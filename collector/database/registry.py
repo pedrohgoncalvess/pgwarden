@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 from psycopg.rows import dict_row
@@ -12,10 +13,33 @@ _UPDATE_LAST_SEEN = load_storage_query(schema="metadata", table="database", quer
 
 @dataclass
 class MonitoredDatabase:
-    id:          int
-    server_id:   int
-    name:        str
-    conninfo:    str
+    id:              int
+    server_id:       int
+    name:            str
+    conninfo:        str
+    ignore_pattern:  str | None = None
+    ignore_tables:   list[str] | None = None
+    include_tables:  list[str] | None = None
+
+    def should_include(self, schema_name: str, table_name: str) -> bool:
+        full_name = f"{schema_name}.{table_name}"
+
+        # 1. ignore_tables (highest priority)
+        if self.ignore_tables:
+            normalized_ignore = [(t if "." in t else f"public.{t}") for t in self.ignore_tables]
+            if full_name in normalized_ignore:
+                return False
+
+        # 2. ignore_pattern
+        if self.ignore_pattern and re.search(self.ignore_pattern, full_name, re.IGNORECASE):
+            return False
+
+        # 3. include_tables (lowest priority / restrictive allow-list)
+        if self.include_tables:
+            normalized_include = [(t if "." in t else f"public.{t}") for t in self.include_tables]
+            return full_name in normalized_include
+
+        return True
 
 
 class DatabaseRegistry:
@@ -70,6 +94,9 @@ class DatabaseRegistry:
                 server_id=row["server_id"],
                 name=label,
                 conninfo=conninfo,
+                ignore_pattern=row.get("ignore_pattern"),
+                ignore_tables=row.get("ignore_tables"),
+                include_tables=row.get("include_tables"),
             )
 
         added   = set(fresh) - set(self._databases)

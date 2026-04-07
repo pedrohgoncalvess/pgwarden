@@ -3,6 +3,7 @@ from psycopg.rows import dict_row
 from collector.collectors.result import SyncResult
 from database import DatabaseConnection, load_monitored_query, load_storage_query
 from collector.collectors.base import BaseCollector
+from collector.database.registry import MonitoredDatabase
 from log import logger
 
 
@@ -18,16 +19,19 @@ class TableCollector(BaseCollector):
         self,
         monitored_db: DatabaseConnection,
         metrics_db: DatabaseConnection,
-        db_id: int,
+        db: MonitoredDatabase,
     ) -> None:
         super().__init__(monitored_db=monitored_db, metrics_db=metrics_db)
-        self._db_id = db_id
+        self._db_id = db.id
+        self._db    = db
 
     async def _collect(self) -> None:
         await logger.info("TableCollector", "tables", f"Starting (db_id={self._db_id})")
 
         try:
             live = await self._fetch_live()
+            live = [t for t in live if self._db.should_include(t["schema_name"], t["name"])]
+            
             stored = await self._fetch_stored()
             result = await self._sync(live, stored)
             await logger.info("TableCollector", "tables", str(result))

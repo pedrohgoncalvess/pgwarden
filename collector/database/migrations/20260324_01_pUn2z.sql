@@ -3,8 +3,9 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE SCHEMA IF NOT EXISTS "collector";
-CREATE SCHEMA IF NOT EXISTS "metadata";
+CREATE SCHEMA "collector";
+CREATE SCHEMA "metadata";
+CREATE SCHEMA "metric";
 
 CREATE TABLE "collector"."server" (
     id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
@@ -17,13 +18,16 @@ CREATE TABLE "collector"."server" (
     ssl_mode TEXT NOT NULL DEFAULT 'prefer',
     last_seen_at TIMESTAMPTZ,
     last_error TEXT,
+    ignore_pattern TEXT,
+    ignore_tables TEXT[],
+    include_tables TEXT[],
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
-    CONSTRAINT pk_server PRIMARY KEY (id),
-    CONSTRAINT uq_server_public_id UNIQUE (public_id),
-    CONSTRAINT uq_server_conn UNIQUE (host, username),
-    CONSTRAINT ck_server_ssl CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'))
+    CONSTRAINT server_pk PRIMARY KEY (id),
+    CONSTRAINT server_public_id_uq UNIQUE (public_id),
+    CONSTRAINT server_conn_uq UNIQUE (host, username),
+    CONSTRAINT server_ssl_ck CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'))
 );
 
 COMMENT ON TABLE "collector"."server" IS 'PostgreSQL server registry. Holds encrypted connection credentials.';
@@ -316,8 +320,6 @@ CREATE INDEX ix_command_pending ON "collector"."command" (created_at) WHERE exec
 COMMENT ON TABLE "collector"."command" IS 'Command queue between API and collector process. API writes, collector consumes.';
 COMMENT ON COLUMN "collector"."command".command IS 'pause | resume | force_run | set_interval';
 COMMENT ON COLUMN "collector"."command".payload IS 'Optional JSON payload. Used by set_interval: {"interval": 60}';
-
-CREATE SCHEMA "metric";
 
 CREATE TABLE "metric"."table" (
     collected_at TIMESTAMPTZ NOT NULL,

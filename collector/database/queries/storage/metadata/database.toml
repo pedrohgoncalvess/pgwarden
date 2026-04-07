@@ -10,6 +10,9 @@ SELECT
     ms.username,
     ms.password,
     ms.ssl_mode,
+    ms.ignore_pattern,
+    ms.ignore_tables,
+    ms.include_tables,
     md.db_name
 FROM "metadata"."database" md
 JOIN "collector"."server" ms ON ms.id = md.server_id

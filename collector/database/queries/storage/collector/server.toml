@@ -1,15 +1,19 @@
 [INSERT]
 default = """
 INSERT INTO "collector"."server" (
-    name, host, port, username, password, ssl_mode
+    name, host, port, username, password, ssl_mode,
+    ignore_pattern, ignore_tables, include_tables
 ) VALUES (
-    %(name)s, %(host)s, %(port)s, %(username)s, %(password)s, %(ssl_mode)s
+    %(name)s, %(host)s, %(port)s, %(username)s, %(password)s, %(ssl_mode)s,
+    %(ignore_pattern)s, %(ignore_tables)s, %(include_tables)s
 ) ON CONFLICT DO NOTHING
 """
 
 [SELECT]
 by_name = """
-SELECT id FROM "collector"."server"
+SELECT 
+    id, ignore_pattern, ignore_tables, include_tables 
+FROM "collector"."server"
 WHERE  name       = %(name)s
   AND  deleted_at IS NULL
 """

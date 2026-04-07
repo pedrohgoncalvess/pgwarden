@@ -1,5 +1,7 @@
 SELECT
   c.oid AS table_oid,
+  n.nspname AS schema_name,
+  c.relname AS table_name,
   a.attname AS name,
   pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
   NOT a.attnotnull AS is_nullable,

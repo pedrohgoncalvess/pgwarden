@@ -16,6 +16,9 @@ async def _upsert_server(conn, entry: dict) -> int:
             "username": encrypt(entry["username"]),
             "password": encrypt(entry["password"]),
             "ssl_mode": entry.get("ssl_mode", "prefer"),
+            "ignore_pattern": entry.get("ignore_pattern"),
+            "ignore_tables":  entry.get("ignore_tables"),
+            "include_tables": entry.get("include_tables"),
         })
 
     async with conn.cursor() as cur:

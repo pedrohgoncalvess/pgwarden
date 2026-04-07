@@ -5,6 +5,7 @@ from psycopg.rows import dict_row
 from collector.collectors.result import SyncResult
 from database import DatabaseConnection, load_monitored_query, load_storage_query
 from collector.collectors.base import BaseCollector
+from collector.database.registry import MonitoredDatabase
 from log import logger
 
 
@@ -23,16 +24,19 @@ class IndexCollector(BaseCollector):
         self,
         monitored_db: DatabaseConnection,
         metrics_db: DatabaseConnection,
-        db_id: int,
+        db: MonitoredDatabase,
     ) -> None:
         super().__init__(monitored_db=monitored_db, metrics_db=metrics_db)
-        self._db_id = db_id
+        self._db_id = db.id
+        self._db    = db
 
     async def _collect(self) -> None:
         await logger.info("IndexCollector", "indexes", f"Starting (db_id={self._db_id})")
 
         try:
             live = await self._fetch_live()
+            live = [i for i in live if self._db.should_include(i["schema_name"], i["table_name"])]
+
             stored = await self._fetch_stored()
             result = await self._sync(live, stored)
             await logger.info("IndexCollector", "indexes", str(result))
@@ -193,8 +197,7 @@ def _index_changed(live: dict, stored: dict) -> bool:
     for field in fields:
         live_val = live.get(field)
         stored_val = stored.get(field)
-        
-        # Adjust for key naming differences if necessary
+
         if field == "name" and "index_name" in live: live_val = live["index_name"]
         if field == "type" and "index_type" in live: live_val = live["index_type"]
 
