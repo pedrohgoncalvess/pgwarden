@@ -11,7 +11,10 @@ from collector.collectors import (
     TableMetricCollector, IndexMetricCollector, ColumnMetricCollector,
     LockMetricCollector, SessionMetricCollector
 )
-from database import DatabaseConnection, DatabaseRegistry, load_storage_query
+from database import (
+    DatabaseConnection, DatabaseRegistry,
+    load_storage_query, MonitoredDatabase
+)
 from config import bootstrap
 from log import logger
 
@@ -105,14 +108,14 @@ async def run_collector_loop(
 async def run_startup_collectors(
         monitored_db: DatabaseConnection,
         metrics_db: DatabaseConnection,
-        db_id: int
+        db: MonitoredDatabase,
 ) -> None:
-    await logger.info("Main", "startup_sync", f"Running initial schema sync (db_id={db_id})")
+    await logger.info("Main", "startup_sync", f"Running initial schema sync (db_id={db.id})")
 
     startup_collectors = [
-        ("tables", TableCollector(monitored_db, metrics_db, db_id)),
-        ("columns", ColumnCollector(monitored_db, metrics_db, db_id)),
-        ("indexes", IndexCollector(monitored_db, metrics_db, db_id)),
+        ("tables", TableCollector(monitored_db, metrics_db, db)),
+        ("columns", ColumnCollector(monitored_db, metrics_db, db)),
+        ("indexes", IndexCollector(monitored_db, metrics_db, db)),
     ]
 
     for name, collector in startup_collectors:
@@ -146,15 +149,15 @@ async def main() -> None:
         monitored_db = DatabaseConnection(conninfo=db.conninfo)
 
         try:
-            await run_startup_collectors(monitored_db, metrics_db, db.id)
+            await run_startup_collectors(monitored_db, metrics_db, db)
         except Exception as startup_error:
             await logger.error("Main", "startup", f"Failed initial sync db_id={db.id}. Skipping loops. Error: {startup_error}")
             continue
 
         collectors_to_loop = [
-            (TableCollector(monitored_db, metrics_db, db.id), "table_collector"),
-            (ColumnCollector(monitored_db, metrics_db, db.id), "column_collector"),
-            (IndexCollector(monitored_db, metrics_db, db.id), "index_collector"),
+            (TableCollector(monitored_db, metrics_db, db), "table_collector"),
+            (ColumnCollector(monitored_db, metrics_db, db), "column_collector"),
+            (IndexCollector(monitored_db, metrics_db, db), "index_collector"),
             (TableMetricCollector(monitored_db, metrics_db, db.id), "table_metric_collector"),
             (ColumnMetricCollector(monitored_db, metrics_db, db.id), "column_metric_collector"),
             (IndexMetricCollector(monitored_db, metrics_db, db.id), "index_metric_collector"),

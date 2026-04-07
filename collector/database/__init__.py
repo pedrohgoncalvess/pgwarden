@@ -1,3 +1,3 @@
 from database.connection import DatabaseConnection
 from database.load import load_monitored_query, load_storage_query
-from database.registry import DatabaseRegistry
+from database.registry import DatabaseRegistry, MonitoredDatabase
