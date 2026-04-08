@@ -1,5 +1,7 @@
 import asyncio
 import os
+import time
+import random
 from urllib.parse import quote_plus
 from datetime import datetime, timezone
 
@@ -129,6 +131,7 @@ async def run_startup_collectors(
 
 
 def run_migrations() -> None:
+    time.sleep(random.uniform(1.0, 3.0))
     logger.info("Main", "migrations", "Starting database migrations (collector)")
     host = get_env_var("DB_HOST")
     port = get_env_var("DB_PORT")
@@ -137,13 +140,12 @@ def run_migrations() -> None:
     dbname = get_env_var("DB_NAME")
 
     db_url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
-    migrations_dir = os.path.join(os.path.dirname(__file__), "..", "database", "migrations")
+    migrations_dir = os.path.join(os.path.dirname(__file__), "database", "migrations")
 
     backend = get_backend(db_url, migration_table='_yoyo_migration_collector')
     migrations = read_migrations(migrations_dir)
 
-    with backend.lock():
-        backend.apply_migrations(backend.to_apply(migrations))
+    backend.apply_migrations(backend.to_apply(migrations))
     logger.info("Main", "migrations", "Migrations completed successfully")
 
 
