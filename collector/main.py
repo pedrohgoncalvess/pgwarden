@@ -1,10 +1,9 @@
 import asyncio
-import sys
+import os
+from urllib.parse import quote_plus
 from datetime import datetime, timezone
 
 from psycopg.rows import dict_row
-
-sys.path.append("../")
 
 from collector.collectors import (
     TableCollector, IndexCollector, ColumnCollector,
@@ -17,6 +16,8 @@ from database import (
 )
 from config import bootstrap
 from log import logger
+from utils import get_env_var
+from yoyo import read_migrations, get_backend
 
 
 _GET_CONFIG = load_storage_query(schema="collector", table="config", query_type="SELECT", query_name="config")
@@ -127,7 +128,27 @@ async def run_startup_collectors(
             raise
 
 
+def run_migrations() -> None:
+    logger.info("Main", "migrations", "Starting database migrations (collector)")
+    host = get_env_var("DB_HOST")
+    port = get_env_var("DB_PORT")
+    user = get_env_var("DB_USER")
+    password = quote_plus(get_env_var("DB_PASSWORD"))
+    dbname = get_env_var("DB_NAME")
+
+    db_url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
+    migrations_dir = os.path.join(os.path.dirname(__file__), "..", "database", "migrations")
+
+    backend = get_backend(db_url, migration_table='_yoyo_migration_collector')
+    migrations = read_migrations(migrations_dir)
+
+    with backend.lock():
+        backend.apply_migrations(backend.to_apply(migrations))
+    logger.info("Main", "migrations", "Migrations completed successfully")
+
+
 async def main() -> None:
+    run_migrations()
     metrics_db = DatabaseConnection()
     registry = DatabaseRegistry(metrics_db=metrics_db)
 
