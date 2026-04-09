@@ -20,7 +20,7 @@ class Server(Base):
     ssl_mode        = Column(Text, nullable=False, server_default='prefer')
     last_seen_at    = Column(DateTime(timezone=True), nullable=True)
     last_error      = Column(Text, nullable=True)
-    ignore_pattern  = Column(Text, nullable=True)
+    ignore_patterns = Column(ARRAY(Text), nullable=True)
     ignore_tables   = Column(ARRAY(Text), nullable=True)
     include_tables  = Column(ARRAY(Text), nullable=True)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

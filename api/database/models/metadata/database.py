@@ -3,6 +3,7 @@ from sqlalchemy import (
     Boolean, DateTime, func, ForeignKey
 )
 from sqlalchemy.dialects.postgresql import UUID
+
 from database.models.base_model import Base
 
 
