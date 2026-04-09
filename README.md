@@ -31,7 +31,7 @@ PGWarden uses Docker and Docker Compose to make deployment seamless.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/pgwarden.git
+   git clone https://github.com/pedrohgoncalvess/pgwarden.git
    cd pgwarden
    ```
 
