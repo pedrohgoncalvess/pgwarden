@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 196 40% 9%;
+  --foreground: 34 22% 90%;
+  --card: 195 34% 12%;
+  --card-foreground: 34 22% 90%;
+  --panel: 194 36% 10%;
+  --panel-foreground: 34 22% 90%;
+  --primary: 27 74% 62%;
+  --primary-foreground: 196 40% 9%;
+  --muted: 198 20% 18%;
+  --muted-foreground: 197 10% 68%;
+  --border: 195 24% 25%;
+  --sf-border-strong: 27 52% 46%;
+  --input: 195 26% 16%;
+  --ring: 27 74% 62%;
+  --sf-accent-cyan: 186 27% 44%;
+  --sf-accent-amber: 27 74% 62%;
+  --sf-panel: 194 36% 10%;
+  --sf-panel-foreground: 34 22% 90%;
+  --radius: 0.75rem;
+  --sf-radius-panel: 0.9rem;
+  --sf-glow-soft: 27 74% 62%;
+  --font-sf-display: "Exo 2";
+  --font-sf-sans: "Sora";
+  --font-sf-mono: "Space Mono";
+  font-family:
+    var(--font-sf-sans),
+    Sora,
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    min-width: 320px;
+    background-image:
+      radial-gradient(ellipse at top, hsl(var(--sf-accent-amber) / 0.12), transparent 45%),
+      linear-gradient(to bottom, hsl(var(--background)), hsl(var(--background)));
+  }
+}
+
+@layer components {
+  .app-card {
+    @apply rounded-panel border border-border bg-card/95 text-card-foreground shadow-panel;
+    backdrop-filter: blur(8px);
+  }
+
+  .app-input {
+    @apply h-10 w-full rounded-md border border-input bg-background/70 px-3 py-2 text-sm text-foreground outline-none;
+    @apply placeholder:text-muted-foreground focus-visible:border-borderStrong focus-visible:ring-2 focus-visible:ring-ring/70;
+    box-shadow: inset 0 1px 0 hsl(var(--sf-accent-cyan) / 0.08);
+  }
+
+  .app-link {
+    @apply text-sm text-primary transition-colors hover:text-accent-amber;
+  }
+
+  .app-button-primary {
+    @apply rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition;
+    @apply hover:bg-primary/85 disabled:cursor-not-allowed disabled:opacity-60;
+    box-shadow: 0 0 0 1px hsl(var(--sf-accent-cyan) / 0.2), 0 0 24px hsl(var(--sf-glow-soft) / 0.22);
+  }
+
+  .sf-panel {
+    @apply app-card relative overflow-hidden;
+  }
+
+  .sf-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    border: 1px solid hsl(var(--sf-accent-cyan) / 0.18);
+    mask-image: linear-gradient(to bottom, black, transparent 80%);
+  }
+}
+
+@layer utilities {
+  .content-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 500px;
+  }
+
+  .sf-grid-bg {
+    background-image:
+      linear-gradient(hsl(var(--sf-accent-cyan) / 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--sf-accent-cyan) / 0.08) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: center;
+  }
+
+  .sf-label {
+    @apply text-xs uppercase tracking-hud text-muted-foreground;
+  }
+
+  .sf-metric {
+    @apply font-mono tabular-nums;
+  }
+}
+
+#root {
+  min-height: 100vh;
+}
