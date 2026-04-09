@@ -12,7 +12,7 @@ from database.operations.base.user import UserRepository
 from utils import get_env_var
 
 
-SECRET_KEY = get_env_var("SECRET_KEY")
+SECRET_KEY = get_env_var("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
@@ -47,7 +47,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             email: str = payload.get("sub")
             if email is None:
                 raise credentials_exception
-            token_data = TokenData(email=email)
         except jwt.ExpiredSignatureError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

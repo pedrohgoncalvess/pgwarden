@@ -7,11 +7,11 @@ class BaseAppException(Exception):
 
 
 class DatabaseNotFoundError(BaseAppException):
-    def __init__(self, public_id: str):
+    def __init__(self, database_id: str):
         super().__init__(
             message="Database not found.",
             status_code=404,
-            details=f"No matching active database found for ID: {public_id}"
+            details=f"No matching active database found for ID: {database_id}"
         )
 
 

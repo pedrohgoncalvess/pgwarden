@@ -14,24 +14,24 @@ from database.operations.base.user import UserRepository
 
 router = APIRouter(
     prefix="/auth",
+    tags=["auth"]
 )
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 90
 REFRESH_TOKEN_EXPIRE_MINUTES = 300
 
-@router.post("", response_model=AuthResponse)
+@router.post(
+    "",
+    response_model=AuthResponse,
+    summary="User Login",
+    description="Authenticates a user via email and password, returning an access token and a refresh token."
+)
 async def login(user_auth: UserLogin):
     async with DatabaseConnection() as conn:
         user_repository = UserRepository(conn)
         refresh_repository = RefreshRepository(conn)
 
         user = await user_repository.find_by_email(user_auth.email)
-
-        if not user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User must be verified.",
-            )
 
         if not user or not verify_password(user_auth.password, user.password):
             raise HTTPException(
@@ -58,12 +58,17 @@ async def login(user_auth: UserLogin):
 
         return {
             "access_token": {"token": access_token, "expires":access_token_expires_at },
-            "refresh_token": {"token": refresh_token, "expires": refresh_token_expires_at},
+            "refresh_token": {"token": str(refresh_token), "expires": refresh_token_expires_at},
             "token_type": "bearer"
         }
 
 
-@router.post("/refresh", response_model=AuthResponse)
+@router.post(
+    "/refresh",
+    response_model=AuthResponse,
+    summary="Refresh Authentication Token",
+    description="Exchanges an active refresh token for a new access token and a new refresh token."
+)
 async def refresh_token(payload: RefreshTokenRequest):
     async with DatabaseConnection() as conn:
         refresh_repository = RefreshRepository(conn)
@@ -114,7 +119,7 @@ async def refresh_token(payload: RefreshTokenRequest):
                 "expires": access_token_expires_at,
             },
             "refresh_token": {
-                "token": new_refresh_token,
+                "token": str(new_refresh_token),
                 "expires": refresh_token_expires_at,
             },
             "token_type": "bearer",

@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
@@ -24,7 +25,7 @@ class TokenData(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: UUID
 
 
 class TokenDetails(BaseModel):

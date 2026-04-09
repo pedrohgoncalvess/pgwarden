@@ -10,7 +10,7 @@ class ErrorResponse(BaseModel):
 
 
 class SchemaColumnResponse(BaseModel):
-    public_id: UUID
+    id: UUID
     name: str
     description: Optional[str] = None
     data_type: str
@@ -18,14 +18,14 @@ class SchemaColumnResponse(BaseModel):
     default_value: Optional[str] = None
     is_unique: bool
     ordinal_position: int
-    fk_table_public_id: Optional[UUID] = None
-    fk_column_public_id: Optional[UUID] = None
+    fk_table_id: Optional[UUID] = None
+    fk_column_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class SchemaIndexResponse(BaseModel):
-    public_id: UUID
+    id: UUID
     name: str
     type: str
     definition: str
@@ -37,7 +37,7 @@ class SchemaIndexResponse(BaseModel):
 
 
 class SchemaTableResponse(BaseModel):
-    public_id: UUID
+    id: UUID
     schema_name: str
     name: str
     description: Optional[str] = None
@@ -48,7 +48,7 @@ class SchemaTableResponse(BaseModel):
 
 
 class SchemaResponse(BaseModel):
-    database_public_id: UUID
+    id: UUID
     tables: List[SchemaTableResponse]
 
     model_config = ConfigDict(from_attributes=True)
