@@ -18,7 +18,7 @@ CREATE TABLE "collector"."server" (
     ssl_mode TEXT NOT NULL DEFAULT 'prefer',
     last_seen_at TIMESTAMPTZ,
     last_error TEXT,
-    ignore_pattern TEXT,
+    ignore_patterns TEXT[],
     ignore_tables TEXT[],
     include_tables TEXT[],
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -58,7 +58,7 @@ CREATE TABLE "metadata"."database" (
 );
 
 COMMENT ON TABLE "metadata"."database" IS 'Individual databases within a monitored server. Each gets independent collection jobs.';
-COMMENT ON COLUMN "metadata"."database".db_name IS '[encrypted] Database name.';
+COMMENT ON COLUMN "metadata"."database".db_name IS 'Database name.';
 COMMENT ON COLUMN "metadata"."database".oid IS 'OID from pg_database. Populated after first successful connection.';
 COMMENT ON COLUMN "metadata"."database".is_active IS 'When false, the collector skips this database without deleting the record.';
 COMMENT ON COLUMN "metadata"."database".last_seen_at IS 'Timestamp of the last successful connection attempt by the collector.';
