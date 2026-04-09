@@ -1,6 +1,6 @@
 # PGWarden Frontend
 
-PGWarden query monitoring dashboard
+Frontend app for PGWarden
 
 ## Stack
 
@@ -13,6 +13,21 @@ PGWarden query monitoring dashboard
 - TailwindCSS
 - Comlink + Web Workers
 - Zod
+
+## Structure
+
+```text
+frontend/
+  public/
+  src/
+    app/
+    lib/
+    modules/
+      auth/
+      dashboard/
+    routes/
+    main.tsx
+```
 
 ## Run
 
@@ -34,3 +49,15 @@ cp .env.example .env
 Available vars:
 
 - `VITE_API_BASE_URL` default: `http://localhost:8080/v1`
+
+## WIP
+
+- The performance stream in `dashboard.metrics-sse.ts` is fake SSE data used for UI/UX development.
+- Chart metrics and query table values in the performance panel are simulated and do not come from backend query telemetry yet.
+- Query list rows (query text/role/categories) are generated from a local sample pool and rotated over time
+
+## Scripts
+
+- `npm run dev` - start development server
+- `npm run build` - typecheck + production build
+- `npm run lint` - run ESLint
