@@ -3,6 +3,8 @@ services:
     image: timescale/timescaledb:latest-pg17
     container_name: pgwarden_db
     restart: unless-stopped
+    ports:
+      - "5436:5432"
     env_file:
       - .env
     environment:
@@ -78,6 +80,12 @@ services:
         condition: service_completed_successfully
     env_file:
       - .env
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
     volumes:
       - ./config.yaml:/etc/pgwarden/config.yaml:ro
       - ./log:/log:rw
