@@ -1,22 +1,29 @@
 from sqlalchemy import (
-    Column, BigInteger, Text, 
-    Integer, Boolean, DateTime, func
+    Column, BigInteger, Text,
+    Integer, Boolean, DateTime, ForeignKey, func
 )
 from database.models.base_model import Base
 
 
-class Config(Base):
-    __tablename__ = "config"
+class ConfigDatabase(Base):
+    __tablename__ = "config_database"
     __table_args__ = {"schema": "collector"}
 
     id          = Column(BigInteger, primary_key=True, autoincrement=True)
-    name        = Column(Text, nullable=False, unique=True)
+    database_id = Column(BigInteger, ForeignKey("metadata.database.id", ondelete="CASCADE"), nullable=False)
+    name        = Column(Text, nullable=False)
     interval    = Column(Integer, nullable=False)
     is_paused   = Column(Boolean, nullable=False, default=False)
-    status      = Column(Text, nullable=False, default='idle')
     next_run_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    last_run_at = Column(DateTime(timezone=True), nullable=True)
-    last_error  = Column(Text, nullable=True)
-    run_count   = Column(BigInteger, nullable=False, default=0)
-    error_count = Column(BigInteger, nullable=False, default=0)
-    updated_at  = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+
+
+class ConfigServer(Base):
+    __tablename__ = "config_server"
+    __table_args__ = {"schema": "collector"}
+
+    id          = Column(BigInteger, primary_key=True, autoincrement=True)
+    server_id   = Column(BigInteger, ForeignKey("collector.server.id", ondelete="CASCADE"), nullable=False)
+    name        = Column(Text, nullable=False)
+    interval    = Column(Integer, nullable=False)
+    is_paused   = Column(Boolean, nullable=False, default=False)
+    next_run_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
