@@ -15,6 +15,10 @@ CREATE TABLE "base"."user" (
     CONSTRAINT user_pk PRIMARY KEY (id)
 );
 
+COMMENT ON TABLE "base"."user" IS 'Standard USERS table for the application, storing identity and authentication details.';
+COMMENT ON COLUMN "base"."user".password IS 'Hashed password string.';
+COMMENT ON COLUMN "base"."user".is_admin IS 'Flag to identify administrators with elevated privileges.';
+
 CREATE TABLE "base"."refresh" (
     id SERIAL,
     user_id INTEGER NOT NULL,
@@ -24,3 +28,7 @@ CREATE TABLE "base"."refresh" (
 
     CONSTRAINT refresh_pk PRIMARY KEY (id)
 );
+
+COMMENT ON TABLE "base"."refresh" IS 'Stores refresh tokens for extended user sessions (JWT refresh cycle).';
+COMMENT ON COLUMN "base"."refresh".token IS 'Unique UUID token for session refresh.';
+COMMENT ON COLUMN "base"."refresh".used IS 'Tracks if the token has already been consumed to prevent reuse attacks.';
