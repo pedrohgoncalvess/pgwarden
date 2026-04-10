@@ -3,3 +3,7 @@ from database.models.metric.index import IndexMetric
 from database.models.metric.column import ColumnMetric
 from database.models.metric.session import SessionMetric
 from database.models.metric.lock import LockMetric
+from database.models.metric.cpu import CpuMetric
+from database.models.metric.ram import RamMetric
+from database.models.metric.disk import DiskMetric
+from database.models.metric.io import IoMetric
