@@ -25,6 +25,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
+    if os.getenv("IS_TESTING") == "1":
+        yield
+        return
+
     email = os.getenv("PGWARDEN_EMAIL")
     password = os.getenv("PGWARDEN_PASSWORD")
     hashed_password = pwd_context.hash(password)

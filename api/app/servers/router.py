@@ -8,6 +8,7 @@ from app.servers.models import (
     ServerCreate, ServerListItem, ServerDatabaseItem,
     ServerCreatedResponse, ConnectionTestSuccess, ConnectionTestError, ServerTest,
 )
+from app.common.models import COMMON_RESPONSES
 from database.connection import DatabaseConnection
 from database.operations.collector.server import ServerRepository
 from database.operations.metadata.database import DatabaseRepository
@@ -27,6 +28,7 @@ router = APIRouter(
     response_model=ServerCreatedResponse,
     summary="Register a new PostgreSQL server",
     description="Registers a new server. Sensitive connection credentials (host, port, username, password) are securely encrypted before being stored.",
+    responses=COMMON_RESPONSES
 )
 async def create_server(server_in: ServerCreate):
     async with DatabaseConnection() as conn:
@@ -52,6 +54,7 @@ async def create_server(server_in: ServerCreate):
     response_model=List[ServerListItem],
     summary="List all registered servers",
     description="Returns a list of all monitored servers along with their current status and a list of linked databases. Decrypted credentials are never exposed.",
+    responses=COMMON_RESPONSES
 )
 async def list_servers():
     async with DatabaseConnection() as conn:
@@ -88,6 +91,7 @@ async def list_servers():
     response_model=Union[ConnectionTestSuccess, ConnectionTestError],
     summary="Test a PostgreSQL connection",
     description="Receives connection credentials and tests connectivity to the PostgreSQL server. No data is stored.",
+    responses=COMMON_RESPONSES
 )
 async def test_connection(server_in: ServerTest):
     try:

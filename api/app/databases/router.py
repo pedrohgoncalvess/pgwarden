@@ -2,6 +2,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.databases.models import DatabaseListItem, DatabaseCreate, DatabaseCreatedResponse
+from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from database.operations.metadata.database import DatabaseRepository
 from database.operations.collector.server import ServerRepository
@@ -21,6 +22,10 @@ router = APIRouter(
     response_model=DatabaseCreatedResponse,
     summary="Register a new managed database",
     description="Registers a new monitored database and links it to an existing PostgreSQL server. The database name is securely encrypted.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Server not found"},
+        **COMMON_RESPONSES
+    }
 )
 async def create_database(db_in: DatabaseCreate):
     async with DatabaseConnection() as conn:
@@ -44,6 +49,7 @@ async def create_database(db_in: DatabaseCreate):
     response_model=List[DatabaseListItem],
     summary="List all managed databases",
     description="Returns a list of all managed databases and their connection status. Includes both active and soft-deleted databases.",
+    responses=COMMON_RESPONSES
 )
 async def list_databases():
     async with DatabaseConnection() as conn:

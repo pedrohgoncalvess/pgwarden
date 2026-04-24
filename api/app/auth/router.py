@@ -6,6 +6,7 @@ from starlette import status
 
 from app.auth.models import UserLogin, RefreshTokenRequest, AuthResponse
 from app.auth.services import verify_password, create_access_token
+from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from database.models.base import Refresh
 from database.operations.base import RefreshRepository
@@ -24,7 +25,11 @@ REFRESH_TOKEN_EXPIRE_MINUTES = 300
     "",
     response_model=AuthResponse,
     summary="User Login",
-    description="Authenticates a user via email and password, returning an access token and a refresh token."
+    description="Authenticates a user via email and password, returning an access token and a refresh token.",
+    responses={
+        401: {"model": ErrorMessage, "description": "Email or password incorrect"},
+        **COMMON_RESPONSES
+    }
 )
 async def login(user_auth: UserLogin):
     async with DatabaseConnection() as conn:
@@ -67,7 +72,11 @@ async def login(user_auth: UserLogin):
     "/refresh",
     response_model=AuthResponse,
     summary="Refresh Authentication Token",
-    description="Exchanges an active refresh token for a new access token and a new refresh token."
+    description="Exchanges an active refresh token for a new access token and a new refresh token.",
+    responses={
+        401: {"model": ErrorMessage, "description": "Invalid or expired refresh token"},
+        **COMMON_RESPONSES
+    }
 )
 async def refresh_token(payload: RefreshTokenRequest):
     async with DatabaseConnection() as conn:

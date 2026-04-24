@@ -3,6 +3,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.databases.configs.models import ConfigItem, ConfigPatch
+from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from database.operations.collector.config import ConfigDatabaseRepository
 from database.operations.metadata.database import DatabaseRepository
@@ -21,6 +22,10 @@ router = APIRouter(
     response_model=List[ConfigItem],
     summary="List collector configs for a database",
     description="Returns all collector configurations linked to a specific database, including their active status and collection interval.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Database not found"},
+        **COMMON_RESPONSES
+    }
 )
 async def get_database_configs(database_id: str):
     async with DatabaseConnection() as conn:
@@ -40,6 +45,11 @@ async def get_database_configs(database_id: str):
     response_model=ConfigItem,
     summary="Update a collector config",
     description="Partially updates a collector configuration. Supports changing the collection interval (in seconds) and pausing/resuming the collector.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Database or Config not found"},
+        400: {"model": ErrorMessage, "description": "No fields to update"},
+        **COMMON_RESPONSES
+    }
 )
 async def patch_database_config(database_id: str, config_id: int, patch: ConfigPatch):
     async with DatabaseConnection() as conn:

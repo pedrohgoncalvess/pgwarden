@@ -3,6 +3,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.servers.config.models import ConfigItem, ConfigPatch
+from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from database.operations.collector import ConfigServerRepository, ServerRepository
 from app.auth.services import get_current_user
@@ -20,6 +21,10 @@ router = APIRouter(
     response_model=List[ConfigItem],
     summary="List collector configs for a server",
     description="Returns all collector configurations linked to a specific server, including their active status and collection interval.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Server not found"},
+        **COMMON_RESPONSES
+    }
 )
 async def get_server_configs(server_id: str):
     async with DatabaseConnection() as conn:
@@ -39,6 +44,11 @@ async def get_server_configs(server_id: str):
     response_model=ConfigItem,
     summary="Update a collector config",
     description="Partially updates a server collector configuration. Supports changing the collection interval (in seconds) and pausing/resuming the collector.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Server or Config not found"},
+        400: {"model": ErrorMessage, "description": "No fields to update"},
+        **COMMON_RESPONSES
+    }
 )
 async def patch_server_config(server_id: str, config_id: int, patch: ConfigPatch):
     async with DatabaseConnection() as conn:
