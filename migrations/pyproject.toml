@@ -7,4 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "psycopg[binary]>=3.3.3",
     "yoyo-migrations>=9.0.0",
+    "pytest>=8.3.5",
+    "pytest-html>=4.1.1",
+    "psycopg2-binary>=2.9.9",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = "."
