@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="9" failures="4" skipped="0" tests="16" time="34.207" timestamp="2026-04-24T15:35:04.604301-03:00" hostname="LAPTOP-61CH63C6"><testcase classname="tests.integration.test_auth" name="test_login_success" time="4.091"><failure message="TypeError: Expected a string value">client = &lt;httpx.AsyncClient object at 0x7fe958a93380&gt;, test_user = &lt;database.models.base.user.User object at 0x7fe958a50ec0&gt;
+
+    @pytest.mark.asyncio
+    async def test_login_success(client: AsyncClient, test_user):
+        """Tests successful login using credentials created in the fixture."""
+        login_data = {
+            "email": "test@example.com",
+            "password": "password123"
+        }
+    
+&gt;       response = await client.post("/v1/auth", json=login_data)
+
+tests/integration/test_auth.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/httpx/_client.py:1859: in post
+    return await self.request(
+.venv/lib/python3.13/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+.venv/lib/python3.13/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv/lib/python3.13/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv/lib/python3.13/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+.venv/lib/python3.13/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+.venv/lib/python3.13/site-packages/httpx/_transports/asgi.py:170: in handle_async_request
+    await self.app(scope, receive, send)
+.venv/lib/python3.13/site-packages/fastapi/applications.py:1054: in __call__
+    await super().__call__(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/applications.py:112: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/middleware/errors.py:187: in __call__
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/middleware/errors.py:165: in __call__
+    await self.app(scope, receive, _send)
+.venv/lib/python3.13/site-packages/starlette/middleware/exceptions.py:62: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.13/site-packages/starlette/routing.py:714: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:734: in app
+    await route.handle(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:288: in handle
+    await self.app(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/routing.py:76: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv/lib/python3.13/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv/lib/python3.13/site-packages/starlette/routing.py:73: in app
+    response = await f(request)
+.venv/lib/python3.13/site-packages/fastapi/routing.py:301: in app
+    raw_response = await run_endpoint_function(
+.venv/lib/python3.13/site-packages/fastapi/routing.py:212: in run_endpoint_function
+    return await dependant.call(**values)
+app/auth/router.py:57: in login
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</failure></testcase><testcase classname="tests.integration.test_auth" name="test_login_invalid_credentials" time="1.388" /><testcase classname="tests.integration.test_auth" name="test_refresh_token_not_found" time="0.826" /><testcase classname="tests.integration.test_databases" name="test_create_database_success" time="2.515"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_create_database_success&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_databases" name="test_create_database_server_not_found" time="1.317"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_create_database_server_not_found&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_databases" name="test_list_databases" time="1.731"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_list_databases&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_databases" name="test_list_databases_unauthorized" time="1.057"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">client = &lt;httpx.AsyncClient object at 0x7fe958a77bd0&gt;
+
+    @pytest.mark.asyncio
+    async def test_list_databases_unauthorized(client: AsyncClient):
+        """Tests that listing databases requires authentication."""
+        response = await client.get("/v1/databases/")
+&gt;       assert response.status_code == 401
+E       assert 403 == 401
+E        +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code
+
+tests/integration/test_databases.py:79: AssertionError</failure></testcase><testcase classname="tests.integration.test_schemas" name="test_get_schema_success" time="1.153"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_get_schema_success&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_schemas" name="test_get_schema_not_found" time="0.925"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_get_schema_not_found&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_schemas" name="test_get_schema_unauthorized" time="0.583"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">client = &lt;httpx.AsyncClient object at 0x7fe953f94b50&gt;
+
+    @pytest.mark.asyncio
+    async def test_get_schema_unauthorized(client: AsyncClient):
+        """Tests that retrieving schema metadata requires authentication."""
+        random_id = uuid.uuid4()
+        response = await client.get(f"/v1/schemas/{random_id}")
+&gt;       assert response.status_code == 401
+E       assert 403 == 401
+E        +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code
+
+tests/integration/test_schemas.py:118: AssertionError</failure></testcase><testcase classname="tests.integration.test_servers" name="test_create_server_success" time="0.928"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_create_server_success&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_servers" name="test_list_servers" time="0.970"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_list_servers&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_servers" name="test_test_connection_success" time="0.811"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_test_connection_success&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_servers" name="test_test_connection_invalid_port" time="0.760"><error message="failed on setup with &quot;TypeError: Expected a string value&quot;">self = &lt;Coroutine test_test_connection_invalid_port&gt;
+
+    def setup(self) -&gt; None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+&gt;       return super().setup()
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:743: in pytest_fixture_setup
+    hook_result = yield
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:313: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+/home/pedro/.local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py:721: in run_until_complete
+    return future.result()
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:309: in setup
+    res = await gen_obj.__anext__()
+tests/conftest.py:110: in auth_client
+    access_token = create_access_token(
+app/auth/services.py:30: in create_access_token
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+.venv/lib/python3.13/site-packages/jwt/api_jwt.py:153: in encode
+    return self._jws.encode(
+.venv/lib/python3.13/site-packages/jwt/api_jws.py:183: in encode
+    key = alg_obj.prepare_key(key)
+.venv/lib/python3.13/site-packages/jwt/algorithms.py:343: in prepare_key
+    key_bytes = force_bytes(key)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None
+
+    def force_bytes(value: Union[bytes, str]) -&gt; bytes:
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        elif isinstance(value, bytes):
+            return value
+        else:
+&gt;           raise TypeError("Expected a string value")
+E           TypeError: Expected a string value
+
+.venv/lib/python3.13/site-packages/jwt/utils.py:22: TypeError</error></testcase><testcase classname="tests.integration.test_servers" name="test_create_server_unauthorized" time="0.553"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code">client = &lt;httpx.AsyncClient object at 0x7fe958bc36c0&gt;
+
+    @pytest.mark.asyncio
+    async def test_create_server_unauthorized(client: AsyncClient):
+        """Tests that server registration requires authentication."""
+        response = await client.post("/v1/servers/", json={})
+&gt;       assert response.status_code == 401
+E       assert 403 == 401
+E        +  where 403 = &lt;Response [403 Forbidden]&gt;.status_code
+
+tests/integration/test_servers.py:100: AssertionError</failure></testcase><testcase classname="tests.test_database" name="test_successful_connection" time="0.628" /></testsuite></testsuites>

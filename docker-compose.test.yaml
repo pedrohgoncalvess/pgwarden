@@ -1,0 +1,15 @@
+services:
+  db_test:
+    image: timescale/timescaledb:latest-pg17
+    container_name: pgwarden_db_test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5437:5432"
