@@ -9,6 +9,7 @@ SELECT
     s.last_autoanalyze,
     s.seq_scan,
     s.idx_scan,
+    s.n_mod_since_analyze,
     COALESCE(io.heap_blks_read, 0) AS heap_blks_read,
     COALESCE(io.heap_blks_hit, 0) AS heap_blks_hit
 FROM pg_stat_user_tables s

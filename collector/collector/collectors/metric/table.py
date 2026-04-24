@@ -61,6 +61,7 @@ class TableMetricCollector(BaseCollector):
                         "last_autoanalyze": row["last_autoanalyze"],
                         "seq_scan": row["seq_scan"],
                         "idx_scan": row["idx_scan"],
+                        "modifications_since_last_analyze": row["n_mod_since_analyze"],
                         "heap_blks_read": row["heap_blks_read"],
                         "heap_blks_hit": row["heap_blks_hit"]
                     })

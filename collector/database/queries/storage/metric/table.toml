@@ -3,11 +3,11 @@ default = """
 INSERT INTO metric.table (
     collected_at, table_id, n_live_tup, n_dead_tup, table_size_bytes,
     last_vacuum, last_autovacuum, last_analyze, last_autoanalyze,
-    seq_scan, idx_scan, heap_blks_read, heap_blks_hit
+    seq_scan, idx_scan, modifications_since_last_analyze, heap_blks_read, heap_blks_hit
 ) VALUES (
     %(collected_at)s, %(table_id)s, %(n_live_tup)s, %(n_dead_tup)s, %(table_size_bytes)s,
     %(last_vacuum)s, %(last_autovacuum)s, %(last_analyze)s, %(last_autoanalyze)s,
-    %(seq_scan)s, %(idx_scan)s, %(heap_blks_read)s, %(heap_blks_hit)s
+    %(seq_scan)s, %(idx_scan)s, %(modifications_since_last_analyze)s, %(heap_blks_read)s, %(heap_blks_hit)s
 )
 ON CONFLICT (collected_at, table_id) DO NOTHING
 """
