@@ -1,9 +1,10 @@
--- rollback of timescale tuning migration
+-- undo the timescale tuning migration. unwound in reverse order so the
+-- columnstore disable below can actually find a hypertable with no policy
+-- still attached.
 -- depends: 20260424_01_9UN1w-add-n-mod-since-analyze
 
--- -----------------------------------------------------------------------------
--- 6. Chunk skipping
--- -----------------------------------------------------------------------------
+
+-- chunk skipping off
 
 SELECT disable_chunk_skipping('metric.session', 'database_id');
 SELECT disable_chunk_skipping('metric.lock',    'database_id');
@@ -16,9 +17,8 @@ SELECT disable_chunk_skipping('metric.ram',     'server_id');
 SELECT disable_chunk_skipping('metric.io',      'server_id');
 SELECT disable_chunk_skipping('metric.disk',    'server_id');
 
--- -----------------------------------------------------------------------------
--- 5. Retention policies
--- -----------------------------------------------------------------------------
+
+-- retention off
 
 SELECT remove_retention_policy('metric.session');
 SELECT remove_retention_policy('metric.lock');
@@ -30,11 +30,10 @@ SELECT remove_retention_policy('metric.table');
 SELECT remove_retention_policy('metric.index');
 SELECT remove_retention_policy('metric.column');
 
--- -----------------------------------------------------------------------------
--- 4. Columnstore policies and settings
---    Policies must be removed first; disabling columnstore requires all
---    chunks on the hypertable to be in rowstore form.
--- -----------------------------------------------------------------------------
+
+-- columnstore off. drop the policies first, then turn the feature off.
+-- (disabling fails if any chunk is still in columnstore form, so on a real
+-- deployment you'd need to decompress_chunk() everything first.)
 
 SELECT remove_columnstore_policy('metric.session');
 SELECT remove_columnstore_policy('metric.lock');
@@ -56,9 +55,8 @@ ALTER TABLE "metric"."ram"     SET (timescaledb.enable_columnstore = false);
 ALTER TABLE "metric"."io"      SET (timescaledb.enable_columnstore = false);
 ALTER TABLE "metric"."disk"    SET (timescaledb.enable_columnstore = false);
 
--- -----------------------------------------------------------------------------
--- 3. Indexes
--- -----------------------------------------------------------------------------
+
+-- indexes
 
 DROP INDEX IF EXISTS "metric"."ix_metric_table_table_time";
 DROP INDEX IF EXISTS "metric"."ix_metric_index_index_time";
@@ -70,9 +68,8 @@ DROP INDEX IF EXISTS "metric"."ix_metric_ram_server_time";
 DROP INDEX IF EXISTS "metric"."ix_metric_disk_server_time";
 DROP INDEX IF EXISTS "metric"."ix_metric_io_server_time";
 
--- -----------------------------------------------------------------------------
--- 2. Chunk interval tuning — revert to the TimescaleDB default (7 days)
--- -----------------------------------------------------------------------------
+
+-- chunk intervals back to the timescale default
 
 SELECT set_chunk_time_interval('metric.session', INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.lock',    INTERVAL '7 days');
@@ -84,9 +81,8 @@ SELECT set_chunk_time_interval('metric.table',   INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.index',   INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.column',  INTERVAL '7 days');
 
--- -----------------------------------------------------------------------------
--- 1. Schema fixes
--- -----------------------------------------------------------------------------
+
+-- schema nits
 
 ALTER TABLE "collector"."config_server"
     DROP CONSTRAINT config_server_server_name_uq;
@@ -94,7 +90,6 @@ ALTER TABLE "collector"."config_server"
 ALTER TABLE "collector"."config_database"
     DROP CONSTRAINT config_database_db_name_uq;
 
--- Narrowing BIGINT back to INTEGER is only safe while no column_id value
--- exceeds 2^31 - 1. Fresh installs are empty, so this is a no-op there;
--- any deployment with real data should audit first.
+-- narrowing back to INTEGER is safe on a fresh install (no rows). on a real
+-- deployment double-check max(column_id) < 2^31 first or this will overflow.
 ALTER TABLE "metric"."column" ALTER COLUMN column_id TYPE INTEGER;
