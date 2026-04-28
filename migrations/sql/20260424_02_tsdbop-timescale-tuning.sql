@@ -116,15 +116,15 @@ ALTER TABLE "metric"."disk" SET (
 
 -- and the policies that actually run the conversion to column store form. lock/io are converted
 -- after 3 days because they're the chattiest; the rest can wait a week.
-SELECT add_columnstore_policy('metric.session', after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.lock',    after => INTERVAL '3 days');
-SELECT add_columnstore_policy('metric.io',      after => INTERVAL '3 days');
-SELECT add_columnstore_policy('metric.cpu',     after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.ram',     after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.disk',    after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.table',   after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.index',   after => INTERVAL '7 days');
-SELECT add_columnstore_policy('metric.column',  after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.session', after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.lock',    after => INTERVAL '3 days');
+CALL add_columnstore_policy('metric.io',      after => INTERVAL '3 days');
+CALL add_columnstore_policy('metric.cpu',     after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.ram',     after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.disk',    after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.table',   after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.index',   after => INTERVAL '7 days');
+CALL add_columnstore_policy('metric.column',  after => INTERVAL '7 days');
 
 
 -- retention ------------------------------------------------------------------
@@ -150,6 +150,8 @@ SELECT add_retention_policy('metric.column',  INTERVAL '1 year');
 -- before any decompression. only really pays off when values cluster by time
 -- (e.g. databases added later only appear in newer chunks), but it's free
 -- when it doesn't help.
+
+SET timescaledb.enable_chunk_skipping = on;
 
 SELECT enable_chunk_skipping('metric.session', 'database_id');
 SELECT enable_chunk_skipping('metric.lock',    'database_id');
