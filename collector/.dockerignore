@@ -9,7 +9,6 @@ __pycache__
 **/__pycache__
 *.pyc
 *.pyo
-log/
 tests/
 *.md
 makefile
