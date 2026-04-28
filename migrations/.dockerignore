@@ -5,8 +5,6 @@
 .python-version
 .env
 .env.*
-.env.example
-yoyo.example.ini
 __pycache__
 **/__pycache__
 *.pyc
