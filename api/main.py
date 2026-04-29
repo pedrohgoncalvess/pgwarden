@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
 
@@ -21,6 +22,15 @@ from database.operations.base.user import UserRepository
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def get_cors_origins() -> list[str]:
+    origins = os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    )
+    return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -90,6 +100,14 @@ app = FastAPI(
         "defaultModelsExpandDepth": -1,
     },
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(BaseAppException)
