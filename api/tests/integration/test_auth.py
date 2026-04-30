@@ -40,6 +40,21 @@ async def test_login_success(client: AsyncClient, test_user):
     assert "token" in data["access_token"]
 
 @pytest.mark.asyncio
+async def test_login_preflight_allows_vite_dev_origin(client: AsyncClient):
+    """Tests that the Vite dev server can preflight login requests."""
+    response = await client.options(
+        "/v1/auth",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+@pytest.mark.asyncio
 async def test_login_invalid_credentials(client: AsyncClient, test_user):
     """Tests login failure when providing an incorrect password."""
     login_data = {
