@@ -27,7 +27,7 @@ SELECT remove_retention_policy('metric.cpu');
 SELECT remove_retention_policy('metric.ram');
 SELECT remove_retention_policy('metric.disk');
 SELECT remove_retention_policy('metric.table');
-SELECT remove_retention_policy('metric.index');
+SELECT   remove_retention_policy('metric.index');
 SELECT remove_retention_policy('metric.column');
 
 
@@ -35,15 +35,15 @@ SELECT remove_retention_policy('metric.column');
 -- (disabling fails if any chunk is still in columnstore form, so on a real
 -- deployment you'd need to decompress_chunk() everything first.)
 
-SELECT remove_columnstore_policy('metric.session');
-SELECT remove_columnstore_policy('metric.lock');
-SELECT remove_columnstore_policy('metric.io');
-SELECT remove_columnstore_policy('metric.cpu');
-SELECT remove_columnstore_policy('metric.ram');
-SELECT remove_columnstore_policy('metric.disk');
-SELECT remove_columnstore_policy('metric.table');
-SELECT remove_columnstore_policy('metric.index');
-SELECT remove_columnstore_policy('metric.column');
+CALL remove_columnstore_policy('metric.session');
+CALL remove_columnstore_policy('metric.lock');
+CALL remove_columnstore_policy('metric.io');
+CALL remove_columnstore_policy('metric.cpu');
+CALL remove_columnstore_policy('metric.ram');
+CALL remove_columnstore_policy('metric.disk');
+CALL remove_columnstore_policy('metric.table');
+CALL remove_columnstore_policy('metric.index');
+CALL remove_columnstore_policy('metric.column');
 
 ALTER TABLE "metric"."session" SET (timescaledb.enable_columnstore = false);
 ALTER TABLE "metric"."lock"    SET (timescaledb.enable_columnstore = false);
