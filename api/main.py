@@ -15,6 +15,8 @@ from app.databases.locks.router import router as locks_router
 from app.databases.configs.router import router as db_config_router
 from app.servers.config.router import router as srv_config_router
 from app.servers.metrics.router import router as srv_metrics_router
+from app.tags.router import router as tags_router
+from app.docs.router import router as docs_router
 from app.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
 from database.models.base import User
@@ -86,6 +88,30 @@ tags_metadata = [
         "name": "locks",
         "description": "Real-time lock monitoring via Server-Sent Events.",
     },
+    {
+        "name": "tags",
+        "description": "Manage classification tags scoped to a server.",
+    },
+    {
+        "name": "database doc",
+        "description": "Documentation for managed databases.",
+    },
+    {
+        "name": "schema doc",
+        "description": "Documentation for PostgreSQL schemas.",
+    },
+    {
+        "name": "table doc",
+        "description": "Documentation for tables.",
+    },
+    {
+        "name": "column doc",
+        "description": "Documentation for columns, including PII classification.",
+    },
+    {
+        "name": "index doc",
+        "description": "Documentation for indexes.",
+    },
 ]
 
 app = FastAPI(
@@ -115,7 +141,6 @@ async def app_exception_handler(request: Request, exc: BaseAppException):
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "status_code": exc.status_code,
             "message": exc.message,
             "details": exc.details
         }
@@ -130,4 +155,5 @@ app.include_router(locks_router, prefix="/v1")
 app.include_router(db_config_router, prefix="/v1")
 app.include_router(srv_config_router, prefix="/v1")
 app.include_router(srv_metrics_router, prefix="/v1")
-
+app.include_router(tags_router, prefix="/v1")
+app.include_router(docs_router, prefix="/v1")

@@ -9,3 +9,7 @@ from database.models.metric import (
     TableMetric, IndexMetric, ColumnMetric, 
     SessionMetric, LockMetric
 )
+from database.models.doc import (
+    DatabaseDoc, SchemaDoc, TableDoc, ColumnDoc, IndexDoc, Tag,
+    DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag
+)
