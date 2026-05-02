@@ -5,7 +5,6 @@ class ErrorMessage(BaseModel):
     detail: str
 
 class ExceptionResponse(BaseModel):
-    status_code: int
     message: str
     details: Optional[Any] = None
 
