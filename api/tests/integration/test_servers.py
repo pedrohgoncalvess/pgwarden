@@ -2,7 +2,6 @@ import uuid
 
 import pytest
 import pytest_asyncio
-
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 
@@ -56,6 +55,7 @@ async def test_list_servers(auth_client: AsyncClient, db_session):
 async def test_test_connection_success(auth_client: AsyncClient):
     """Tests the connection test endpoint with mocked successful response."""
     connection_data = {
+        "name": "Test Server",
         "host": "localhost",
         "port": "5432",
         "username": "postgres",
@@ -79,6 +79,7 @@ async def test_test_connection_success(auth_client: AsyncClient):
 async def test_test_connection_invalid_port(auth_client: AsyncClient):
     """Tests the connection test endpoint with an invalid port format."""
     connection_data = {
+        "name": "Test Server",
         "host": "localhost",
         "port": "not-a-number",
         "username": "postgres",
