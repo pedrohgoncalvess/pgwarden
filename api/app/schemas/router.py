@@ -11,7 +11,7 @@ from app.auth.services import get_current_user
 
 router = APIRouter(
     prefix="/schemas",
-    tags=["schema"],
+    tags=["schemas"],
     dependencies=[Depends(get_current_user)],
 )
 
