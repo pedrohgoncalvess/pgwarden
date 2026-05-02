@@ -2,6 +2,7 @@ services:
   db_test:
     image: timescale/timescaledb:latest-pg17
     container_name: pgwarden_db_test
+    command: ["postgres", "-c", "timescaledb.enable_chunk_skipping=on"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

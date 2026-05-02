@@ -56,7 +56,6 @@ echo ""
 echo -e "${YELLOW}[3/5] Running migration tests...${NC}"
 cd migrations
 UV_PROJECT_ENVIRONMENT=.venv.test uv run pytest tests/ \
-  --junitxml=../test-results/migration-report.xml \
   --html=../test-results/migration-report.html \
   --self-contained-html -v
 MIGRATION_EXIT=$?
@@ -72,7 +71,6 @@ echo ""
 echo -e "${YELLOW}[4/5] Running API tests...${NC}"
 cd api
 PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test uv run pytest tests/ \
-  --junitxml=../test-results/api-report.xml \
   --html=../test-results/api-report.html \
   --self-contained-html -v
 API_EXIT=$?

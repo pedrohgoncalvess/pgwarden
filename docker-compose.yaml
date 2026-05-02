@@ -1,6 +1,7 @@
 services:
   db:
     image: timescale/timescaledb:latest-pg17
+    command: ["postgres", "-c", "timescaledb.enable_chunk_skipping=on"]
     container_name: pgwarden_db
     restart: unless-stopped
     env_file:
