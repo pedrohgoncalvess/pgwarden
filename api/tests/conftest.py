@@ -1,115 +1,147 @@
-import os
+"""
+conftest.py – fixtures de teste para a API PGWarden.
 
+Estratégia:
+  • Cria um engine SQLAlchemy dedicado apontando para o banco de teste (pgwarden_test).
+  • Faz monkey-patch da classe DatabaseConnection para que todos os routers que
+    usam `async with DatabaseConnection() as conn:` recebam a sessão de teste
+    dentro de uma transação que é revertida ao final de cada teste.
+  • Expõe as fixtures `db_session`, `client` (sem autenticação) e `auth_client`
+    (com JWT válido) para os testes de integração.
+"""
+
+import os
 import pytest
 import pytest_asyncio
+
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import text
+from passlib.context import CryptContext
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
-os.environ["IS_TESTING"] = "1"
+# ── env vars ──────────────────────────────────────────────────────────────────
+os.environ.setdefault("IS_TESTING", "1")
+os.environ.setdefault("DB_HOST",     os.getenv("DB_HOST",     "localhost"))
+os.environ.setdefault("DB_PORT",     os.getenv("DB_PORT",     "5437"))
+os.environ.setdefault("DB_USER",     os.getenv("DB_USER",     "postgres"))
+os.environ.setdefault("DB_PASSWORD", os.getenv("DB_PASSWORD", "postgres"))
+os.environ.setdefault("DB_NAME",     os.getenv("TEST_DB_NAME","pgwarden_test"))
+os.environ.setdefault("SECRET_KEY",  os.getenv("SECRET_KEY",  "test-secret-key-not-for-production"))
 
-from main import app
-from database.connection import DatabaseConnection
-from database.models import Base
-
-
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5437")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASSWORD", "postgres")
-DB_NAME = os.getenv("TEST_DB_NAME", "pgwarden_test")
-
-TEST_DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-ADMIN_DB_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/postgres"
+# ── imports that depend on env vars ───────────────────────────────────────────
+from database.models import Base          # noqa: E402  (also registers all submodels)
+from database.models.base.user import User           # noqa: E402
+import database.connection as _db_connection_module  # noqa: E402
 
 
-@pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def engine():
-    """Creates the test database, sets up schemas, and provides a shared engine."""
-    try:
-        admin_engine = create_async_engine(ADMIN_DB_URL, isolation_level="AUTOCOMMIT")
-        async with admin_engine.connect() as conn:
-            result = await conn.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{DB_NAME}'"))
-            if not result.scalar():
-                await conn.execute(text(f"CREATE DATABASE {DB_NAME}"))
-        await admin_engine.dispose()
-    except Exception as e:
-        pytest.skip(f"Could not connect to Postgres: {e}")
+# ── test engine ───────────────────────────────────────────────────────────────
+_DB_URL = (
+    f"postgresql+asyncpg://"
+    f"{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}"
+    f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}"
+    f"/{os.environ['DB_NAME']}"
+)
 
-    _engine = create_async_engine(TEST_DATABASE_URL)
+from sqlalchemy.pool import NullPool
 
-    async with _engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA IF EXISTS base CASCADE"))
-        await conn.execute(text("DROP SCHEMA IF EXISTS collector CASCADE"))
-        await conn.execute(text("DROP SCHEMA IF EXISTS metadata CASCADE"))
-        await conn.execute(text("DROP SCHEMA IF EXISTS metric CASCADE"))
+_test_engine = create_async_engine(_DB_URL, echo=False, future=True, poolclass=NullPool)
+_TestSessionMaker = async_sessionmaker(
+    bind=_test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
 
-        await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
-        await conn.execute(text('CREATE EXTENSION IF NOT EXISTS timescaledb'))
 
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS base"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS collector"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS metadata"))
-        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS metric"))
-
+# ── create all tables once per session ────────────────────────────────────────
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _create_tables():
+    async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    yield _engine
-    await _engine.dispose()
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def cleanup(engine):
-    """Truncates all tables after each test to guarantee isolation."""
     yield
-    async with engine.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(text(f'TRUNCATE TABLE {table.schema}."{table.name}" CASCADE'))
+    async with _test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
 
+# ── db_session: one rolled-back transaction per test ─────────────────────────
 @pytest_asyncio.fixture
-async def db_session(engine):
-    """Provides a database session for each test."""
-    session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_maker() as session:
-        yield session
+async def db_session():
+    """
+    Yields a SQLAlchemy AsyncSession that wraps everything in a savepoint
+    so that changes are rolled back after each test (no data leakage).
+    """
+    async with _test_engine.connect() as conn:
+        await conn.begin()
+        session = AsyncSession(bind=conn, expire_on_commit=False)
+
+        # Monkey-patch DatabaseConnection so every `async with DatabaseConnection()`
+        # inside the routers returns THIS session instead of opening a real connection.
+        original_aenter = _db_connection_module.DatabaseConnection.__aenter__
+        original_aexit  = _db_connection_module.DatabaseConnection.__aexit__
+
+        async def _fake_aenter(self):
+            return session
+
+        async def _fake_aexit(self, *args):
+            pass  # don't close – rollback happens below
+
+        _db_connection_module.DatabaseConnection.__aenter__ = _fake_aenter
+        _db_connection_module.DatabaseConnection.__aexit__  = _fake_aexit
+
+        try:
+            yield session
+        finally:
+            await session.close()
+            await conn.rollback()
+            # Restore original methods
+            _db_connection_module.DatabaseConnection.__aenter__ = original_aenter
+            _db_connection_module.DatabaseConnection.__aexit__  = original_aexit
 
 
+# ── client: unauthenticated HTTPX client ─────────────────────────────────────
 @pytest_asyncio.fixture
-async def client(monkeypatch):
-    """Provides an HTTP client with DatabaseConnection mocked to the test database."""
-    def mock_init(self):
-        self._database_url = TEST_DATABASE_URL
-        self._engine = None
-        self._session_maker = None
-        self._session = None
-
-    monkeypatch.setattr(DatabaseConnection, "__init__", mock_init)
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+async def client(db_session):  # noqa: F811  (db_session patches the connection)
+    """Unauthenticated AsyncClient for testing public / 401 endpoints."""
+    from main import app
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
         yield ac
 
 
-@pytest_asyncio.fixture
-async def auth_client(client, db_session):
-    """Provides an authenticated HTTP client with a committed test user."""
-    from database.models.base import User
-    from app.auth.services import create_access_token, pwd_context
-    from datetime import timedelta
+# ── test_user: admin user created inside the test transaction ─────────────────
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+@pytest_asyncio.fixture
+async def test_user(db_session):
+    """Creates a throwaway admin user for auth tests."""
     user = User(
-        email="auth_test@example.com",
+        email="test@example.com",
         password=pwd_context.hash("password123"),
-        name="Auth Test User",
-        is_admin=True
+        name="Test User",
+        is_admin=True,
     )
     db_session.add(user)
     await db_session.commit()
+    return user
 
-    access_token = create_access_token(
-        data={"sub": user.email},
-        expires_delta=timedelta(minutes=15)
+
+# ── auth_client: client that already carries a valid JWT ─────────────────────
+@pytest_asyncio.fixture
+async def auth_client(client, test_user):
+    """
+    AsyncClient pre-authenticated as the test_user.
+    Performs a real POST /v1/auth to obtain a token so that the auth
+    middleware is exercised exactly as in production.
+    """
+    resp = await client.post(
+        "/v1/auth",
+        json={"email": "test@example.com", "password": "password123"},
     )
-    client.headers.update({"Authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200, f"auth failed: {resp.text}"
+    token = resp.json()["access_token"]["token"]
+    client.headers.update({"Authorization": f"Bearer {token}"})
     yield client
