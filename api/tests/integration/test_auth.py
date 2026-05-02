@@ -1,26 +1,5 @@
 import pytest
-import pytest_asyncio
-
 from httpx import AsyncClient
-from passlib.context import CryptContext
-
-from database.models.base import User
-
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-@pytest_asyncio.fixture
-async def test_user(db_session):
-    """Creates a test user in the test database to ensure tests are independent."""
-    user = User(
-        email="test@example.com",
-        password=pwd_context.hash("password123"),
-        name="Test User",
-        is_admin=True
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient, test_user):

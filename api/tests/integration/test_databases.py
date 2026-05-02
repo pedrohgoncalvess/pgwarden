@@ -2,7 +2,6 @@ import uuid
 
 import pytest
 import pytest_asyncio
-
 from httpx import AsyncClient
 
 from database.models.collector.server import Server
