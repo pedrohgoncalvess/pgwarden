@@ -1,0 +1,18 @@
+-- docs-tags-history
+-- depends: 20260424_02_tsdbop-timescale-tuning
+
+DROP TABLE IF EXISTS doc.index_tag CASCADE;
+DROP TABLE IF EXISTS doc.column_tag CASCADE;
+DROP TABLE IF EXISTS doc.table_tag CASCADE;
+DROP TABLE IF EXISTS doc.schema_tag CASCADE;
+DROP TABLE IF EXISTS doc.database_tag CASCADE;
+
+DROP TABLE IF EXISTS doc."index" CASCADE;
+DROP TABLE IF EXISTS doc."column" CASCADE;
+DROP TABLE IF EXISTS doc."table" CASCADE;
+DROP TABLE IF EXISTS doc.schema CASCADE;
+DROP TABLE IF EXISTS doc.database CASCADE;
+
+DROP TABLE IF EXISTS doc.tag CASCADE;
+
+DROP SCHEMA IF EXISTS doc CASCADE;
