@@ -1,4 +1,5 @@
 from cryptography.fernet import Fernet
+from cryptography.fernet import InvalidToken
 from utils import get_env_var
 
 def _get_key() -> bytes:
@@ -16,3 +17,11 @@ def decrypt(token: any) -> str:
     if token is None:
         return None
     return Fernet(_get_key()).decrypt(str(token).encode()).decode()
+
+def decrypt_or_plain(value: any) -> str:
+    if value is None:
+        return None
+    try:
+        return decrypt(value)
+    except InvalidToken:
+        return str(value)
