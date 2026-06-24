@@ -13,6 +13,9 @@ from app.servers.router import router as server_router
 from app.databases.sessions.router import router as sessions_router
 from app.databases.locks.router import router as locks_router
 from app.databases.configs.router import router as db_config_router
+from app.databases.metrics.router import router as db_metrics_router
+from app.databases.stats.router import router as db_stats_router
+from app.databases.uptime.router import router as db_uptime_router
 from app.servers.config.router import router as srv_config_router
 from app.servers.metrics.router import router as srv_metrics_router
 from app.tags.router import router as tags_router
@@ -74,7 +77,7 @@ tags_metadata = [
     },
     {
         "name": "databases",
-        "description": "Manage monitored databases linked to the registered servers.",
+        "description": "Manage monitored databases linked to the registered servers. Includes real-time metrics (TPS) via Server-Sent Events.",
     },
     {
         "name": "schemas",
@@ -153,6 +156,9 @@ app.include_router(server_router, prefix="/v1")
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(locks_router, prefix="/v1")
 app.include_router(db_config_router, prefix="/v1")
+app.include_router(db_metrics_router, prefix="/v1")
+app.include_router(db_stats_router, prefix="/v1")
+app.include_router(db_uptime_router, prefix="/v1")
 app.include_router(srv_config_router, prefix="/v1")
 app.include_router(srv_metrics_router, prefix="/v1")
 app.include_router(tags_router, prefix="/v1")
