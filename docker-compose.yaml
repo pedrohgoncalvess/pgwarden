@@ -92,6 +92,22 @@ services:
     networks:
       - pgwarden_network
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pgwarden_frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://api:8080
+    networks:
+      - pgwarden_network
+
 networks:
   pgwarden_network:
     driver: bridge

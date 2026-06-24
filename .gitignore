@@ -1,4 +1,4 @@
-.idea
+**/.idea
 .vscode
 .venv.*
 **/.venv
@@ -10,3 +10,5 @@
 **/.pytest_cache
 **/*.pyc
 *.log
+.codex
+.agents
