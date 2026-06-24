@@ -3,3 +3,4 @@ from collector.collectors.metric.column import ColumnMetricCollector
 from collector.collectors.metric.table import TableMetricCollector
 from collector.collectors.metric.session import SessionMetricCollector
 from collector.collectors.metric.lock import LockMetricCollector
+from collector.collectors.metric.database_stat import DatabaseStatCollector

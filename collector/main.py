@@ -6,7 +6,7 @@ from psycopg.rows import dict_row
 from collector.collectors import (
     TableCollector, IndexCollector, ColumnCollector,
     TableMetricCollector, IndexMetricCollector, ColumnMetricCollector,
-    LockMetricCollector, SessionMetricCollector,
+    LockMetricCollector, SessionMetricCollector, DatabaseStatCollector,
     CpuCollector, RamCollector, DiskCollector, IoCollector,
 )
 from database import (
@@ -47,6 +47,7 @@ DATABASE_COLLECTOR_MAP = {
     "index_metric_collector":    lambda mon, met, db: IndexMetricCollector(mon, met, db.id),
     "lock_metric_collector":     lambda mon, met, db: LockMetricCollector(mon, met, db.id),
     "session_metric_collector":  lambda mon, met, db: SessionMetricCollector(mon, met, db.id),
+    "database_stat_collector":   lambda mon, met, db: DatabaseStatCollector(mon, met, db.id),
 }
 
 SERVER_COLLECTOR_MAP = {

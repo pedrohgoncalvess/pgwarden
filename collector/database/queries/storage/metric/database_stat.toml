@@ -1,0 +1,15 @@
+[INSERT]
+default = """
+INSERT INTO metric.database_stat (
+    collected_at, database_id, xact_commit, xact_rollback,
+    blks_read, blks_hit, tup_returned, tup_fetched,
+    tup_inserted, tup_updated, tup_deleted, conflicts,
+    deadlocks, db_size_bytes
+) VALUES (
+    %(collected_at)s, %(database_id)s, %(xact_commit)s, %(xact_rollback)s,
+    %(blks_read)s, %(blks_hit)s, %(tup_returned)s, %(tup_fetched)s,
+    %(tup_inserted)s, %(tup_updated)s, %(tup_deleted)s, %(conflicts)s,
+    %(deadlocks)s, %(db_size_bytes)s
+)
+ON CONFLICT (collected_at, database_id) DO NOTHING
+"""
