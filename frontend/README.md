@@ -1,63 +1,42 @@
-# PGWarden Frontend
+# sv
 
-Frontend app for PGWarden
+Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
-## Stack
+## Creating a project
 
-- Vite + React + TypeScript
-- TanStack Router
-- TanStack Query
-- Zustand (slices pattern)
-- TanStack Table + TanStack Virtual
-- uPlot
-- TailwindCSS
-- Comlink + Web Workers
-- Zod
+If you're seeing this, you've probably already done this step. Congrats!
 
-## Structure
-
-```text
-frontend/
-  public/
-  src/
-    app/
-    lib/
-    modules/
-      auth/
-      dashboard/
-    routes/
-    main.tsx
+```sh
+# create a new project
+npx sv create my-app
 ```
 
-## Run
+To recreate this project with the same configuration:
 
-```bash
-npm install
+```sh
+# recreate this project
+npx sv@0.16.0 create --template minimal --types ts --add eslint prettier tailwindcss="plugins:none" --install npm frontend
+```
+
+## Developing
+
+Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+
+```sh
 npm run dev
+
+# or start the server and open the app in a new browser tab
+npm run dev -- --open
 ```
 
-Default app URL: `http://localhost:5173`
+## Building
 
-## Environment
+To create a production version of your app:
 
-Create `.env` from `.env.example`:
-
-```bash
-cp .env.example .env
+```sh
+npm run build
 ```
 
-Available vars:
+You can preview the production build with `npm run preview`.
 
-- `VITE_API_BASE_URL` default: `http://localhost:8080/v1`
-
-## WIP
-
-- The performance stream in `dashboard.metrics-sse.ts` is fake SSE data used for UI/UX development.
-- Chart metrics and query table values in the performance panel are simulated and do not come from backend query telemetry yet.
-- Query list rows (query text/role/categories) are generated from a local sample pool and rotated over time
-
-## Scripts
-
-- `npm run dev` - start development server
-- `npm run build` - typecheck + production build
-- `npm run lint` - run ESLint
+> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
