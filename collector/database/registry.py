@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from psycopg.rows import dict_row
 
 from database import DatabaseConnection, load_monitored_query, load_storage_query
-from utils import decrypt
+from utils import decrypt, decrypt_or_plain
 from log import logger
 
 
@@ -66,7 +66,7 @@ class DatabaseRegistry:
                 port     = decrypt(row["port"])
                 username = decrypt(row["username"])
                 password = decrypt(row["password"])
-                db_name  = row["db_name"]
+                db_name  = decrypt_or_plain(row["db_name"])
             except Exception as error:
                 await logger.error(
                     "DatabaseRegistry",

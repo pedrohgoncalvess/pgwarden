@@ -2,7 +2,7 @@ from psycopg.rows import dict_row
 
 from database import load_storage_query
 from log import logger
-from utils import encrypt
+from utils import decrypt_or_plain, encrypt
 
 
 async def _upsert_server(conn, entry: dict) -> int:
@@ -36,7 +36,7 @@ async def _upsert_database(conn, server_id: int, db_name: str) -> None:
 
     for row in existing_dbs:
         try:
-            if row["db_name"] == db_name:
+            if decrypt_or_plain(row["db_name"]) == db_name:
                 await logger.info("Bootstrap", "Insert", f"server_id={server_id} '{db_name}' already registered — skipping")
                 return
         except Exception as error:
