@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
@@ -19,5 +21,5 @@ router = APIRouter(
     description="Server-Sent Events endpoint that streams the latest collected locks for a specific database. Updates every 3 seconds.",
     responses=COMMON_RESPONSES
 )
-async def stream_locks(database_id: int):
+async def stream_locks(database_id: UUID):
     return EventSourceResponse(lock_stream(database_id))

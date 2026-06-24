@@ -1,10 +1,12 @@
 import asyncio
 import json
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import select, desc
 
 from database.connection import DatabaseConnection
+from database.models.collector.server import Server
 from database.models.metric.cpu import CpuMetric
 from database.models.metric.ram import RamMetric
 from database.models.metric.disk import DiskMetric
@@ -51,7 +53,7 @@ async def _fetch_latest(conn, model, server_id: int, last_ts):
     return serialize_row(latest), new_ts
 
 
-async def server_metrics_stream(server_id: int):
+async def server_metrics_stream(server_id: UUID):
     last_cpu_ts = None
     last_ram_ts = None
     last_disk_ts = None
@@ -60,10 +62,19 @@ async def server_metrics_stream(server_id: int):
     while True:
         try:
             async with DatabaseConnection() as conn:
-                cpu_data, last_cpu_ts = await _fetch_latest(conn, CpuMetric, server_id, last_cpu_ts)
-                ram_data, last_ram_ts = await _fetch_latest(conn, RamMetric, server_id, last_ram_ts)
-                disk_data, last_disk_ts = await _fetch_latest(conn, DiskMetric, server_id, last_disk_ts)
-                io_data, last_io_ts = await _fetch_latest(conn, IoMetric, server_id, last_io_ts)
+                server_result = await conn.execute(
+                    select(Server.id).where(Server.public_id == server_id)
+                )
+                internal_server_id = server_result.scalar_one_or_none()
+                if internal_server_id is None:
+                    yield {"event": "error", "data": json.dumps({"error": "Server not found"})}
+                    await asyncio.sleep(2)
+                    continue
+
+                cpu_data, last_cpu_ts = await _fetch_latest(conn, CpuMetric, internal_server_id, last_cpu_ts)
+                ram_data, last_ram_ts = await _fetch_latest(conn, RamMetric, internal_server_id, last_ram_ts)
+                disk_data, last_disk_ts = await _fetch_latest(conn, DiskMetric, internal_server_id, last_disk_ts)
+                io_data, last_io_ts = await _fetch_latest(conn, IoMetric, internal_server_id, last_io_ts)
 
             if cpu_data is not None:
                 yield {"event": "cpu", "data": json.dumps(cpu_data)}

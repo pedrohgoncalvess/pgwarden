@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
@@ -21,5 +23,5 @@ router = APIRouter(
                 "Polls every 2 seconds, adapting to each collector's configured interval.",
     responses=COMMON_RESPONSES
 )
-async def stream_server_metrics(server_id: int):
+async def stream_server_metrics(server_id: UUID):
     return EventSourceResponse(server_metrics_stream(server_id))
