@@ -3,7 +3,6 @@ from typing import List
 from fastapi import HTTPException
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
 from database.operations.metadata.tag import TagRepository
 from database.operations.collector.server import ServerRepository
@@ -11,16 +10,10 @@ from database.models.doc.tag import Tag
 from app.tags.models import TagCreate, TagUpdate
 
 
-async def create_tag(db: AsyncSession, server_id: UUID, tag_in: TagCreate) -> Tag:
+async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
     tag_repo = TagRepository(db)
-    server_repo = ServerRepository(db)
-
-    server = await server_repo.find_one_by(public_id=server_id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
 
     new_tag = Tag(
-        server_id=server.id,
         name=tag_in.name,
         description=tag_in.description,
         color=tag_in.color
@@ -34,25 +27,19 @@ async def create_tag(db: AsyncSession, server_id: UUID, tag_in: TagCreate) -> Ta
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def list_tags(db: AsyncSession, server_id: UUID) -> List[Tag]:
+async def list_tags(db: AsyncSession) -> List[Tag]:
     tag_repo = TagRepository(db)
-    server_repo = ServerRepository(db)
 
-    server = await server_repo.find_one_by(public_id=server_id)
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
-
-    return await tag_repo.find_by(server_id=server.id)
+    return await tag_repo.find_all()
 
 
-async def update_tag(db: AsyncSession, server_id: UUID, tag_id: UUID, tag_in: TagUpdate) -> Tag:
+async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
     tag_repo = TagRepository(db)
     
     tag = await tag_repo.find_one_by(public_id=tag_id)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-        
-    # Check if we are trying to rename to an existing tag in this server
+
     if tag_in.name and tag_in.name != tag.name:
         existing = await tag_repo.find_one_by(server_id=tag.server_id, name=tag_in.name)
         if existing:
@@ -65,7 +52,7 @@ async def update_tag(db: AsyncSession, server_id: UUID, tag_id: UUID, tag_in: Ta
     return await tag_repo.update(tag.id, update_data)
 
 
-async def delete_tag(db: AsyncSession, server_id: UUID, tag_id: UUID) -> None:
+async def delete_tag(db: AsyncSession, tag_id: UUID) -> None:
     tag_repo = TagRepository(db)
     
     tag = await tag_repo.find_one_by(public_id=tag_id)

@@ -11,7 +11,7 @@ from app.auth.services import get_current_user
 
 
 router = APIRouter(
-    prefix="/servers/{server_id}/tags",
+    prefix="/tags",
     tags=["tags"],
     dependencies=[Depends(get_current_user)],
 )
@@ -28,9 +28,9 @@ router = APIRouter(
         **COMMON_RESPONSES
     }
 )
-async def create_tag(server_id: UUID, tag_in: TagCreate):
+async def create_tag(tag_in: TagCreate):
     async with DatabaseConnection() as conn:
-        return await services.create_tag(conn, server_id, tag_in)
+        return await services.create_tag(conn, tag_in)
 
 @router.get(
     "/",
@@ -42,9 +42,9 @@ async def create_tag(server_id: UUID, tag_in: TagCreate):
         **COMMON_RESPONSES
     }
 )
-async def list_tags(server_id: UUID):
+async def list_tags():
     async with DatabaseConnection() as conn:
-        return await services.list_tags(conn, server_id)
+        return await services.list_tags(conn)
 
 @router.patch(
     "/{tag_id}",
@@ -57,9 +57,9 @@ async def list_tags(server_id: UUID):
         **COMMON_RESPONSES
     }
 )
-async def update_tag(server_id: UUID, tag_id: UUID, tag_in: TagUpdate):
+async def update_tag(tag_id: UUID, tag_in: TagUpdate):
     async with DatabaseConnection() as conn:
-        return await services.update_tag(conn, server_id, tag_id, tag_in)
+        return await services.update_tag(conn, tag_id, tag_in)
 
 @router.delete(
     "/{tag_id}",
@@ -71,6 +71,6 @@ async def update_tag(server_id: UUID, tag_id: UUID, tag_in: TagUpdate):
         **COMMON_RESPONSES
     }
 )
-async def delete_tag(server_id: UUID, tag_id: UUID):
+async def delete_tag(tag_id: UUID):
     async with DatabaseConnection() as conn:
-        await services.delete_tag(conn, server_id, tag_id)
+        await services.delete_tag(conn, tag_id)
