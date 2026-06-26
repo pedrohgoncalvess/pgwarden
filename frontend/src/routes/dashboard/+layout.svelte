@@ -5,10 +5,10 @@
 
   const navItems = [
     { name: 'Overview', href: '/dashboard', icon: 'dashboard' },
+    { name: 'Schema view', href: '/dashboard/schemas', icon: 'account_tree' },
     { name: 'Servers', href: '/dashboard/servers', icon: 'dns' },
     { name: 'Databases', href: '/dashboard/databases', icon: 'database' },
     { name: 'Sessions', href: '/dashboard/sessions', icon: 'group' },
-    { name: 'Schema Tracker', href: '/dashboard/schemas', icon: 'history' },
   ];
 
   const metadataItems = [
