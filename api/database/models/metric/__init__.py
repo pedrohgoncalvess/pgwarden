@@ -8,3 +8,4 @@ from database.models.metric.ram import RamMetric
 from database.models.metric.disk import DiskMetric
 from database.models.metric.io import IoMetric
 from database.models.metric.database_stat import DatabaseStat
+from database.models.metric.native_query import NativeQueryMetric

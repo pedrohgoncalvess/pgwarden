@@ -7,7 +7,7 @@ from database.models.metadata import (
 )
 from database.models.metric import (
     TableMetric, IndexMetric, ColumnMetric, 
-    SessionMetric, LockMetric
+    SessionMetric, LockMetric, NativeQueryMetric
 )
 from database.models.doc import (
     DatabaseDoc, SchemaDoc, TableDoc, ColumnDoc, IndexDoc, Tag,

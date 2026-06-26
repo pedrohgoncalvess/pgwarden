@@ -14,6 +14,7 @@ from app.databases.sessions.router import router as sessions_router
 from app.databases.locks.router import router as locks_router
 from app.databases.configs.router import router as db_config_router
 from app.databases.metrics.router import router as db_metrics_router
+from app.databases.native_queries.router import router as db_native_queries_router
 from app.databases.stats.router import router as db_stats_router
 from app.databases.uptime.router import router as db_uptime_router
 from app.servers.config.router import router as srv_config_router
@@ -92,6 +93,10 @@ tags_metadata = [
         "description": "Real-time lock monitoring via Server-Sent Events.",
     },
     {
+        "name": "native queries",
+        "description": "Native pg_stat_activity query monitoring and history.",
+    },
+    {
         "name": "tags",
         "description": "Manage classification tags scoped to a server.",
     },
@@ -157,6 +162,7 @@ app.include_router(sessions_router, prefix="/v1")
 app.include_router(locks_router, prefix="/v1")
 app.include_router(db_config_router, prefix="/v1")
 app.include_router(db_metrics_router, prefix="/v1")
+app.include_router(db_native_queries_router, prefix="/v1")
 app.include_router(db_stats_router, prefix="/v1")
 app.include_router(db_uptime_router, prefix="/v1")
 app.include_router(srv_config_router, prefix="/v1")
