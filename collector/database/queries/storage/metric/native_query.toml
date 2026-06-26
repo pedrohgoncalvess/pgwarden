@@ -1,0 +1,19 @@
+[INSERT]
+default = """
+INSERT INTO metric.native_query (
+    collected_at, database_id, pid, leader_pid, usesysid, user_name,
+    application_name, client_addr, client_hostname, client_port,
+    backend_start, xact_start, query_start, state_change,
+    wait_event_type, wait_event, state, backend_xid, backend_xmin,
+    query_id, backend_type, query, query_hash,
+    query_duration_ms, transaction_duration_ms, backend_duration_ms
+) VALUES (
+    %(collected_at)s, %(database_id)s, %(pid)s, %(leader_pid)s, %(usesysid)s, %(user_name)s,
+    %(application_name)s, %(client_addr)s, %(client_hostname)s, %(client_port)s,
+    %(backend_start)s, %(xact_start)s, %(query_start)s, %(state_change)s,
+    %(wait_event_type)s, %(wait_event)s, %(state)s, %(backend_xid)s, %(backend_xmin)s,
+    %(query_id)s, %(backend_type)s, %(query)s, %(query_hash)s,
+    %(query_duration_ms)s, %(transaction_duration_ms)s, %(backend_duration_ms)s
+)
+ON CONFLICT (collected_at, database_id, pid, backend_start) DO NOTHING
+"""

@@ -7,7 +7,7 @@ from collector.collectors import (
     TableCollector, IndexCollector, ColumnCollector,
     TableMetricCollector, IndexMetricCollector, ColumnMetricCollector,
     LockMetricCollector, SessionMetricCollector, DatabaseStatCollector,
-    CpuCollector, RamCollector, DiskCollector, IoCollector,
+    NativeQueryMetricCollector, CpuCollector, RamCollector, DiskCollector, IoCollector,
 )
 from database import (
     DatabaseConnection, DatabaseRegistry,
@@ -48,6 +48,7 @@ DATABASE_COLLECTOR_MAP = {
     "lock_metric_collector":     lambda mon, met, db: LockMetricCollector(mon, met, db.id),
     "session_metric_collector":  lambda mon, met, db: SessionMetricCollector(mon, met, db.id),
     "database_stat_collector":   lambda mon, met, db: DatabaseStatCollector(mon, met, db.id),
+    "native_query_collector":    lambda mon, met, db: NativeQueryMetricCollector(mon, met, db.id),
 }
 
 SERVER_COLLECTOR_MAP = {
