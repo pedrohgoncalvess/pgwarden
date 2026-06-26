@@ -113,10 +113,7 @@
 
         <!-- Password -->
         <div class="flex flex-col gap-2">
-          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant flex justify-between" for="password">
-            <span>Password</span>
-            <button type="button" class="text-primary hover:text-primary-fixed lowercase normal-case tracking-normal hover:underline cursor-pointer">Forgot?</button>
-          </label>
+          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant" for="password">Password</label>
           <div class="relative group">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors text-[20px]">lock</span>
             <input 
