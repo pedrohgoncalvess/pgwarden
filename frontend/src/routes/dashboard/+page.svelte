@@ -5,11 +5,12 @@
     createTpsEventSource, formatBytes, listServers,
     testConnection, createServer, createDatabase,
     createSessionEventSource, createLockEventSource, createServerMetricsEventSource,
+    createNativeQueryEventSource,
   } from '$lib/api';
   import type {
     DatabaseListItem, DatabaseStats, UptimeResponse,
     ServerListItem, ServerCreatedResponse,
-    SessionMetric, LockMetric, CpuMetric, RamMetric,
+    SessionMetric, LockMetric, CpuMetric, RamMetric, NativeQueryMetric,
   } from '$lib/api';
 
   let databases = $state<DatabaseListItem[]>([]);
@@ -18,6 +19,7 @@
   let uptime = $state<UptimeResponse | null>(null);
   let tps = $state<number>(0);
   let sessions = $state<SessionMetric[] | null>(null);
+  let nativeQueries = $state<NativeQueryMetric[] | null>(null);
   let locks = $state<LockMetric[] | null>(null);
   let cpuMetric = $state<CpuMetric | null>(null);
   let ramMetric = $state<RamMetric | null>(null);
@@ -25,6 +27,7 @@
   let error = $state<string>('');
   let tpsEventSource = $state<EventSource | null>(null);
   let sessionEventSource = $state<EventSource | null>(null);
+  let nativeQueryEventSource = $state<EventSource | null>(null);
   let lockEventSource = $state<EventSource | null>(null);
   let serverMetricsEventSource = $state<EventSource | null>(null);
 
@@ -57,6 +60,7 @@
     uptime = null;
     tps = 0;
     sessions = null;
+    nativeQueries = null;
     locks = null;
     cpuMetric = null;
     ramMetric = null;
@@ -68,6 +72,10 @@
     if (sessionEventSource) {
       sessionEventSource.close();
       sessionEventSource = null;
+    }
+    if (nativeQueryEventSource) {
+      nativeQueryEventSource.close();
+      nativeQueryEventSource = null;
     }
     if (lockEventSource) {
       lockEventSource.close();
@@ -129,6 +137,7 @@
   function connectStreams(db: DatabaseListItem) {
     connectTpsStream(db.id);
     connectSessionStream(db.id);
+    connectNativeQueryStream(db.id);
     connectLockStream(db.id);
     connectServerMetricsStream(db.server_id);
   }
@@ -141,6 +150,22 @@
       sessions = JSON.parse((event as MessageEvent).data);
     });
     sessionEventSource.onerror = () => { /* browser auto-reconnects */ };
+  }
+
+  function applyNativeQuerySnapshot(rows: NativeQueryMetric[]) {
+    nativeQueries = rows
+      .sort((a, b) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime())
+      .slice(0, 200);
+  }
+
+  function connectNativeQueryStream(dbId: string) {
+    nativeQueries = null;
+    if (nativeQueryEventSource) nativeQueryEventSource.close();
+    nativeQueryEventSource = createNativeQueryEventSource(dbId);
+    nativeQueryEventSource.addEventListener('native_query', (event) => {
+      applyNativeQuerySnapshot(JSON.parse((event as MessageEvent).data));
+    });
+    nativeQueryEventSource.onerror = () => { /* browser auto-reconnects */ };
   }
 
   function connectLockStream(dbId: string) {
@@ -167,16 +192,19 @@
     serverMetricsEventSource.onerror = () => { /* browser auto-reconnects */ };
   }
 
-  function formatDurationSince(value: string | null): string {
-    if (!value) return '--';
-    const startedAt = new Date(value).getTime();
-    if (Number.isNaN(startedAt)) return '--';
-    const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-    if (seconds < 60) return `${seconds}s`;
+  function formatMilliseconds(value: number | null): string {
+    if (value === null || value === undefined) return '--';
+    if (value < 1000) return `${Math.round(value)}ms`;
+    const seconds = value / 1000;
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours}h ${minutes % 60}m`;
+    return `${minutes}m ${Math.round(seconds % 60)}s`;
+  }
+
+  function dashboardQueries(): NativeQueryMetric[] {
+    return [...(nativeQueries ?? [])]
+      .filter((query) => query.state === 'active' && Boolean(query.query))
+      .sort((a, b) => (b.query_duration_ms ?? 0) - (a.query_duration_ms ?? 0))
   }
 
   async function handleTestConnection() {
@@ -284,6 +312,7 @@
   onDestroy(() => {
     if (tpsEventSource) tpsEventSource.close();
     if (sessionEventSource) sessionEventSource.close();
+    if (nativeQueryEventSource) nativeQueryEventSource.close();
     if (lockEventSource) lockEventSource.close();
     if (serverMetricsEventSource) serverMetricsEventSource.close();
   });
@@ -667,17 +696,23 @@
   <div class="grid grid-cols-12 gap-panel-gap">
 
     <!-- Active Queries (Left Col) -->
-    <div class="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-lg flex flex-col overflow-hidden">
+    <div class="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-lg flex flex-col overflow-hidden h-[460px]">
       <div class="px-4 py-3 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-primary text-sm">terminal</span>
-          <h2 class="font-headline-md text-headline-md m-0">Active Slow Queries</h2>
+          <h2 class="font-headline-md text-headline-md m-0">Active queries</h2>
         </div>
         <button class="text-[10px] font-label-caps text-primary hover:underline cursor-pointer">VIEW ALL</button>
       </div>
-      <div class="flex-1 overflow-x-auto custom-scrollbar">
-        <table class="w-full text-left border-collapse">
-          <thead>
+      <div class="flex-1 overflow-auto custom-scrollbar">
+        <table class="w-full table-fixed text-left border-collapse">
+          <colgroup>
+            <col class="w-24" />
+            <col class="w-28" />
+            <col />
+            <col class="w-20" />
+          </colgroup>
+          <thead class="sticky top-0 z-10">
             <tr class="bg-surface-container-high">
               <th class="px-4 py-2 font-label-caps text-on-surface-variant text-[10px] border-b border-outline-variant">PID</th>
               <th class="px-4 py-2 font-label-caps text-on-surface-variant text-[10px] border-b border-outline-variant">DURATION</th>
@@ -686,27 +721,31 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-outline-variant/30">
-            {#if sessions === null}
-              <tr>
-                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">--</td>
-                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">--</td>
-                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">Waiting for collector data</td>
+            {#if nativeQueries === null}
+              <tr class="h-[72px]">
+                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant truncate">--</td>
+                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant truncate">--</td>
+                <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant truncate">Waiting for native query samples</td>
                 <td class="px-4 py-3 text-center"><span class="material-symbols-outlined text-on-surface-variant text-[16px]">hourglass_empty</span></td>
               </tr>
-            {:else if sessions.length === 0}
+            {:else if dashboardQueries().length === 0}
               <tr>
-                <td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-sm">No active sessions in the latest collector sample</td>
+                <td colspan="4" class="px-4 py-20 text-center text-on-surface-variant text-sm">No active queries in the latest collector samples</td>
               </tr>
             {:else}
-              {#each sessions as session}
-                <tr class="hover:bg-surface-variant/20 transition-colors">
-                  <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">{session.pid}</td>
-                  <td class="px-4 py-3 font-code-sm text-code-sm {session.state === 'active' ? 'text-tertiary font-bold' : 'text-on-surface'}">{formatDurationSince(session.query_start)}</td>
-                  <td class="px-4 py-3">
-                    <code class="font-code-sm text-code-sm text-on-surface block max-w-md truncate">{session.query_preview || session.application_name || '--'}</code>
+              {#each dashboardQueries() as query}
+                <tr class="h-[72px] hover:bg-surface-variant/20 transition-colors">
+                  <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant truncate" title={String(query.pid)}>{query.pid}</td>
+                  <td class="px-4 py-3 font-code-sm text-code-sm truncate {query.state === 'active' ? 'text-tertiary font-bold' : 'text-on-surface'}">{formatMilliseconds(query.query_duration_ms)}</td>
+                  <td class="px-4 py-3 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-[10px] text-on-surface-variant font-label-caps truncate max-w-32">{query.user_name || '--'}</span>
+                      <span class="text-[10px] px-1.5 py-0.5 rounded border border-outline-variant text-on-surface-variant shrink-0">{query.state || '--'}</span>
+                    </div>
+                    <code class="font-code-sm text-code-sm text-on-surface block w-full truncate" title={query.query || '--'}>{query.query || '--'}</code>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <span class="material-symbols-outlined {session.wait_event ? 'text-error' : 'text-primary'} text-[16px]">{session.wait_event ? 'close' : 'check'}</span>
+                    <span class="material-symbols-outlined {query.wait_event ? 'text-error' : 'text-primary'} text-[16px]" title={query.wait_event || 'No wait event'}>{query.wait_event ? 'close' : 'check'}</span>
                   </td>
                 </tr>
               {/each}
