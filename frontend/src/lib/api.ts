@@ -21,6 +21,43 @@ type UptimeResponse = {
   postmaster_start_time: string;
 };
 
+export type SchemaColumn = {
+  id: string;
+  name: string;
+  description: string | null;
+  data_type: string;
+  is_nullable: boolean;
+  default_value: string | null;
+  is_unique: boolean;
+  ordinal_position: number;
+  fk_table_id: string | null;
+  fk_column_id: string | null;
+};
+
+export type SchemaIndex = {
+  id: string;
+  name: string;
+  type: string;
+  definition: string;
+  is_unique: boolean;
+  is_primary: boolean;
+  columns: string[];
+};
+
+export type SchemaTable = {
+  id: string;
+  schema_name: string;
+  name: string;
+  description: string | null;
+  columns: SchemaColumn[];
+  indexes: SchemaIndex[];
+};
+
+export type DatabaseSchema = {
+  id: string;
+  tables: SchemaTable[];
+};
+
 export type ServerListItem = {
   id: string;
   name: string;
@@ -99,6 +136,35 @@ export type RamMetric = {
   used_bytes: number | null;
   available_bytes: number | null;
   percent: number | null;
+};
+
+export type NativeQueryMetric = {
+  collected_at: string;
+  database_id: number;
+  pid: number;
+  leader_pid: number | null;
+  usesysid: number | null;
+  user_name: string | null;
+  application_name: string | null;
+  client_addr: string | null;
+  client_hostname: string | null;
+  client_port: number | null;
+  backend_start: string;
+  xact_start: string | null;
+  query_start: string | null;
+  state_change: string | null;
+  wait_event_type: string | null;
+  wait_event: string | null;
+  state: string | null;
+  backend_xid: string | null;
+  backend_xmin: string | null;
+  query_id: number | null;
+  backend_type: string | null;
+  query: string | null;
+  query_hash: string | null;
+  query_duration_ms: number | null;
+  transaction_duration_ms: number | null;
+  backend_duration_ms: number | null;
 };
 
 function getToken(): string | null {
@@ -217,6 +283,26 @@ export async function getDatabaseUptime(databaseId: string): Promise<UptimeRespo
   return res.json();
 }
 
+export async function getDatabaseSchema(databaseId: string): Promise<DatabaseSchema> {
+  const res = await fetch(`/api/v1/schemas/${databaseId}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to get database schema: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function listNativeQueries(databaseId: string, limit = 100): Promise<NativeQueryMetric[]> {
+  const res = await fetch(`/api/v1/databases/${databaseId}/native-queries?limit=${limit}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to list native queries: ${res.status}`);
+  }
+  return res.json();
+}
+
 export function createTpsEventSource(databaseId: string): EventSource {
   const token = getToken();
   const url = new URL(`/api/v1/databases/${databaseId}/metrics/stream`, window.location.origin);
@@ -245,6 +331,10 @@ export function createLockEventSource(databaseId: string): EventSource {
 
 export function createServerMetricsEventSource(serverId: string): EventSource {
   return createAuthenticatedEventSource(`/api/v1/servers/${serverId}/metrics/stream`);
+}
+
+export function createNativeQueryEventSource(databaseId: string): EventSource {
+  return createAuthenticatedEventSource(`/api/v1/databases/${databaseId}/native-queries/stream`);
 }
 
 export function formatBytes(bytes: number | null): string {
