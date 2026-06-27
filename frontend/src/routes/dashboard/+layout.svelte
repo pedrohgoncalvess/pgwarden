@@ -20,6 +20,13 @@
     { name: 'Settings', href: '/dashboard/settings', icon: 'settings' }
   ];
 
+  const processItems = [
+    { name: 'Live', href: '/dashboard/processes', icon: 'bolt' },
+    { name: 'History', href: '/dashboard/processes/history', icon: 'history' },
+  ];
+
+  let expandedProcesses = $state(false);
+
   function isActive(href: string, currentPath: string) {
     if (href === '/dashboard') {
       return currentPath === href;
@@ -53,6 +60,35 @@
             <span class="font-body-md text-body-md">{item.name}</span>
           </a>
         {/each}
+      </nav>
+
+      <!-- Processes Nav -->
+      <nav class="space-y-1">
+        <h2 class="px-3 text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest mb-2">Processes</h2>
+        <button
+          onclick={() => expandedProcesses = !expandedProcesses}
+          class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+        >
+          <div class="flex items-center">
+            <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;">precision_manufacturing</span>
+            <span class="font-body-md text-body-md">Processes</span>
+          </div>
+          <span class="material-symbols-outlined text-[18px] transition-transform duration-200" style="transform: rotate({expandedProcesses ? 180 : 0}deg)">expand_more</span>
+        </button>
+        {#if expandedProcesses}
+          <div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
+            {#each processItems as item}
+              {@const active = isActive(item.href, $page.url.pathname)}
+              <a
+                href={item.href}
+                class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {active ? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
+              >
+                <span class="material-symbols-outlined mr-3" style="{active ? "font-variation-settings: 'FILL' 1;" : ''}">{item.icon}</span>
+                <span class="font-body-md text-body-md">{item.name}</span>
+              </a>
+            {/each}
+          </div>
+        {/if}
       </nav>
 
       <!-- Metadata Nav -->
