@@ -8,6 +8,7 @@ from passlib.context import CryptContext
 
 from app.auth.router import router as auth_router
 from app.schemas.router import router as schema_router
+from app.schemas.history.router import router as schema_history_router
 from app.databases.router import router as database_router
 from app.servers.router import router as server_router
 from app.databases.sessions.router import router as sessions_router
@@ -156,6 +157,7 @@ async def app_exception_handler(request: Request, exc: BaseAppException):
 
 app.include_router(auth_router, prefix="/v1")
 app.include_router(schema_router, prefix="/v1")
+app.include_router(schema_history_router, prefix="/v1")
 app.include_router(database_router, prefix="/v1")
 app.include_router(server_router, prefix="/v1")
 app.include_router(sessions_router, prefix="/v1")
