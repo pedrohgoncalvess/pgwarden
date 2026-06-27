@@ -167,6 +167,37 @@ export type NativeQueryMetric = {
   backend_duration_ms: number | null;
 };
 
+export type ProcessType = 'server' | 'database';
+export type ProcessStatus = 'idle' | 'running' | 'paused' | 'deleted';
+export type ProcessAction = 'pause' | 'resume' | 'stop' | 'delete';
+
+export type ProcessItem = {
+  id: number;
+  server_id: number;
+  database_id: number | null;
+  database_name: string | null;
+  name: string;
+  type: ProcessType;
+  interval: number;
+  is_paused: boolean;
+  next_run_at: string | null;
+  status: ProcessStatus;
+  action?: ProcessAction;
+};
+
+export type ProcessHistoryItem = {
+  id: number;
+  config_id: number | null;
+  database_id: number | null;
+  database_name: string | null;
+  name: string | null;
+  type: ProcessType | null;
+  status: string;
+  errors: string[];
+  started_at: string | null;
+  finished_at: string | null;
+};
+
 function getToken(): string | null {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('token');
@@ -337,6 +368,48 @@ export function createNativeQueryEventSource(databaseId: string): EventSource {
   return createAuthenticatedEventSource(`/api/v1/databases/${databaseId}/native-queries/stream`);
 }
 
+
+export function createProcessEventSource(serverId: string): EventSource {
+  return createAuthenticatedEventSource(`/api/v1/servers/${serverId}/configs/processes/stream`);
+}
+
+export async function listProcessHistory(
+  serverId: string,
+  limit = 100,
+  offset = 0
+): Promise<ProcessHistoryItem[]> {
+  const res = await fetch(
+    `/api/v1/servers/${serverId}/configs/processes/history?limit=${limit}&offset=${offset}`,
+    {
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to list process history: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function controlProcess(
+  serverId: string,
+  processId: number,
+  processType: ProcessType,
+  action: ProcessAction
+): Promise<ProcessItem> {
+  const res = await fetch(
+    `/api/v1/servers/${serverId}/configs/processes/${processId}?process_type=${processType}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ action }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Failed to control process: ${res.status}`);
+  }
+  return res.json();
+}
 export function formatBytes(bytes: number | null): string {
   if (bytes === null || bytes === undefined) return '-';
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
