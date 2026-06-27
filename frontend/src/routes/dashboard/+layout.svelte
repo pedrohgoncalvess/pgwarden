@@ -9,7 +9,11 @@
     { name: 'Servers', href: '/dashboard/servers', icon: 'dns' },
     { name: 'Databases', href: '/dashboard/databases', icon: 'database' },
     { name: 'Sessions', href: '/dashboard/sessions', icon: 'group' },
-    { name: 'Processes', href: '/dashboard/processes', icon: 'precision_manufacturing' },
+  ];
+
+  const processItems = [
+    { name: 'Live', href: '/dashboard/processes', icon: 'bolt' },
+    { name: 'History', href: '/dashboard/processes/history', icon: 'history' }
   ];
 
   const metadataItems = [
@@ -21,10 +25,11 @@
     { name: 'Settings', href: '/dashboard/settings', icon: 'settings' }
   ];
 
+  let expandedProcesses = $state($page.url.pathname.startsWith('/dashboard/processes'));
   let expandedMetadata = $state($page.url.pathname.startsWith('/dashboard/tags') || $page.url.pathname.startsWith('/dashboard/docs'));
 
   function isActive(href: string, currentPath: string) {
-    if (href === '/dashboard') {
+    if (href === '/dashboard' || href === '/dashboard/processes') {
       return currentPath === href;
     }
     return currentPath.startsWith(href);
@@ -41,7 +46,7 @@
       <span class="font-headline-md text-headline-md font-bold text-primary">pgwarden</span>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-3 space-y-6 custom-scrollbar">
+    <div class="flex-1 overflow-y-auto px-3 space-y-2 custom-scrollbar">
       
       <!-- Main Nav -->
       <nav class="space-y-1">
@@ -58,9 +63,36 @@
         {/each}
       </nav>
 
+      <!-- Processes Nav -->
+      <nav class="space-y-1">
+        <button
+          onclick={() => expandedProcesses = !expandedProcesses}
+          class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+        >
+          <div class="flex items-center">
+            <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;">precision_manufacturing</span>
+            <span class="font-body-md text-body-md">Processes</span>
+          </div>
+          <span class="material-symbols-outlined text-[18px] transition-transform duration-200" style="transform: rotate({expandedProcesses ? 180 : 0}deg)">expand_more</span>
+        </button>
+        {#if expandedProcesses}
+          <div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
+            {#each processItems as item}
+              {@const active = isActive(item.href, $page.url.pathname)}
+              <a
+                href={item.href}
+                class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {active ? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
+              >
+                <span class="material-symbols-outlined mr-3" style="{active ? 'font-variation-settings: \'FILL\' 1;' : ''}">{item.icon}</span>
+                <span class="font-body-md text-body-md">{item.name}</span>
+              </a>
+            {/each}
+          </div>
+        {/if}
+      </nav>
+
       <!-- Metadata Nav -->
       <nav class="space-y-1">
-        <h2 class="px-3 text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest mb-2">Metadata</h2>
         <button
           onclick={() => expandedMetadata = !expandedMetadata}
           class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
@@ -89,7 +121,6 @@
 
       <!-- System Nav -->
       <nav class="space-y-1">
-        <h2 class="px-3 text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest mb-2">System</h2>
         {#each configItems as item}
           {@const active = isActive(item.href, $page.url.pathname)}
           <a
