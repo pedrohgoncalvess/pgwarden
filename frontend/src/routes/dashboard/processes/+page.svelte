@@ -37,16 +37,31 @@
       : 'bg-primary/10 text-primary border-primary/20';
   }
 
-  function formatDuration(iso: string | null): string {
-    if (!iso) return '--';
-    const ms = Date.now() - new Date(iso).getTime();
-    if (Number.isNaN(ms) || ms < 0) return '--';
-    const s = Math.floor(ms / 1000);
+  function formatDuration(ms: number): string {
+    const absMs = Math.abs(ms);
+    const s = Math.floor(absMs / 1000);
     if (s < 60) return `${s}s`;
     const m = Math.floor(s / 60);
     if (m < 60) return `${m}m ${s % 60}s`;
     const h = Math.floor(m / 60);
-    return `${h}h ${m % 60}m`;
+    if (h < 24) return `${h}h ${m % 60}m`;
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h`;
+  }
+
+  function formatNextRun(iso: string | null): string {
+    if (!iso) return '--';
+    const ms = new Date(iso).getTime() - Date.now();
+    if (Number.isNaN(ms)) return '--';
+    if (ms <= 0) return 'due now';
+    return `in ${formatDuration(ms)}`;
+  }
+
+  function formatRunningTime(iso: string | null, status: string): string {
+    if (!iso || status !== 'running') return '--';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (Number.isNaN(ms) || ms < 0) return '--';
+    return formatDuration(ms);
   }
 
   function controlKey(p: ProcessItem): string {
@@ -198,6 +213,7 @@
               <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">SCOPE</th>
               <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">INTERVAL</th>
               <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">STATUS</th>
+              <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">RUNNING TIME</th>
               <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">NEXT RUN</th>
               <th class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest text-right">ACTIONS</th>
             </tr>
@@ -205,7 +221,7 @@
           <tbody class="divide-y divide-outline-variant/20">
             {#if processes === null}
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-sm">
+                <td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-sm">
                   <div class="flex items-center justify-center gap-2">
                     <svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -217,7 +233,7 @@
               </tr>
             {:else if processes.length === 0}
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-sm">
+                <td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-sm">
                   No collector processes found for this server.
                 </td>
               </tr>
@@ -247,7 +263,10 @@
                     </span>
                   </td>
                   <td class="px-4 py-3 font-code-sm text-code-sm {statusColor(process.status)}">
-                    {formatDuration(process.next_run_at)}
+                    {formatRunningTime(process.next_run_at, process.status)}
+                  </td>
+                  <td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">
+                    {formatNextRun(process.next_run_at)}
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex items-center justify-end gap-2">
