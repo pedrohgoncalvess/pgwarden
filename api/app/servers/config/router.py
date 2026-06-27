@@ -5,7 +5,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.servers.config.models import (
     ConfigItem, ConfigPatch,
-    ProcessItem, ProcessPatch, ProcessHistoryItem, ProcessControlResult, ProcessType
+    ProcessPatch, ProcessHistoryItem,
+    ProcessControlResult, ProcessType
 )
 from app.servers.config import services as process_services
 from app.common.models import COMMON_RESPONSES, ErrorMessage
