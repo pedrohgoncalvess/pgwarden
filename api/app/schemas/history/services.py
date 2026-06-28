@@ -1,3 +1,4 @@
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -194,7 +195,7 @@ async def get_database_schema_history(
         for c in columns:
             table = table_by_id.get(c.table_id)
             if c.deleted_at is None:
-                if table and c.created_at > table.created_at:
+                if table and c.created_at > (table.created_at + timedelta(minutes=1)):
                     events.append(SchemaHistoryItem(
                         id=str(c.public_id),
                         type="column",
@@ -251,7 +252,7 @@ async def get_database_schema_history(
         for i in indexes:
             table = table_by_id.get(i.table_id)
             if i.deleted_at is None:
-                if table and i.created_at > table.created_at:
+                if table and i.created_at > (table.created_at + timedelta(minutes=1)):
                     events.append(SchemaHistoryItem(
                         id=str(i.public_id),
                         type="index",
