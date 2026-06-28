@@ -103,21 +103,21 @@ async def test_create_server_unauthorized(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_get_process_history_not_found(auth_client: AsyncClient):
-    """Tests that process history returns 404 for a non-existent server."""
-    response = await auth_client.get("/v1/servers/non-existent-id/configs/processes/history")
+async def test_get_run_history_not_found(auth_client: AsyncClient):
+    """Tests that run history returns 404 for a non-existent server."""
+    response = await auth_client.get("/v1/servers/non-existent-id/configs/runs/history")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_get_process_history_success(auth_client: AsyncClient, db_session):
-    """Tests retrieving process history for a server's collectors."""
+async def test_get_run_history_success(auth_client: AsyncClient, db_session):
+    """Tests retrieving run history for a server's collectors."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
     from database.models.collector.run import Run
 
     server = Server(
-        name="Process Test Server",
+        name="Run Test Server",
         host="encrypted-host",
         port="encrypted-port",
         username="encrypted-user",
@@ -136,7 +136,7 @@ async def test_get_process_history_success(auth_client: AsyncClient, db_session)
     db_session.add(run)
     await db_session.commit()
 
-    response = await auth_client.get(f"/v1/servers/{server.public_id}/configs/processes/history")
+    response = await auth_client.get(f"/v1/servers/{server.public_id}/configs/runs/history")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
@@ -145,8 +145,8 @@ async def test_get_process_history_success(auth_client: AsyncClient, db_session)
 
 
 @pytest.mark.asyncio
-async def test_patch_process_pause_resume(auth_client: AsyncClient, db_session):
-    """Tests pausing and resuming a server collector process."""
+async def test_patch_run_pause_resume(auth_client: AsyncClient, db_session):
+    """Tests pausing and resuming a server collector run."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
 
@@ -167,7 +167,7 @@ async def test_patch_process_pause_resume(auth_client: AsyncClient, db_session):
     await db_session.refresh(config)
 
     response = await auth_client.patch(
-        f"/v1/servers/{server.public_id}/configs/processes/{config.id}?process_type=server",
+        f"/v1/servers/{server.public_id}/configs/runs/{config.id}?run_type=server",
         json={"action": "pause"},
     )
     assert response.status_code == 200
@@ -176,7 +176,7 @@ async def test_patch_process_pause_resume(auth_client: AsyncClient, db_session):
     assert data["status"] == "paused"
 
     response = await auth_client.patch(
-        f"/v1/servers/{server.public_id}/configs/processes/{config.id}?process_type=server",
+        f"/v1/servers/{server.public_id}/configs/runs/{config.id}?run_type=server",
         json={"action": "resume"},
     )
     assert response.status_code == 200
@@ -185,8 +185,8 @@ async def test_patch_process_pause_resume(auth_client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
-async def test_patch_process_delete(auth_client: AsyncClient, db_session):
-    """Tests deleting a server collector process."""
+async def test_patch_run_delete(auth_client: AsyncClient, db_session):
+    """Tests deleting a server collector run."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
 
@@ -207,7 +207,7 @@ async def test_patch_process_delete(auth_client: AsyncClient, db_session):
     await db_session.refresh(config)
 
     response = await auth_client.patch(
-        f"/v1/servers/{server.public_id}/configs/processes/{config.id}?process_type=server",
+        f"/v1/servers/{server.public_id}/configs/runs/{config.id}?run_type=server",
         json={"action": "delete"},
     )
     assert response.status_code == 200
@@ -217,7 +217,7 @@ async def test_patch_process_delete(auth_client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
-async def test_stream_processes_not_found(auth_client: AsyncClient):
-    """Tests that the process SSE stream returns 404 for a non-existent server."""
-    response = await auth_client.get("/v1/servers/non-existent-id/configs/processes/stream")
+async def test_stream_runs_not_found(auth_client: AsyncClient):
+    """Tests that the runs SSE stream returns 404 for a non-existent server."""
+    response = await auth_client.get("/v1/servers/non-existent-id/configs/runs/stream")
     assert response.status_code == 404
