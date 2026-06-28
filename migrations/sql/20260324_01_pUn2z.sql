@@ -24,10 +24,12 @@ CREATE TABLE "collector"."server" (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
+
     CONSTRAINT server_pk PRIMARY KEY (id),
     CONSTRAINT server_public_id_uq UNIQUE (public_id),
     CONSTRAINT server_conn_uq UNIQUE (host, username),
-    CONSTRAINT server_ssl_ck CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'))
+    CONSTRAINT server_ssl_ck CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full')),
+    CONSTRAINT server_host_port_uq UNIQUE (host, port)
 );
 
 COMMENT ON TABLE "collector"."server" IS 'PostgreSQL server registry. Holds encrypted connection credentials.';
