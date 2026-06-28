@@ -26,7 +26,7 @@
 
       const data = await res.json();
       localStorage.setItem('token', data.access_token.token);
-      window.location.href = '/dashboard';
+      window.location.href = '/overview';
     } catch (err) {
       error = 'Erro de conexão com o servidor.';
     } finally {
