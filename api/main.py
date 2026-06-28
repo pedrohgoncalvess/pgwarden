@@ -14,6 +14,7 @@ from app.servers.router import router as server_router
 from app.databases.sessions.router import router as sessions_router
 from app.databases.locks.router import router as locks_router
 from app.databases.configs.router import router as db_config_router
+from app.databases.runs.router import router as db_runs_router
 from app.databases.metrics.router import router as db_metrics_router
 from app.databases.native_queries.router import router as db_native_queries_router
 from app.databases.stats.router import router as db_stats_router
@@ -163,6 +164,7 @@ app.include_router(server_router, prefix="/v1")
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(locks_router, prefix="/v1")
 app.include_router(db_config_router, prefix="/v1")
+app.include_router(db_runs_router, prefix="/v1")
 app.include_router(db_metrics_router, prefix="/v1")
 app.include_router(db_native_queries_router, prefix="/v1")
 app.include_router(db_stats_router, prefix="/v1")

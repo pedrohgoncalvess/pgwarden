@@ -13,8 +13,8 @@ from database.models.collector.run import Run
 from database.models.metadata.database import Database
 
 
-def _serialize_process(item: dict) -> dict:
-    """Serialize a process snapshot for SSE payloads."""
+def _serialize_run_snapshot(item: dict) -> dict:
+    """Serialize a run snapshot for SSE payloads."""
     next_run = item.get("next_run_at")
     if isinstance(next_run, datetime):
         next_run = next_run.isoformat()
@@ -69,7 +69,15 @@ async def _get_server_internal_id(server_id: str) -> Optional[int]:
         return result.scalar_one_or_none()
 
 
-async def _get_processes(server_id: str):
+async def _get_database_internal_id(database_id: str) -> Optional[int]:
+    async with DatabaseConnection() as conn:
+        result = await conn.execute(
+            select(Database.id).where(Database.public_id == database_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def _get_runs_by_server(server_id: str):
     internal_id = await _get_server_internal_id(server_id)
     if internal_id is None:
         return None
@@ -92,9 +100,9 @@ async def _get_processes(server_id: str):
             )
             db_configs = db_cfg_result.scalars().all()
 
-    processes = []
+    runs = []
     for cfg in server_configs:
-        processes.append({
+        runs.append({
             "id": cfg.id,
             "server_id": cfg.server_id,
             "database_id": None,
@@ -108,7 +116,7 @@ async def _get_processes(server_id: str):
         })
 
     for cfg in db_configs:
-        processes.append({
+        runs.append({
             "id": cfg.id,
             "server_id": internal_id,
             "database_id": cfg.database_id,
@@ -121,27 +129,81 @@ async def _get_processes(server_id: str):
             "status": _derive_status(cfg.is_paused, cfg.next_run_at),
         })
 
-    return processes
+    return runs
 
 
-async def process_stream(server_id: str):
+async def _get_runs_by_database(database_id: str):
+    internal_id = await _get_database_internal_id(database_id)
+    if internal_id is None:
+        return None
+
+    async with DatabaseConnection() as conn:
+        db_result = await conn.execute(
+            select(Database.server_id, Database.db_name).where(Database.id == internal_id)
+        )
+        row = db_result.one_or_none()
+        if row is None:
+            return None
+        server_id, db_name = row
+
+        db_cfg_result = await conn.execute(
+            select(ConfigDatabase).where(ConfigDatabase.database_id == internal_id)
+        )
+        db_configs = db_cfg_result.scalars().all()
+
+    runs = []
+    for cfg in db_configs:
+        runs.append({
+            "id": cfg.id,
+            "server_id": server_id,
+            "database_id": internal_id,
+            "database_name": db_name,
+            "name": cfg.name,
+            "type": "database",
+            "interval": cfg.interval,
+            "is_paused": cfg.is_paused,
+            "next_run_at": cfg.next_run_at,
+            "status": _derive_status(cfg.is_paused, cfg.next_run_at),
+        })
+
+    return runs
+
+
+async def run_stream(server_id: str):
     while True:
         try:
-            processes = await _get_processes(server_id)
-            if processes is None:
+            runs = await _get_runs_by_server(server_id)
+            if runs is None:
                 yield {"event": "error", "data": json.dumps({"error": "Server not found"})}
                 await asyncio.sleep(2)
                 continue
 
-            payload = [_serialize_process(p) for p in processes]
-            yield {"event": "processes", "data": json.dumps(payload)}
+            payload = [_serialize_run_snapshot(r) for r in runs]
+            yield {"event": "runs", "data": json.dumps(payload)}
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"error": str(e)})}
 
         await asyncio.sleep(2)
 
 
-async def list_process_history(server_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
+async def database_run_stream(database_id: str):
+    while True:
+        try:
+            runs = await _get_runs_by_database(database_id)
+            if runs is None:
+                yield {"event": "error", "data": json.dumps({"error": "Database not found"})}
+                await asyncio.sleep(2)
+                continue
+
+            payload = [_serialize_run_snapshot(r) for r in runs]
+            yield {"event": "runs", "data": json.dumps(payload)}
+        except Exception as e:
+            yield {"event": "error", "data": json.dumps({"error": str(e)})}
+
+        await asyncio.sleep(2)
+
+
+async def list_run_history(server_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
     internal_id = await _get_server_internal_id(server_id)
     if internal_id is None:
         return []
@@ -200,28 +262,71 @@ async def list_process_history(server_id: str, limit: int = 100, offset: int = 0
         return [_serialize_run(r, config_lookup) for r in runs]
 
 
-async def patch_process(process_id: int, process_type: str, action: str) -> dict:
+async def list_database_run_history(database_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
+    internal_id = await _get_database_internal_id(database_id)
+    if internal_id is None:
+        return []
+
     async with DatabaseConnection() as conn:
-        if process_type == "server":
-            result = await conn.execute(select(ConfigServer).where(ConfigServer.id == process_id))
+        db_cfg_result = await conn.execute(
+            select(ConfigDatabase.id, ConfigDatabase.database_id)
+            .where(ConfigDatabase.database_id == internal_id)
+        )
+        db_config_rows = db_cfg_result.all()
+        db_config_ids = [row[0] for row in db_config_rows]
+
+        if not db_config_ids:
+            return []
+
+        db_name_result = await conn.execute(
+            select(Database.db_name).where(Database.id == internal_id)
+        )
+        db_name = db_name_result.scalar_one_or_none()
+
+        config_lookup = {
+            cfg_id: {
+                "type": "database",
+                "name": None,
+                "database_id": db_id,
+                "database_name": db_name,
+            }
+            for cfg_id, db_id in db_config_rows
+        }
+
+        runs_result = await conn.execute(
+            select(Run)
+            .where(Run.config_database_id.in_(db_config_ids))
+            .order_by(desc(Run.inserted_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        runs = runs_result.scalars().all()
+
+        return [_serialize_run(r, config_lookup) for r in runs]
+
+
+async def patch_run(run_id: int, run_type: str, action: str) -> dict:
+    async with DatabaseConnection() as conn:
+        if run_type == "server":
+            result = await conn.execute(select(ConfigServer).where(ConfigServer.id == run_id))
             config = result.scalar_one_or_none()
             model = ConfigServer
-        elif process_type == "database":
-            result = await conn.execute(select(ConfigDatabase).where(ConfigDatabase.id == process_id))
+        elif run_type == "database":
+            result = await conn.execute(select(ConfigDatabase).where(ConfigDatabase.id == run_id))
             config = result.scalar_one_or_none()
             model = ConfigDatabase
         else:
-            raise ValueError("Invalid process type. Use 'server' or 'database'.")
+            raise ValueError("Invalid run type. Use 'server' or 'database'.")
 
         if not config:
-            raise ValueError("Process not found")
+            raise ValueError("Run not found")
 
         snapshot = {
             "id": config.id,
             "server_id": config.server_id,
             "database_id": getattr(config, "database_id", None),
             "name": config.name,
-            "type": process_type,
+            "type": run_type,
             "interval": config.interval,
             "is_paused": config.is_paused,
             "next_run_at": config.next_run_at.isoformat() if config.next_run_at else None,

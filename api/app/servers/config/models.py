@@ -19,50 +19,50 @@ class ConfigPatch(BaseModel):
     interval: Optional[int] = None
 
 
-class ProcessType(str, Enum):
+class RunType(str, Enum):
     SERVER = "server"
     DATABASE = "database"
 
 
-class ProcessStatus(str, Enum):
+class RunStatus(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
 
 
-class ProcessAction(str, Enum):
+class RunAction(str, Enum):
     PAUSE = "pause"
     RESUME = "resume"
     STOP = "stop"
     DELETE = "delete"
 
 
-class ProcessItem(BaseModel):
+class RunItem(BaseModel):
     id: int
     server_id: int
     database_id: Optional[int] = None
     database_name: Optional[str] = None
     name: str
-    type: ProcessType
+    type: RunType
     interval: float
     is_paused: bool
     next_run_at: Optional[datetime] = None
-    status: ProcessStatus
+    status: RunStatus
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProcessPatch(BaseModel):
-    action: ProcessAction
+class RunPatch(BaseModel):
+    action: RunAction
 
 
-class ProcessHistoryItem(BaseModel):
+class RunHistoryItem(BaseModel):
     id: int
     config_id: Optional[int] = None
     database_id: Optional[int] = None
     database_name: Optional[str] = None
     name: Optional[str] = None
-    type: Optional[ProcessType] = None
+    type: Optional[RunType] = None
     status: str
     errors: List[str]
     started_at: Optional[datetime] = None
@@ -71,16 +71,16 @@ class ProcessHistoryItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProcessControlResult(BaseModel):
+class RunControlResult(BaseModel):
     id: int
     server_id: int
     database_id: Optional[int] = None
     name: str
-    type: ProcessType
+    type: RunType
     interval: float
     is_paused: bool
     next_run_at: Optional[datetime] = None
-    status: ProcessStatus
-    action: ProcessAction
+    status: RunStatus
+    action: RunAction
 
     model_config = ConfigDict(from_attributes=True)
