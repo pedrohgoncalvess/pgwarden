@@ -58,6 +58,31 @@ export type DatabaseSchema = {
   tables: SchemaTable[];
 };
 
+export type SchemaHistoryAction = 'added' | 'removed' | 'altered';
+export type SchemaHistoryType = 'table' | 'column' | 'index';
+
+export type SchemaHistoryItem = {
+  id: string;
+  type: SchemaHistoryType;
+  action: SchemaHistoryAction;
+  schema_name: string | null;
+  table_name: string | null;
+  column_name: string | null;
+  index_name: string | null;
+  object_id: string | null;
+  table_id: string | null;
+  changed_at: string;
+  changed_by: number | null;
+  details: string | null;
+};
+
+export type SchemaHistoryResponse = {
+  total: number;
+  limit: number;
+  offset: number;
+  items: SchemaHistoryItem[];
+};
+
 export type ServerListItem = {
   id: string;
   name: string;
@@ -167,31 +192,31 @@ export type NativeQueryMetric = {
   backend_duration_ms: number | null;
 };
 
-export type ProcessType = 'server' | 'database';
-export type ProcessStatus = 'idle' | 'running' | 'paused' | 'deleted';
-export type ProcessAction = 'pause' | 'resume' | 'stop' | 'delete';
+export type RunType = 'server' | 'database';
+export type RunStatus = 'idle' | 'running' | 'paused' | 'deleted';
+export type RunAction = 'pause' | 'resume' | 'stop' | 'delete';
 
-export type ProcessItem = {
+export type RunItem = {
   id: number;
   server_id: number;
   database_id: number | null;
   database_name: string | null;
   name: string;
-  type: ProcessType;
+  type: RunType;
   interval: number;
   is_paused: boolean;
   next_run_at: string | null;
-  status: ProcessStatus;
-  action?: ProcessAction;
+  status: RunStatus;
+  action?: RunAction;
 };
 
-export type ProcessHistoryItem = {
+export type RunHistoryItem = {
   id: number;
   config_id: number | null;
   database_id: number | null;
   database_name: string | null;
   name: string | null;
-  type: ProcessType | null;
+  type: RunType | null;
   status: string;
   errors: string[];
   started_at: string | null;
@@ -324,6 +349,27 @@ export async function getDatabaseSchema(databaseId: string): Promise<DatabaseSch
   return res.json();
 }
 
+export async function getDatabaseSchemaHistory(
+  databaseId: string,
+  tableId?: string,
+  limit = 100,
+  offset = 0
+): Promise<SchemaHistoryResponse> {
+  const url = new URL(`/api/v1/schemas/${databaseId}/history`, window.location.origin);
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('offset', String(offset));
+  if (tableId) {
+    url.searchParams.set('table_id', tableId);
+  }
+  const res = await fetch(url.toString(), {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to get schema history: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function listNativeQueries(databaseId: string, limit = 100): Promise<NativeQueryMetric[]> {
   const res = await fetch(`/api/v1/databases/${databaseId}/native-queries?limit=${limit}`, {
     headers: authHeaders(),
@@ -369,35 +415,35 @@ export function createNativeQueryEventSource(databaseId: string): EventSource {
 }
 
 
-export function createProcessEventSource(serverId: string): EventSource {
-  return createAuthenticatedEventSource(`/api/v1/servers/${serverId}/configs/processes/stream`);
+export function createRunEventSource(databaseId: string): EventSource {
+  return createAuthenticatedEventSource(`/api/v1/databases/${databaseId}/runs/stream`);
 }
 
-export async function listProcessHistory(
-  serverId: string,
+export async function listRunHistory(
+  databaseId: string,
   limit = 100,
   offset = 0
-): Promise<ProcessHistoryItem[]> {
+): Promise<RunHistoryItem[]> {
   const res = await fetch(
-    `/api/v1/servers/${serverId}/configs/processes/history?limit=${limit}&offset=${offset}`,
+    `/api/v1/databases/${databaseId}/runs/history?limit=${limit}&offset=${offset}`,
     {
       headers: authHeaders(),
     }
   );
   if (!res.ok) {
-    throw new Error(`Failed to list process history: ${res.status}`);
+    throw new Error(`Failed to list run history: ${res.status}`);
   }
   return res.json();
 }
 
-export async function controlProcess(
-  serverId: string,
-  processId: number,
-  processType: ProcessType,
-  action: ProcessAction
-): Promise<ProcessItem> {
+export async function controlRun(
+  databaseId: string,
+  runId: number,
+  runType: RunType,
+  action: RunAction
+): Promise<RunItem> {
   const res = await fetch(
-    `/api/v1/servers/${serverId}/configs/processes/${processId}?process_type=${processType}`,
+    `/api/v1/databases/${databaseId}/runs/${runId}?run_type=${runType}`,
     {
       method: 'PATCH',
       headers: authHeaders(),
@@ -406,7 +452,7 @@ export async function controlProcess(
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Failed to control process: ${res.status}`);
+    throw new Error(body.detail || `Failed to control run: ${res.status}`);
   }
   return res.json();
 }
