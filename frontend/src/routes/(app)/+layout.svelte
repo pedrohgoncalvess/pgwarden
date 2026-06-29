@@ -10,6 +10,12 @@
     { name: 'Servers', href: '/servers', icon: 'dns', needsDb: false },
   ];
 
+  const analyticsItems = [
+    { name: 'Data', href: '/analytics/data', icon: 'bar_chart', needsDb: true },
+    { name: 'Query', href: '/analytics/query', icon: 'search', needsDb: true },
+    { name: 'Index', href: '/analytics/index', icon: 'speed', needsDb: true }
+  ];
+
   const runItems = [
     { name: 'Live', href: '/runs/live', icon: 'bolt', needsDb: true },
     { name: 'History', href: '/runs/history', icon: 'history', needsDb: true }
@@ -24,31 +30,57 @@
     { name: 'Settings', href: '/settings', icon: 'settings', needsDb: false }
   ];
 
+  let expandedAnalytics = $state($page.url.pathname.startsWith('/analytics'));
   let expandedRuns = $state($page.url.pathname.startsWith('/runs'));
   let expandedMetadata = $state($page.url.pathname.startsWith('/metadata'));
 
   function resolveHref(href: string, needsDb: boolean, dbId: string | null): string {
     if (!needsDb) return href;
     const activeDb = dbId ?? $selectedDatabaseId;
-    if (!activeDb) return href;
+    if (!activeDb) {
+      if (href.startsWith('/runs/')) return '/runs';
+      if (href.startsWith('/analytics/')) return '/analytics';
+      return href;
+    }
     if (href.startsWith('/runs/')) {
       return `/runs/${activeDb}${href.slice('/runs'.length)}`;
+    }
+    if (href.startsWith('/analytics/')) {
+      return `/analytics/${activeDb}${href.slice('/analytics'.length)}`;
     }
     return `${href}/${activeDb}`;
   }
 
   $effect(() => {
     const routeDbId = $page.params.database_id;
+    const currentPath = $page.url.pathname;
+
     if (routeDbId) {
       selectedDatabaseId.set(routeDbId);
     }
+
+    if (isActive('/analytics', currentPath)) expandedAnalytics = true;
+    if (isActive('/runs', currentPath)) expandedRuns = true;
+    if (isActive('/metadata', currentPath)) expandedMetadata = true;
   });
 
   function isActive(href: string, currentPath: string) {
-    if (href === '/overview') {
-      return currentPath === href || currentPath.startsWith(`${href}/`);
+    return currentPath === href || currentPath.startsWith(`${href}/`);
+  }
+
+  function normalizeSubmenuPath(path: string) {
+    const segments = path.split('/').filter(Boolean);
+    const section = segments[0];
+
+    if ((section === 'analytics' || section === 'runs') && segments.length >= 3) {
+      return `/${section}/${segments.slice(2).join('/')}`;
     }
-    return currentPath.startsWith(href);
+
+    return path;
+  }
+
+  function isSubmenuActive(href: string, currentPath: string) {
+    return isActive(href, normalizeSubmenuPath(currentPath));
   }
 </script>
 
@@ -80,6 +112,46 @@
         {/each}
       </nav>
 
+      <!-- Analytics Nav -->
+      <nav class="space-y-1">
+        <button
+          onclick={() => expandedAnalytics = !expandedAnalytics}
+          class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+        >
+          <div class="flex items-center">
+            <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;">analytics</span>
+            <span class="font-body-md text-body-md">Analytics</span>
+          </div>
+          <span class="material-symbols-outlined text-[18px] transition-transform duration-200" style="transform: rotate({expandedAnalytics ? 180 : 0}deg)">expand_more</span>
+        </button>
+        {#if expandedAnalytics}
+          <div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
+            {#each analyticsItems as item}
+              {@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+              {@const active = isSubmenuActive(item.href, $page.url.pathname)}
+              {#if active}
+                <a
+                  href={$page.url.pathname}
+                  aria-current="page"
+                  class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {:else}
+                <a
+                  href={href}
+                  class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </nav>
+
       <!-- Runs Nav -->
       <nav class="space-y-1">
         <button
@@ -96,14 +168,25 @@
           <div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
             {#each runItems as item}
               {@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-              {@const active = isActive(item.href, $page.url.pathname)}
-              <a
-                href={href}
-                class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {active ? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
-              >
-                <span class="material-symbols-outlined mr-3" style="{active ? 'font-variation-settings: \'FILL\' 1;' : ''}">{item.icon}</span>
-                <span class="font-body-md text-body-md">{item.name}</span>
-              </a>
+              {@const active = isSubmenuActive(item.href, $page.url.pathname)}
+              {#if active}
+                <a
+                  href={$page.url.pathname}
+                  aria-current="page"
+                  class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {:else}
+                <a
+                  href={href}
+                  class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -124,14 +207,25 @@
         {#if expandedMetadata}
           <div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
             {#each metadataItems as item}
-              {@const active = isActive(item.href, $page.url.pathname)}
-              <a
-                href={item.href}
-                class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {active ? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
-              >
-                <span class="material-symbols-outlined mr-3" style="{active ? 'font-variation-settings: \'FILL\' 1;' : ''}">{item.icon}</span>
-                <span class="font-body-md text-body-md">{item.name}</span>
-              </a>
+              {@const active = isSubmenuActive(item.href, $page.url.pathname)}
+              {#if active}
+                <a
+                  href={$page.url.pathname}
+                  aria-current="page"
+                  class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {:else}
+                <a
+                  href={item.href}
+                  class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+                >
+                  <span class="material-symbols-outlined mr-3">{item.icon}</span>
+                  <span class="font-body-md text-body-md">{item.name}</span>
+                </a>
+              {/if}
             {/each}
           </div>
         {/if}
