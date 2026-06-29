@@ -11,6 +11,11 @@ from collector.collectors.result import SyncResult
 from log import logger
 
 
+def _align_collected_at() -> datetime:
+    now = datetime.now(timezone.utc)
+    return now.replace(second=0, microsecond=0)
+
+
 _COLLECT_DATABASE_STATS = load_monitored_query("database_stats")
 _INSERT_DATABASE_STAT = load_storage_query(schema="metric", table="database_stat", query_type="INSERT", query_name="default")
 _SELECT_TRACKED_DB = load_storage_query(schema="metadata", table="database", query_type="SELECT", query_name="by_id")
@@ -27,7 +32,7 @@ class DatabaseStatCollector(BaseCollector):
             if not db_info:
                 return result
 
-            collected_at = datetime.now(timezone.utc)
+            collected_at = _align_collected_at()
 
             async with self.monitored_db as conn:
                 async with conn.cursor(row_factory=dict_row) as cur:
