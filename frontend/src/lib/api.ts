@@ -456,6 +456,66 @@ export async function controlRun(
   }
   return res.json();
 }
+export type AnalyticsTableFilterItem = {
+  id: number;
+  schema_name: string;
+  name: string;
+};
+
+export type AnalyticsDatabaseSizePoint = {
+  collected_at: string;
+  size_bytes: number;
+};
+
+export type AnalyticsTableSizePoint = {
+  collected_at: string;
+  table_id: number;
+  schema_name: string;
+  table_name: string;
+  size_bytes: number;
+};
+
+export type AnalyticsDataResponse = {
+  database_id: string;
+  database_name: string;
+  database_size_history: AnalyticsDatabaseSizePoint[];
+  table_size_history: AnalyticsTableSizePoint[];
+  tables: AnalyticsTableFilterItem[];
+};
+
+export type AnalyticsPreset = '1d' | '3d' | '1w' | '2w' | '1m' | 'custom';
+
+export async function getAnalyticsData(
+  databaseId: string,
+  options: {
+    preset?: AnalyticsPreset;
+    startDate?: string;
+    endDate?: string;
+    tableIds?: number[];
+  } = {}
+): Promise<AnalyticsDataResponse> {
+  const url = new URL(`/api/v1/databases/${databaseId}/analytics/data`, window.location.origin);
+  if (options.preset && options.preset !== 'custom') {
+    url.searchParams.set('preset', options.preset);
+  }
+  if (options.startDate) {
+    url.searchParams.set('start_date', options.startDate);
+  }
+  if (options.endDate) {
+    url.searchParams.set('end_date', options.endDate);
+  }
+  if (options.tableIds && options.tableIds.length > 0) {
+    options.tableIds.forEach((id) => url.searchParams.append('table_ids', String(id)));
+  }
+  const res = await fetch(url.toString(), {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to get analytics data: ${res.status}`);
+  }
+  return res.json();
+}
+
 export function formatBytes(bytes: number | null): string {
   if (bytes === null || bytes === undefined) return '-';
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
