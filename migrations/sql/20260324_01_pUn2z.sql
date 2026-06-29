@@ -27,9 +27,8 @@ CREATE TABLE "collector"."server" (
 
     CONSTRAINT server_pk PRIMARY KEY (id),
     CONSTRAINT server_public_id_uq UNIQUE (public_id),
-    CONSTRAINT server_conn_uq UNIQUE (host, username),
-    CONSTRAINT server_ssl_ck CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full')),
-    CONSTRAINT server_host_port_uq UNIQUE (host, port)
+    CONSTRAINT server_name_uq UNIQUE (name),
+    CONSTRAINT server_ssl_ck CHECK (ssl_mode IN ('disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'))
 );
 
 COMMENT ON TABLE "collector"."server" IS 'PostgreSQL server registry. Holds encrypted connection credentials.';
@@ -355,6 +354,7 @@ CREATE OR REPLACE FUNCTION "collector"."fn_default_config_database"()
             (NEW.id, 'table_metric_collector', 1800),
             (NEW.id, 'column_metric_collector', 1800),
             (NEW.id, 'index_metric_collector', 1800),
+            (NEW.id, 'database_stat_collector', 1800),
             (NEW.id, 'lock_metric_collector', 3),
             (NEW.id, 'session_metric_collector', 3);
         RETURN NEW;
