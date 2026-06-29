@@ -6,7 +6,16 @@ INSERT INTO "collector"."server" (
 ) VALUES (
     %(name)s, %(host)s, %(port)s, %(username)s, %(password)s, %(ssl_mode)s,
     %(ignore_patterns)s, %(ignore_tables)s, %(include_tables)s
-) ON CONFLICT DO NOTHING
+) ON CONFLICT (name) DO UPDATE SET
+    host = EXCLUDED.host,
+    port = EXCLUDED.port,
+    username = EXCLUDED.username,
+    password = EXCLUDED.password,
+    ssl_mode = EXCLUDED.ssl_mode,
+    ignore_patterns = EXCLUDED.ignore_patterns,
+    ignore_tables = EXCLUDED.ignore_tables,
+    include_tables = EXCLUDED.include_tables
+RETURNING id
 """
 
 [SELECT]

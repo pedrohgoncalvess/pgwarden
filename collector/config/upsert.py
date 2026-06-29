@@ -8,7 +8,7 @@ from utils import decrypt_or_plain, encrypt
 async def _upsert_server(conn, entry: dict) -> int:
     name = entry["name"]
 
-    async with conn.cursor() as cur:
+    async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(load_storage_query(schema="collector", table="server", query_type="INSERT", query_name="default"), {
             "name":     name,
             "host":     encrypt(entry["host"]),
@@ -20,13 +20,11 @@ async def _upsert_server(conn, entry: dict) -> int:
             "ignore_tables":  entry.get("ignore_tables"),
             "include_tables": entry.get("include_tables"),
         })
+        row = await cur.fetchone()
 
-    async with conn.cursor() as cur:
-        await cur.execute(load_storage_query(schema="collector", table="server", query_type="SELECT", query_name="by_name"), {"name": name})
-        existing = await cur.fetchone()
-
-    await logger.info("Bootstrap", name, f"Server registered (id={existing})")
-    return existing["id"]
+    server_id = row["id"]
+    await logger.info("Bootstrap", name, f"Server upserted (id={server_id})")
+    return server_id
 
 
 async def _upsert_database(conn, server_id: int, db_name: str) -> None:

@@ -21,9 +21,6 @@ async def bootstrap(metrics_db: DatabaseConnection) -> None:
                 for db_name in entry.get("databases", []):
                     await _upsert_database(conn, row, db_name)
 
-            except psycopg.errors.UniqueViolation:
-                continue
-                
             except Exception as error:
                 await logger.error("Bootstrap", entry.get("name", "?"), f"Failed: {error}")
                 continue
