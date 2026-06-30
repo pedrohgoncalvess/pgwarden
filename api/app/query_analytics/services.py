@@ -1,0 +1,323 @@
+import re
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+from uuid import UUID
+
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.query_analytics.models import (
+    QueryAnalyticsResponse,
+    QueryAnalyticsItem,
+    QueryAnalyticsTimelinePoint,
+    QueryAnalyticsFilters,
+    QueryAnalyticsUserBreakdown,
+    QueryAnalyticsApplicationBreakdown,
+)
+from app.schemas.exceptions import DatabaseNotFoundError
+from database.models.metadata.database import Database
+from database.models.metric.native_query import NativeQueryMetric
+from utils import decrypt_or_plain
+
+
+PRESET_RANGES = {
+    "1d": timedelta(days=1),
+    "3d": timedelta(days=3),
+    "1w": timedelta(weeks=1),
+    "2w": timedelta(weeks=2),
+    "1m": timedelta(days=30),
+}
+
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def _resolve_date_range(
+    start_date: Optional[str],
+    end_date: Optional[str],
+    preset: Optional[str],
+) -> tuple[datetime, datetime]:
+    now = datetime.now(timezone.utc)
+    end_dt = _parse_iso_datetime(end_date) or now
+
+    if start_date:
+        start_dt = _parse_iso_datetime(start_date) or (now - timedelta(days=7))
+    elif preset and preset in PRESET_RANGES:
+        start_dt = end_dt - PRESET_RANGES[preset]
+    else:
+        start_dt = end_dt - timedelta(days=7)
+
+    return start_dt, end_dt
+
+
+def _remove_sql_comments(query: str) -> str:
+    # Remove block comments /* ... */
+    query = re.sub(r"/\*.*?\*/", " ", query, flags=re.DOTALL)
+    # Remove line comments -- ...
+    query = re.sub(r"--[^\n]*", " ", query)
+    return query
+
+
+def _normalize_query(query: Optional[str]) -> str:
+    if not query:
+        return ""
+
+    query = _remove_sql_comments(query)
+
+    # Remove double quotes used as identifier quotes (PostgreSQL).
+    # Examples: "base"."user" -> base.user
+    query = re.sub(r'"([^"]+)"', r"\1", query)
+
+    # Lowercase
+    query = query.lower()
+
+    # Replace string literals (single quotes, handling escaped quotes).
+    query = re.sub(r"'(?:''|[^'])*'", "?", query)
+
+    # Replace numeric literals (integers and floats), keeping an optional leading sign.
+    query = re.sub(r"(?<![\w.])-?\d+(\.\d+)?(?![\w.])", "?", query)
+
+    # Normalize IN clauses: in (?, ?, ?) -> in (?)
+    query = re.sub(r"\bin\s*\(\s*(\?\s*,\s*)*\?\s*\)", "in (?)", query, flags=re.IGNORECASE)
+
+    # Collapse whitespace
+    query = re.sub(r"\s+", " ", query).strip()
+
+    # Remove trailing semicolon
+    if query.endswith(";"):
+        query = query[:-1].strip()
+
+    return query
+
+
+def _build_preview(query_signature: str, max_length: int = 120) -> str:
+    if len(query_signature) <= max_length:
+        return query_signature
+    return query_signature[:max_length].rstrip() + "..."
+
+
+def _bucket_timestamp(ts: datetime, bucket_minutes: int = 5) -> datetime:
+    return ts.replace(
+        minute=(ts.minute // bucket_minutes) * bucket_minutes,
+        second=0,
+        microsecond=0,
+    )
+
+
+def _parse_exclude_terms(exclude: Optional[str]) -> list[str]:
+    if not exclude:
+        return []
+    return [term.strip().lower() for term in exclude.split(',') if term.strip()]
+
+
+async def get_query_analytics(
+    db: AsyncSession,
+    database_id: UUID,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    preset: Optional[str],
+    user_name: Optional[str],
+    application_name: Optional[str],
+    state: Optional[str],
+    search: Optional[str],
+    exclude: Optional[str],
+) -> QueryAnalyticsResponse:
+    db_result = await db.execute(
+        select(Database).where(
+            Database.public_id == database_id,
+            Database.deleted_at.is_(None),
+        )
+    )
+    database = db_result.scalar_one_or_none()
+    if not database:
+        raise DatabaseNotFoundError(str(database_id))
+
+    start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
+
+    filters = [
+        NativeQueryMetric.database_id == database.id,
+        NativeQueryMetric.collected_at >= start_dt,
+        NativeQueryMetric.collected_at <= end_dt,
+    ]
+
+    if user_name is not None:
+        filters.append(NativeQueryMetric.user_name == user_name)
+    if application_name is not None:
+        filters.append(NativeQueryMetric.application_name == application_name)
+    if state is not None:
+        filters.append(NativeQueryMetric.state == state)
+
+    rows_result = await db.execute(
+        select(
+            NativeQueryMetric.collected_at,
+            NativeQueryMetric.pid,
+            NativeQueryMetric.backend_start,
+            NativeQueryMetric.query_start,
+            NativeQueryMetric.user_name,
+            NativeQueryMetric.application_name,
+            NativeQueryMetric.state,
+            NativeQueryMetric.query,
+            NativeQueryMetric.query_hash,
+            NativeQueryMetric.query_duration_ms,
+        )
+        .where(and_(*filters))
+        .order_by(NativeQueryMetric.collected_at)
+    )
+    rows = rows_result.all()
+
+    # Build filter options from the full-period data before applying search filter.
+    users_set = set()
+    applications_set = set()
+    states_set = set()
+    for row in rows:
+        users_set.add(row.user_name)
+        applications_set.add(row.application_name)
+        states_set.add(row.state)
+
+    exclude_terms = _parse_exclude_terms(exclude)
+
+    # Group by execution identity to avoid inflating counts by snapshot frequency.
+    executions: dict[tuple, dict] = {}
+    for row in rows:
+        query_text = row.query or ""
+        signature = _normalize_query(query_text)
+        if not signature:
+            continue
+
+        if search and search.lower() not in signature:
+            continue
+
+        if exclude_terms and any(term in signature for term in exclude_terms):
+            continue
+
+        exec_key = (row.pid, row.backend_start, row.query_start or row.collected_at, row.query_hash)
+        existing = executions.get(exec_key)
+        if existing is None or row.collected_at < existing["first_seen"]:
+            executions[exec_key] = {
+                "signature": signature,
+                "query_hash": row.query_hash,
+                "query": query_text,
+                "user_name": row.user_name,
+                "application_name": row.application_name,
+                "state": row.state,
+                "first_seen": row.collected_at,
+                "last_seen": row.collected_at,
+                "durations": [],
+            }
+        executions[exec_key]["durations"].append(row.query_duration_ms)
+        if row.collected_at > executions[exec_key]["last_seen"]:
+            executions[exec_key]["last_seen"] = row.collected_at
+
+    # Aggregate by query signature.
+    signatures: dict[str, dict] = defaultdict(
+        lambda: {
+            "query_preview": "",
+            "query_hash": None,
+            "execution_count": 0,
+            "durations": [],
+            "users": defaultdict(int),
+            "applications": defaultdict(int),
+            "first_seen": None,
+            "last_seen": None,
+        }
+    )
+
+    timeline_buckets: dict[datetime, list] = defaultdict(list)
+
+    for exec_data in executions.values():
+        signature = exec_data["signature"]
+        agg = signatures[signature]
+        if agg["execution_count"] == 0:
+            agg["query_preview"] = _build_preview(signature)
+            agg["query_hash"] = exec_data["query_hash"]
+
+        exec_avg_duration = (
+            sum(d for d in exec_data["durations"] if d is not None) / len([d for d in exec_data["durations"] if d is not None])
+            if any(d is not None for d in exec_data["durations"])
+            else None
+        )
+
+        agg["execution_count"] += 1
+        if exec_avg_duration is not None:
+            agg["durations"].append(exec_avg_duration)
+        agg["users"][exec_data["user_name"]] += 1
+        agg["applications"][exec_data["application_name"]] += 1
+
+        if agg["first_seen"] is None or exec_data["first_seen"] < agg["first_seen"]:
+            agg["first_seen"] = exec_data["first_seen"]
+        if agg["last_seen"] is None or exec_data["last_seen"] > agg["last_seen"]:
+            agg["last_seen"] = exec_data["last_seen"]
+
+        bucket = _bucket_timestamp(exec_data["first_seen"])
+        timeline_buckets[bucket].append(exec_avg_duration)
+
+    items = []
+    for signature, agg in sorted(signatures.items(), key=lambda x: x[1]["execution_count"], reverse=True):
+        durations = agg["durations"]
+        avg_duration = sum(durations) / len(durations) if durations else None
+        max_duration = max(durations) if durations else None
+        min_duration = min(durations) if durations else None
+        total_duration = sum(durations) if durations else None
+
+        user_breakdown = [
+            QueryAnalyticsUserBreakdown(user_name=user, execution_count=count)
+            for user, count in sorted(agg["users"].items(), key=lambda x: x[1], reverse=True)
+        ]
+        application_breakdown = [
+            QueryAnalyticsApplicationBreakdown(application_name=app, execution_count=count)
+            for app, count in sorted(agg["applications"].items(), key=lambda x: x[1], reverse=True)
+        ]
+
+        items.append(
+            QueryAnalyticsItem(
+                query_signature=signature,
+                query_preview=agg["query_preview"],
+                query_hash=agg["query_hash"],
+                execution_count=agg["execution_count"],
+                avg_duration_ms=avg_duration,
+                max_duration_ms=max_duration,
+                min_duration_ms=min_duration,
+                total_duration_ms=total_duration,
+                unique_users=len(agg["users"]),
+                user_breakdown=user_breakdown,
+                unique_applications=len(agg["applications"]),
+                application_breakdown=application_breakdown,
+                first_seen=agg["first_seen"],
+                last_seen=agg["last_seen"],
+            )
+        )
+
+    timeline = []
+    for bucket in sorted(timeline_buckets.keys()):
+        bucket_durations = [d for d in timeline_buckets[bucket] if d is not None]
+        timeline.append(
+            QueryAnalyticsTimelinePoint(
+                timestamp=bucket,
+                execution_count=len(timeline_buckets[bucket]),
+                avg_duration_ms=(sum(bucket_durations) / len(bucket_durations)) if bucket_durations else None,
+            )
+        )
+
+    return QueryAnalyticsResponse(
+        database_id=database_id,
+        database_name=decrypt_or_plain(database.db_name),
+        start_at=start_dt,
+        end_at=end_dt,
+        items=items,
+        timeline=timeline,
+        filters=QueryAnalyticsFilters(
+            users=sorted(users_set, key=lambda x: (x is None, x or "")),
+            applications=sorted(applications_set, key=lambda x: (x is None, x or "")),
+            states=sorted(states_set, key=lambda x: (x is None, x or "")),
+        ),
+    )
