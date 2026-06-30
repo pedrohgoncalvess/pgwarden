@@ -4,6 +4,8 @@ services:
     command: ["postgres", "-c", "timescaledb.enable_chunk_skipping=on"]
     container_name: pgwarden_db
     restart: unless-stopped
+    ports:
+      - "5438:5432"
     env_file:
       - .env
     environment:
