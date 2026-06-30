@@ -17,7 +17,7 @@ _UPDATE_INTERVAL   = load_storage_query(schema="collector", table="config_databa
 _SET_FORCE_RUN     = load_storage_query(schema="collector", table="config_database", query_type="UPDATE", query_name="set_next_run_on_force")
 
 class Scheduler:
-    COMMAND_POLL_INTERVAL = 5.0
+    COMMAND_POLL_INTERVAL = 1.5
 
     def __init__(self, metrics_db: DatabaseConnection) -> None:
         self._collectors: dict[str, CollectorState] = {}
@@ -70,7 +70,11 @@ class Scheduler:
         state._paused.clear()
         state.status = CollectorStatus.PAUSED
         await self._persist_paused(state, is_paused=True)
-        await logger.info("Scheduler", name, "Paused")
+        if state.is_running and state._task and not state._task.done():
+            state._task.cancel()
+            await logger.info("Scheduler", name, "Pause requested — cancelling active run")
+        else:
+            await logger.info("Scheduler", name, "Paused")
 
     async def resume(self, name: str) -> None:
         state = self._get(name)
@@ -181,14 +185,23 @@ class Scheduler:
                 state._force.clear()
             except asyncio.TimeoutError:
                 pass
+            except asyncio.CancelledError:
+                return
 
             if not state._paused.is_set():
                 continue
 
-            await self._run_once(state)
+            try:
+                await self._run_once(state)
+            except asyncio.CancelledError:
+                state.is_running = False
+                state.status = CollectorStatus.PAUSED if not state._paused.is_set() else CollectorStatus.IDLE
+                await logger.info("Scheduler", state.name, "Run cancelled")
+                continue
 
     async def _run_once(self, state: CollectorState) -> None:
         state.status = CollectorStatus.RUNNING
+        state.is_running = True
 
         try:
             await state.fn()
@@ -211,6 +224,9 @@ class Scheduler:
             state.status       = CollectorStatus.ERROR
             await logger.error("Scheduler", state.name, f"Failed: {error}")
 
+        finally:
+            state.is_running = False
+
     async def _cancel(self, state: CollectorState) -> None:
         if state._task and not state._task.done():
             state._task.cancel()
@@ -218,6 +234,8 @@ class Scheduler:
                 await state._task
             except asyncio.CancelledError:
                 pass
+            finally:
+                state.is_running = False
 
     def _get(self, name: str) -> CollectorState:
         if name not in self._collectors:

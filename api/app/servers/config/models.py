@@ -35,6 +35,7 @@ class RunAction(str, Enum):
     RESUME = "resume"
     STOP = "stop"
     DELETE = "delete"
+    FORCE_RUN = "force_run"
 
 
 class RunItem(BaseModel):

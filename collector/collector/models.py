@@ -22,11 +22,12 @@ class CollectorState:
     status:      CollectorStatus      = CollectorStatus.IDLE
     last_run_at: datetime | None      = None
     last_error:  str | None           = None
-    run_count:   int                  = 0
-    error_count: int                  = 0
-    _task:       asyncio.Task | None  = field(default=None,                repr=False)
-    _force:      asyncio.Event        = field(default_factory=asyncio.Event, repr=False)
-    _paused:     asyncio.Event        = field(default_factory=asyncio.Event, repr=False)
+    run_count:    int                  = 0
+    error_count:  int                  = 0
+    is_running:   bool                 = False
+    _task:        asyncio.Task | None  = field(default=None,                repr=False)
+    _force:       asyncio.Event        = field(default_factory=asyncio.Event, repr=False)
+    _paused:      asyncio.Event        = field(default_factory=asyncio.Event, repr=False)
 
     def __post_init__(self) -> None:
         self._paused.set()

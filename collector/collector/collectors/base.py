@@ -1,3 +1,4 @@
+import asyncio
 from abc import ABC, abstractmethod
 
 from database import DatabaseConnection
@@ -17,6 +18,8 @@ class BaseCollector(ABC):
     async def collect(self) -> None:
         try:
             await self._collect()
+        except asyncio.CancelledError:
+            raise
         except Exception as error:
             await logger.error(
                 self.__class__.__name__,

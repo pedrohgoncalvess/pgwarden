@@ -7,6 +7,7 @@ from sqlalchemy import select, desc
 
 from database.connection import DatabaseConnection
 from database.models.collector.server import Server
+from database.models.collector.command import Command
 from database.models.collector.config_server import ConfigServer
 from database.models.collector.config_database import ConfigDatabase
 from database.models.collector.run import Run
@@ -307,14 +308,21 @@ async def list_database_run_history(database_id: str, limit: int = 100, offset: 
 
 async def patch_run(run_id: int, run_type: str, action: str) -> dict:
     async with DatabaseConnection() as conn:
+        server_id: Optional[int] = None
         if run_type == "server":
             result = await conn.execute(select(ConfigServer).where(ConfigServer.id == run_id))
             config = result.scalar_one_or_none()
-            model = ConfigServer
+            if config:
+                server_id = config.server_id
         elif run_type == "database":
-            result = await conn.execute(select(ConfigDatabase).where(ConfigDatabase.id == run_id))
-            config = result.scalar_one_or_none()
-            model = ConfigDatabase
+            result = await conn.execute(
+                select(ConfigDatabase, Database.server_id)
+                .join(Database, ConfigDatabase.database_id == Database.id)
+                .where(ConfigDatabase.id == run_id)
+            )
+            row = result.one_or_none()
+            config = row[0] if row else None
+            server_id = row[1] if row else None
         else:
             raise ValueError("Invalid run type. Use 'server' or 'database'.")
 
@@ -323,7 +331,7 @@ async def patch_run(run_id: int, run_type: str, action: str) -> dict:
 
         snapshot = {
             "id": config.id,
-            "server_id": config.server_id,
+            "server_id": server_id,
             "database_id": getattr(config, "database_id", None),
             "name": config.name,
             "type": run_type,
@@ -338,12 +346,21 @@ async def patch_run(run_id: int, run_type: str, action: str) -> dict:
             config.is_paused = True
         elif action == "resume":
             config.is_paused = False
+        elif action == "force_run":
+            if config.is_paused:
+                raise ValueError("Cannot force run a paused collector")
+            command = Command(
+                collector=config.name,
+                command="force_run",
+                payload=None,
+            )
+            conn.add(command)
         elif action == "delete":
             await conn.delete(config)
             await conn.commit()
             return snapshot
         else:
-            raise ValueError("Invalid action. Use 'pause', 'resume', 'stop' or 'delete'.")
+            raise ValueError("Invalid action. Use 'pause', 'resume', 'stop', 'delete' or 'force_run'.")
 
         await conn.commit()
         await conn.refresh(config)
