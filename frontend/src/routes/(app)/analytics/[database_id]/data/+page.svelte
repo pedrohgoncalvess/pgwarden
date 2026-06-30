@@ -46,10 +46,22 @@
     return new Date(value).toISOString();
   }
 
-  function allTimestamps(dbHistory: AnalyticsDatabaseSizePoint[], tableHistory: AnalyticsTableSizePoint[]): Date[] {
+  function allTimestamps(
+    dbHistory: AnalyticsDatabaseSizePoint[],
+    tableHistory: AnalyticsTableSizePoint[],
+    selectedTableIds: number[],
+    showDatabase: boolean
+  ): Date[] {
     const set = new Set<number>();
-    dbHistory.forEach((p) => set.add(new Date(p.collected_at).getTime()));
-    tableHistory.forEach((p) => set.add(new Date(p.collected_at).getTime()));
+    if (showDatabase) {
+      dbHistory.forEach((p) => set.add(new Date(p.collected_at).getTime()));
+    }
+    if (selectedTableIds.length > 0) {
+      const ids = new Set(selectedTableIds);
+      tableHistory
+        .filter((p) => ids.has(p.table_id))
+        .forEach((p) => set.add(new Date(p.collected_at).getTime()));
+    }
     return Array.from(set).sort((a, b) => a - b).map((t) => new Date(t));
   }
 
@@ -212,7 +224,9 @@
   onMount(() => load());
 
   // ── Chart computation ────────────────────────────────────────────────────────
-  let timestamps = $derived(data ? allTimestamps(data.database_size_history, data.table_size_history) : []);
+  let timestamps = $derived(
+    data ? allTimestamps(data.database_size_history, data.table_size_history, selectedTableIds, showDatabase) : []
+  );
 
   let dbValues = $derived(data ? dbSeries(data.database_size_history, timestamps) : []);
   let tableValues = $derived.by(() => {
@@ -256,14 +270,17 @@
 
   function yScale(value: number): number {
     const usableHeight = chartHeight - padding.top - padding.bottom;
+    let y: number;
     if (logScale) {
       const maxLog = Math.log10(Math.max(1, maxBytesValue));
       const minLog = Math.log10(Math.max(1, minBytesValue));
       const logRange = Math.max(1, maxLog - minLog);
       const v = Math.max(1, value);
-      return padding.top + usableHeight - ((Math.log10(v) - minLog) / logRange) * usableHeight;
+      y = padding.top + usableHeight - ((Math.log10(v) - minLog) / logRange) * usableHeight;
+    } else {
+      y = padding.top + usableHeight - (value / maxBytesValue) * usableHeight;
     }
-    return padding.top + usableHeight - (value / maxBytesValue) * usableHeight;
+    return Math.max(padding.top, Math.min(padding.top + usableHeight, y));
   }
 
   function pathForSeries(values: number[]): string {
