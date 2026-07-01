@@ -65,6 +65,7 @@
 	let historyError = $state('');
 	let tooltip = $state<{ text: string; x: number; y: number } | null>(null);
 	let tooltipTimeout: ReturnType<typeof setTimeout> | null = null;
+	let schemaHelpOpen = $state(false);
 	let panState = $state<{
 		pointerId: number;
 		startX: number;
@@ -576,7 +577,34 @@
 	<div class="flex items-center gap-4">
 		<span class="material-symbols-outlined text-primary">account_tree</span>
 		<div class="flex items-center gap-3">
-			<h1 class="m-0 font-headline-md text-headline-md text-on-background">Schema view</h1>
+			<h1 class="m-0 font-headline-md text-headline-md text-on-background">Schema</h1>
+			<div class="relative">
+				<button
+					onclick={() => (schemaHelpOpen = !schemaHelpOpen)}
+					onmouseenter={() => (schemaHelpOpen = true)}
+					onmouseleave={() => (schemaHelpOpen = false)}
+					class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-outline-variant text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+					aria-label="Schema page explanation"
+				>
+					<span class="material-symbols-outlined text-[14px]">help</span>
+				</button>
+				{#if schemaHelpOpen}
+					<div
+						class="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs text-on-surface shadow-lg"
+					>
+						<p class="mb-1 font-bold">What is this page?</p>
+						<p class="mb-2 text-on-surface-variant">
+							Visual entity-relationship map of the selected database. Pan the board by dragging the
+							background, arrange tables by dragging them, and use Ctrl + wheel to zoom.
+						</p>
+						<p class="font-bold">Table details</p>
+						<p class="text-on-surface-variant">
+							Click any table to open its details panel, showing schema changes and, soon, pgwarden
+							documentation stored for that table.
+						</p>
+					</div>
+				{/if}
+			</div>
 			{#if selectedDb}
 				<span class="font-label-caps text-[10px] text-on-surface-variant">{selectedDb.name}</span>
 			{/if}
@@ -608,15 +636,6 @@
 			title="Zoom in"
 		>
 			<span class="material-symbols-outlined text-[18px]">add</span>
-		</button>
-		<button
-			onclick={resetLayout}
-			disabled={!schema || schemaLoading}
-			class="flex cursor-pointer items-center gap-2 rounded-lg border border-outline-variant bg-surface-container px-3 py-1.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
-			title="Reset layout"
-		>
-			<span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
-			Layout
 		</button>
 	</div>
 </header>
@@ -729,18 +748,6 @@
 		{/if}
 
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
-			<div
-				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
-			>
-				<div class="flex items-center gap-2">
-					<span class="material-symbols-outlined text-sm text-primary">schema</span>
-					<h2 class="m-0 font-headline-md text-headline-md">Entity Relationships</h2>
-				</div>
-				<span class="font-code-sm text-code-sm text-on-surface-variant">
-					Drag background to pan · Drag tables to arrange · Ctrl + wheel to zoom
-				</span>
-			</div>
-
 			{#if schemaLoading}
 				<div class="flex h-[520px] items-center justify-center">
 					<svg
