@@ -11,6 +11,6 @@ from database.models.metric import (
 )
 from database.models.doc import (
     DatabaseDoc, SchemaDoc, TableDoc, ColumnDoc, IndexDoc, Tag,
-    DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag,
-    DatabaseObjectTag, TableObjectTag, ColumnObjectTag, IndexObjectTag, NativeQueryObjectTag
+    DatabaseDocTag, SchemaDocTag, TableDocTag, ColumnDocTag, IndexDocTag,
+    DatabaseTag, TableTag, ColumnTag, IndexTag, QueryTag
 )

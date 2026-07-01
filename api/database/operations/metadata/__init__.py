@@ -9,7 +9,7 @@ from database.operations.metadata.index_history import IndexHistoryRepository
 from database.operations.metadata.tag import TagRepository
 from database.operations.metadata.doc import (
     DatabaseDocRepository, SchemaDocRepository, TableDocRepository, ColumnDocRepository, IndexDocRepository,
-    DatabaseTagRepository, SchemaTagRepository, TableTagRepository, ColumnTagRepository, IndexTagRepository,
-    DatabaseObjectTagRepository, TableObjectTagRepository, ColumnObjectTagRepository, IndexObjectTagRepository,
-    NativeQueryObjectTagRepository
+    DatabaseDocTagRepository, SchemaDocTagRepository, TableDocTagRepository, ColumnDocTagRepository, IndexDocTagRepository,
+    DatabaseTagRepository, TableTagRepository, ColumnTagRepository, IndexTagRepository,
+    QueryTagRepository
 )

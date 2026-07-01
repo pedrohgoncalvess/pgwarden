@@ -10,16 +10,16 @@ from database.models.doc.column import ColumnDoc
 from database.models.doc.database import DatabaseDoc
 from database.models.doc.index import IndexDoc
 from database.models.doc.object_tag import (
-    ColumnObjectTag,
     ColumnTag,
-    DatabaseObjectTag,
+    ColumnDocTag,
     DatabaseTag,
-    IndexObjectTag,
+    DatabaseDocTag,
     IndexTag,
-    NativeQueryObjectTag,
-    SchemaTag,
-    TableObjectTag,
+    IndexDocTag,
+    QueryTag,
+    SchemaDocTag,
     TableTag,
+    TableDocTag,
 )
 from database.models.doc.schema import SchemaDoc
 from database.models.doc.table import TableDoc
@@ -183,31 +183,31 @@ async def _resolve_object_assignment(db: AsyncSession, assignment: TagAssignment
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         database = await _get_database(db, assignment.target_id)
-        return DatabaseObjectTag, {"database_id": database.id}
+        return DatabaseTag, {"database_id": database.id}
 
     if assignment.target_type == "table":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         table = await _get_table(db, assignment.target_id)
-        return TableObjectTag, {"table_id": table.id}
+        return TableTag, {"table_id": table.id}
 
     if assignment.target_type == "column":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         column = await _get_column(db, assignment.target_id)
-        return ColumnObjectTag, {"column_id": column.id}
+        return ColumnTag, {"column_id": column.id}
 
     if assignment.target_type == "index":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         index = await _get_index(db, assignment.target_id)
-        return IndexObjectTag, {"index_id": index.id}
+        return IndexTag, {"index_id": index.id}
 
     if assignment.target_type == "native_query":
         if not assignment.database_id or not assignment.query_hash:
             raise HTTPException(status_code=400, detail="database_id and query_hash are required")
         database = await _get_database(db, assignment.database_id)
-        return NativeQueryObjectTag, {"database_id": database.id, "query_hash": assignment.query_hash}
+        return QueryTag, {"database_id": database.id, "query_hash": assignment.query_hash}
 
     raise HTTPException(status_code=400, detail="Invalid object target type")
 
@@ -218,35 +218,35 @@ async def _resolve_doc_assignment(db: AsyncSession, assignment: TagAssignmentCre
             raise HTTPException(status_code=400, detail="target_id is required")
         database = await _get_database(db, assignment.target_id)
         doc = await _get_or_create_doc(db, DatabaseDoc, database_id=database.id)
-        return DatabaseTag, {"database_doc_id": doc.id}
+        return DatabaseDocTag, {"database_doc_id": doc.id}
 
     if assignment.target_type == "schema":
         if not assignment.database_id or not assignment.schema_name:
             raise HTTPException(status_code=400, detail="database_id and schema_name are required")
         database = await _get_database(db, assignment.database_id)
         doc = await _get_or_create_doc(db, SchemaDoc, database_id=database.id, schema_name=assignment.schema_name)
-        return SchemaTag, {"schema_doc_id": doc.id}
+        return SchemaDocTag, {"schema_doc_id": doc.id}
 
     if assignment.target_type == "table":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         table = await _get_table(db, assignment.target_id)
         doc = await _get_or_create_doc(db, TableDoc, table_id=table.id)
-        return TableTag, {"table_doc_id": doc.id}
+        return TableDocTag, {"table_doc_id": doc.id}
 
     if assignment.target_type == "column":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         column = await _get_column(db, assignment.target_id)
         doc = await _get_or_create_doc(db, ColumnDoc, column_id=column.id)
-        return ColumnTag, {"column_doc_id": doc.id}
+        return ColumnDocTag, {"column_doc_id": doc.id}
 
     if assignment.target_type == "index":
         if not assignment.target_id:
             raise HTTPException(status_code=400, detail="target_id is required")
         index = await _get_index(db, assignment.target_id)
         doc = await _get_or_create_doc(db, IndexDoc, index_id=index.id)
-        return IndexTag, {"index_doc_id": doc.id}
+        return IndexDocTag, {"index_doc_id": doc.id}
 
     raise HTTPException(status_code=400, detail="Invalid documentation target type")
 
@@ -286,7 +286,7 @@ def _assignment_dict(tag: Tag, scope: str, target_type: str, target_id, target_l
 
 
 async def _list_database_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, DatabaseObjectTag, Database).join(DatabaseObjectTag).join(Database, Database.id == DatabaseObjectTag.database_id)
+    query = select(Tag, DatabaseTag, Database).join(DatabaseTag).join(Database, Database.id == DatabaseTag.database_id)
     if database:
         query = query.where(Database.id == database.id)
     rows = (await db.execute(query)).all()
@@ -297,7 +297,7 @@ async def _list_database_object_assignments(db: AsyncSession, database: Database
 
 
 async def _list_table_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, TableObjectTag, Table).join(TableObjectTag).join(Table, Table.id == TableObjectTag.table_id)
+    query = select(Tag, TableTag, Table).join(TableTag).join(Table, Table.id == TableTag.table_id)
     if database:
         query = query.where(Table.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -309,9 +309,9 @@ async def _list_table_object_assignments(db: AsyncSession, database: Database | 
 
 async def _list_column_object_assignments(db: AsyncSession, database: Database | None):
     query = (
-        select(Tag, ColumnObjectTag, ColumnModel, Table)
-        .join(ColumnObjectTag)
-        .join(ColumnModel, ColumnModel.id == ColumnObjectTag.column_id)
+        select(Tag, ColumnTag, ColumnModel, Table)
+        .join(ColumnTag)
+        .join(ColumnModel, ColumnModel.id == ColumnTag.column_id)
         .join(Table, Table.id == ColumnModel.table_id)
     )
     if database:
@@ -324,7 +324,7 @@ async def _list_column_object_assignments(db: AsyncSession, database: Database |
 
 
 async def _list_index_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, IndexObjectTag, Index).join(IndexObjectTag).join(Index, Index.id == IndexObjectTag.index_id)
+    query = select(Tag, IndexTag, Index).join(IndexTag).join(Index, Index.id == IndexTag.index_id)
     if database:
         query = query.where(Index.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -336,9 +336,9 @@ async def _list_index_object_assignments(db: AsyncSession, database: Database | 
 
 async def _list_native_query_object_assignments(db: AsyncSession, database: Database | None):
     query = (
-        select(Tag, NativeQueryObjectTag, Database)
-        .join(NativeQueryObjectTag)
-        .join(Database, Database.id == NativeQueryObjectTag.database_id)
+        select(Tag, QueryTag, Database)
+        .join(QueryTag)
+        .join(Database, Database.id == QueryTag.database_id)
     )
     if database:
         query = query.where(Database.id == database.id)
@@ -351,9 +351,9 @@ async def _list_native_query_object_assignments(db: AsyncSession, database: Data
 
 async def _list_database_doc_assignments(db: AsyncSession, database: Database | None):
     query = (
-        select(Tag, DatabaseTag, DatabaseDoc, Database)
-        .join(DatabaseTag)
-        .join(DatabaseDoc, DatabaseDoc.id == DatabaseTag.database_doc_id)
+        select(Tag, DatabaseDocTag, DatabaseDoc, Database)
+        .join(DatabaseDocTag)
+        .join(DatabaseDoc, DatabaseDoc.id == DatabaseDocTag.database_doc_id)
         .join(Database, Database.id == DatabaseDoc.database_id)
     )
     if database:
@@ -366,7 +366,7 @@ async def _list_database_doc_assignments(db: AsyncSession, database: Database | 
 
 
 async def _list_schema_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, SchemaTag, SchemaDoc, Database).join(SchemaTag).join(SchemaDoc, SchemaDoc.id == SchemaTag.schema_doc_id).join(Database, Database.id == SchemaDoc.database_id)
+    query = select(Tag, SchemaDocTag, SchemaDoc, Database).join(SchemaDocTag).join(SchemaDoc, SchemaDoc.id == SchemaDocTag.schema_doc_id).join(Database, Database.id == SchemaDoc.database_id)
     if database:
         query = query.where(Database.id == database.id)
     rows = (await db.execute(query)).all()
@@ -377,7 +377,7 @@ async def _list_schema_doc_assignments(db: AsyncSession, database: Database | No
 
 
 async def _list_table_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, TableTag, TableDoc, Table).join(TableTag).join(TableDoc, TableDoc.id == TableTag.table_doc_id).join(Table, Table.id == TableDoc.table_id)
+    query = select(Tag, TableDocTag, TableDoc, Table).join(TableDocTag).join(TableDoc, TableDoc.id == TableDocTag.table_doc_id).join(Table, Table.id == TableDoc.table_id)
     if database:
         query = query.where(Table.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -389,9 +389,9 @@ async def _list_table_doc_assignments(db: AsyncSession, database: Database | Non
 
 async def _list_column_doc_assignments(db: AsyncSession, database: Database | None):
     query = (
-        select(Tag, ColumnTag, ColumnDoc, ColumnModel, Table)
-        .join(ColumnTag)
-        .join(ColumnDoc, ColumnDoc.id == ColumnTag.column_doc_id)
+        select(Tag, ColumnDocTag, ColumnDoc, ColumnModel, Table)
+        .join(ColumnDocTag)
+        .join(ColumnDoc, ColumnDoc.id == ColumnDocTag.column_doc_id)
         .join(ColumnModel, ColumnModel.id == ColumnDoc.column_id)
         .join(Table, Table.id == ColumnModel.table_id)
     )
@@ -405,7 +405,7 @@ async def _list_column_doc_assignments(db: AsyncSession, database: Database | No
 
 
 async def _list_index_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, IndexTag, IndexDoc, Index).join(IndexTag).join(IndexDoc, IndexDoc.id == IndexTag.index_doc_id).join(Index, Index.id == IndexDoc.index_id)
+    query = select(Tag, IndexDocTag, IndexDoc, Index).join(IndexDocTag).join(IndexDoc, IndexDoc.id == IndexDocTag.index_doc_id).join(Index, Index.id == IndexDoc.index_id)
     if database:
         query = query.where(Index.database_id == database.id)
     rows = (await db.execute(query)).all()

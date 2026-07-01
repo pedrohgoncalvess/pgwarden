@@ -5,8 +5,8 @@ from database.models.doc.table import TableDoc
 from database.models.doc.column import ColumnDoc
 from database.models.doc.index import IndexDoc
 from database.models.doc.object_tag import (
-    DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag,
-    DatabaseObjectTag, TableObjectTag, ColumnObjectTag, IndexObjectTag, NativeQueryObjectTag
+    DatabaseDocTag, SchemaDocTag, TableDocTag, ColumnDocTag, IndexDocTag,
+    DatabaseTag, TableTag, ColumnTag, IndexTag, QueryTag
 )
 
 
@@ -31,13 +31,29 @@ class IndexDocRepository(Interface[IndexDoc]):
         super().__init__(IndexDoc, db)
 
 
+class DatabaseDocTagRepository(Interface[DatabaseDocTag]):
+    def __init__(self, db):
+        super().__init__(DatabaseDocTag, db)
+
+class SchemaDocTagRepository(Interface[SchemaDocTag]):
+    def __init__(self, db):
+        super().__init__(SchemaDocTag, db)
+
+class TableDocTagRepository(Interface[TableDocTag]):
+    def __init__(self, db):
+        super().__init__(TableDocTag, db)
+
+class ColumnDocTagRepository(Interface[ColumnDocTag]):
+    def __init__(self, db):
+        super().__init__(ColumnDocTag, db)
+
+class IndexDocTagRepository(Interface[IndexDocTag]):
+    def __init__(self, db):
+        super().__init__(IndexDocTag, db)
+
 class DatabaseTagRepository(Interface[DatabaseTag]):
     def __init__(self, db):
         super().__init__(DatabaseTag, db)
-
-class SchemaTagRepository(Interface[SchemaTag]):
-    def __init__(self, db):
-        super().__init__(SchemaTag, db)
 
 class TableTagRepository(Interface[TableTag]):
     def __init__(self, db):
@@ -51,22 +67,6 @@ class IndexTagRepository(Interface[IndexTag]):
     def __init__(self, db):
         super().__init__(IndexTag, db)
 
-class DatabaseObjectTagRepository(Interface[DatabaseObjectTag]):
+class QueryTagRepository(Interface[QueryTag]):
     def __init__(self, db):
-        super().__init__(DatabaseObjectTag, db)
-
-class TableObjectTagRepository(Interface[TableObjectTag]):
-    def __init__(self, db):
-        super().__init__(TableObjectTag, db)
-
-class ColumnObjectTagRepository(Interface[ColumnObjectTag]):
-    def __init__(self, db):
-        super().__init__(ColumnObjectTag, db)
-
-class IndexObjectTagRepository(Interface[IndexObjectTag]):
-    def __init__(self, db):
-        super().__init__(IndexObjectTag, db)
-
-class NativeQueryObjectTagRepository(Interface[NativeQueryObjectTag]):
-    def __init__(self, db):
-        super().__init__(NativeQueryObjectTag, db)
+        super().__init__(QueryTag, db)

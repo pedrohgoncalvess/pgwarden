@@ -1,8 +1,8 @@
 from sqlalchemy import Column, BigInteger, ForeignKey, DateTime, Text, func, UniqueConstraint
 from database.models.base_model import Base
 
-class DatabaseTag(Base):
-    __tablename__ = "database_tag"
+class DatabaseDocTag(Base):
+    __tablename__ = "database_doc_tag"
     __table_args__ = (
         UniqueConstraint("database_doc_id", "tag_id"),
         {"schema": "doc"}
@@ -13,8 +13,8 @@ class DatabaseTag(Base):
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class SchemaTag(Base):
-    __tablename__ = "schema_tag"
+class SchemaDocTag(Base):
+    __tablename__ = "schema_doc_tag"
     __table_args__ = (
         UniqueConstraint("schema_doc_id", "tag_id"),
         {"schema": "doc"}
@@ -25,8 +25,8 @@ class SchemaTag(Base):
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class TableTag(Base):
-    __tablename__ = "table_tag"
+class TableDocTag(Base):
+    __tablename__ = "table_doc_tag"
     __table_args__ = (
         UniqueConstraint("table_doc_id", "tag_id"),
         {"schema": "doc"}
@@ -37,8 +37,8 @@ class TableTag(Base):
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class ColumnTag(Base):
-    __tablename__ = "column_tag"
+class ColumnDocTag(Base):
+    __tablename__ = "column_doc_tag"
     __table_args__ = (
         UniqueConstraint("column_doc_id", "tag_id"),
         {"schema": "doc"}
@@ -49,8 +49,8 @@ class ColumnTag(Base):
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class IndexTag(Base):
-    __tablename__ = "index_tag"
+class IndexDocTag(Base):
+    __tablename__ = "index_doc_tag"
     __table_args__ = (
         UniqueConstraint("index_doc_id", "tag_id"),
         {"schema": "doc"}
@@ -61,8 +61,8 @@ class IndexTag(Base):
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class DatabaseObjectTag(Base):
-    __tablename__ = "database_object_tag"
+class DatabaseTag(Base):
+    __tablename__ = "database_tag"
     __table_args__ = (
         UniqueConstraint("database_id", "tag_id"),
         {"schema": "doc"}
@@ -73,8 +73,8 @@ class DatabaseObjectTag(Base):
     tag_id      = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class TableObjectTag(Base):
-    __tablename__ = "table_object_tag"
+class TableTag(Base):
+    __tablename__ = "table_tag"
     __table_args__ = (
         UniqueConstraint("table_id", "tag_id"),
         {"schema": "doc"}
@@ -85,8 +85,8 @@ class TableObjectTag(Base):
     tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class ColumnObjectTag(Base):
-    __tablename__ = "column_object_tag"
+class ColumnTag(Base):
+    __tablename__ = "column_tag"
     __table_args__ = (
         UniqueConstraint("column_id", "tag_id"),
         {"schema": "doc"}
@@ -97,8 +97,8 @@ class ColumnObjectTag(Base):
     tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class IndexObjectTag(Base):
-    __tablename__ = "index_object_tag"
+class IndexTag(Base):
+    __tablename__ = "index_tag"
     __table_args__ = (
         UniqueConstraint("index_id", "tag_id"),
         {"schema": "doc"}
@@ -109,8 +109,8 @@ class IndexObjectTag(Base):
     tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-class NativeQueryObjectTag(Base):
-    __tablename__ = "native_query_object_tag"
+class QueryTag(Base):
+    __tablename__ = "query_tag"
     __table_args__ = (
         UniqueConstraint("database_id", "query_hash", "tag_id"),
         {"schema": "doc"}

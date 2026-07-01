@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.docs.models import SchemaDocPut
 from app.docs.services.common import resolve_object
 from database.models.doc.schema import SchemaDoc
-from database.models.doc.object_tag import SchemaTag
+from database.models.doc.object_tag import SchemaDocTag
 from database.models.doc.tag import Tag
 from database.operations.metadata.doc import SchemaDocRepository
 
@@ -35,7 +35,7 @@ async def get_schema_doc(db: AsyncSession, database_id: UUID, schema_name: str) 
     if not doc:
         raise HTTPException(404, "Documentation not found")
         
-    tags_query = select(Tag).join(SchemaTag).filter(SchemaTag.schema_doc_id == doc.id)
+    tags_query = select(Tag).join(SchemaDocTag).filter(SchemaDocTag.schema_doc_id == doc.id)
     tags = (await db.execute(tags_query)).scalars().all()
     
     result = {c.name: getattr(doc, c.name) for c in doc.__table__.columns}
