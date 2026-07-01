@@ -313,6 +313,84 @@ export async function deleteServer(serverId: string): Promise<void> {
 	}
 }
 
+export type ServerConfigItem = {
+	id: number;
+	name: string;
+	interval: number;
+	is_paused: boolean;
+};
+
+export type DatabaseConfigItem = {
+	id: number;
+	name: string;
+	interval: number;
+	is_paused: boolean;
+};
+
+export type ServerConfigPatch = {
+	is_paused?: boolean;
+	interval?: number;
+};
+
+export type DatabaseConfigPatch = {
+	is_paused?: boolean;
+	interval?: number;
+};
+
+export async function listServerConfigs(serverId: string): Promise<ServerConfigItem[]> {
+	const res = await fetch(`/api/v1/servers/${serverId}/configs`, {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list server configs: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function patchServerConfig(
+	serverId: string,
+	configId: number,
+	patch: ServerConfigPatch
+): Promise<ServerConfigItem> {
+	const res = await fetch(`/api/v1/servers/${serverId}/configs/${configId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update server config: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function listDatabaseConfigs(databaseId: string): Promise<DatabaseConfigItem[]> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/configs`, {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list database configs: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function patchDatabaseConfig(
+	databaseId: string,
+	configId: number,
+	patch: DatabaseConfigPatch
+): Promise<DatabaseConfigItem> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/configs/${configId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update database config: ${res.status}`);
+	}
+	return res.json();
+}
+
 export async function listDatabases(): Promise<DatabaseListItem[]> {
 	const res = await fetch('/api/v1/databases', {
 		headers: authHeaders()
@@ -613,6 +691,131 @@ export type IndexAnalyticsResponse = {
 	indexes: IndexAnalyticsFilterItem[];
 };
 
+export type TagItem = {
+	id: string;
+	name: string;
+	description: string | null;
+	color: string | null;
+	type: string;
+	created_at: string;
+};
+
+export type TagInput = {
+	name: string;
+	description?: string | null;
+	color?: string | null;
+	type?: string;
+};
+
+export type TagAssignmentScope = 'object' | 'doc';
+export type TagAssignmentTargetType =
+	| 'database'
+	| 'schema'
+	| 'table'
+	| 'column'
+	| 'index'
+	| 'native_query';
+
+export type TagAssignmentInput = {
+	scope: TagAssignmentScope;
+	target_type: TagAssignmentTargetType;
+	target_id?: string | null;
+	database_id?: string | null;
+	schema_name?: string | null;
+	query_hash?: string | null;
+};
+
+export type TagAssignment = TagAssignmentInput & {
+	tag: TagItem;
+	target_label: string;
+	created_at: string;
+};
+
+export async function listTags(): Promise<TagItem[]> {
+	const res = await fetch('/api/v1/tags', {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list tags: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function createTag(data: TagInput): Promise<TagItem> {
+	const res = await fetch('/api/v1/tags', {
+		method: 'POST',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to create tag: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function updateTag(tagId: string, data: Partial<TagInput>): Promise<TagItem> {
+	const res = await fetch(`/api/v1/tags/${tagId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update tag: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function deleteTag(tagId: string): Promise<void> {
+	const res = await fetch(`/api/v1/tags/${tagId}`, {
+		method: 'DELETE',
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to delete tag: ${res.status}`);
+	}
+}
+
+export async function listTagAssignments(databaseId?: string): Promise<TagAssignment[]> {
+	const url = new URL('/api/v1/tags/assignments', window.location.origin);
+	if (databaseId) {
+		url.searchParams.set('database_id', databaseId);
+	}
+	const res = await fetch(url.toString(), {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list tag assignments: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function attachTagAssignment(tagId: string, data: TagAssignmentInput): Promise<void> {
+	const res = await fetch(`/api/v1/tags/${tagId}/assignments`, {
+		method: 'POST',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to attach tag: ${res.status}`);
+	}
+}
+
+export async function detachTagAssignment(tagId: string, data: TagAssignmentInput): Promise<void> {
+	const res = await fetch(`/api/v1/tags/${tagId}/assignments`, {
+		method: 'DELETE',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to detach tag: ${res.status}`);
+	}
+}
+
 export async function getAnalyticsData(
 	databaseId: string,
 	options: {
@@ -654,7 +857,7 @@ export async function getQueryAnalytics(
 		applicationName?: string;
 		state?: string;
 		search?: string;
-		exclude?: string;
+		exclude?: string[];
 		limit?: number;
 	} = {}
 ): Promise<QueryAnalyticsResponse> {
@@ -680,8 +883,10 @@ export async function getQueryAnalytics(
 	if (options.search) {
 		url.searchParams.set('search', options.search);
 	}
-	if (options.exclude) {
-		url.searchParams.set('exclude', options.exclude);
+	if (options.exclude && options.exclude.length > 0) {
+		for (const term of options.exclude) {
+			url.searchParams.append('exclude', term);
+		}
 	}
 	if (options.limit !== undefined) {
 		url.searchParams.set('limit', String(options.limit));
