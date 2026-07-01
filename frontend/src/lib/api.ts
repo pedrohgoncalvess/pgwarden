@@ -529,6 +529,7 @@ export type QueryAnalyticsResponse = {
 	start_at: string;
 	end_at: string;
 	items: QueryAnalyticsItem[];
+	total: number;
 	timeline: QueryAnalyticsTimelinePoint[];
 	filters: QueryAnalyticsFilters;
 };
@@ -654,6 +655,7 @@ export async function getQueryAnalytics(
 		state?: string;
 		search?: string;
 		exclude?: string;
+		limit?: number;
 	} = {}
 ): Promise<QueryAnalyticsResponse> {
 	const url = new URL(`/api/v1/databases/${databaseId}/analytics/query`, window.location.origin);
@@ -680,6 +682,9 @@ export async function getQueryAnalytics(
 	}
 	if (options.exclude) {
 		url.searchParams.set('exclude', options.exclude);
+	}
+	if (options.limit !== undefined) {
+		url.searchParams.set('limit', String(options.limit));
 	}
 	const res = await fetch(url.toString(), {
 		headers: authHeaders()

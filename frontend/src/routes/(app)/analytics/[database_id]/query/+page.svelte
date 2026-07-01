@@ -30,6 +30,8 @@
 	let expandedQuery = $state<string | null>(null);
 	let pageOffset = $state(0);
 	let timelineHoverIndex = $state<number | null>(null);
+	let topQueryHoverIndex = $state<number | null>(null);
+	let copiedQueryIndex = $state<number | null>(null);
 	const pageLimit = 10;
 
 	const presets: { label: string; value: AnalyticsPreset }[] = [
@@ -159,6 +161,7 @@
 			if (selectedState) options.state = selectedState;
 			if (searchTerm.trim()) options.search = searchTerm.trim();
 			if (excludeTerm.trim()) options.exclude = excludeTerm.trim();
+			options.limit = pageLimit;
 
 			data = await getQueryAnalytics(database.id, options);
 		} catch (err: any) {
@@ -226,12 +229,12 @@
 
 	let totalPages = $derived.by(() => {
 		if (!data) return 0;
-		return Math.ceil(data.items.length / pageLimit);
+		return Math.ceil(data.total / pageLimit);
 	});
 
 	function changePage(delta: number) {
 		const next = pageOffset + delta * pageLimit;
-		if (next < 0 || next >= (data?.items.length || 0)) return;
+		if (next < 0 || next >= (data?.total || 0)) return;
 		pageOffset = next;
 	}
 
@@ -329,6 +332,13 @@
 		return data.items.slice(0, 5);
 	});
 
+	let maxPreviewChars = $derived.by(() => {
+		if (barChartWidth < 360) return 8;
+		if (barChartWidth < 480) return 12;
+		if (barChartWidth < 640) return 16;
+		return 20;
+	});
+
 	let barChartWidth = $state(0);
 	const barChartHeight = 220;
 	const barPadding = { top: 16, right: 16, bottom: 56, left: 56 };
@@ -350,6 +360,8 @@
 				(barChartHeight - barPadding.top - barPadding.bottom) * (q.execution_count / maxCount),
 			value: q.execution_count,
 			label: q.query_preview,
+			query: q.query_signature,
+			index: i,
 			color: colors[i % colors.length]
 		}));
 	});
@@ -399,7 +411,8 @@
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">search</span>
-		<h1 class="font-headline-md text-headline-md text-on-background m-0">Query Analytics</h1>
+		<h1 class="font-headline-md text-headline-md text-on-background m-0">Analytics</h1>
+		<span class="font-label-caps text-[10px] text-on-surface-variant">/ Query</span>
 		{#if selectedDb}
 			<span class="font-label-caps text-[10px] text-on-surface-variant">{selectedDb.name}</span>
 		{/if}
@@ -881,29 +894,77 @@
 								>
 							{/each}
 							{#each topQueryBars as bar}
-								<rect
-									x={bar.x}
-									y={bar.y}
-									width={bar.width}
-									height={bar.height}
-									fill={bar.color}
-									rx="2"
-								/>
-								<text
-									x={bar.x + bar.width / 2}
-									y={bar.y - 6}
-									text-anchor="middle"
-									class="text-[10px] fill-on-surface font-bold">{bar.value}</text
+								<g
+									role="button"
+									tabindex="0"
+									class="cursor-pointer"
+									onmouseenter={() => (topQueryHoverIndex = bar.index)}
+									onmouseleave={() => (topQueryHoverIndex = null)}
+									onclick={() => {
+										copyToClipboard(bar.query);
+										copiedQueryIndex = bar.index;
+										setTimeout(() => (copiedQueryIndex = null), 1200);
+									}}
+									onkeydown={(e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											copyToClipboard(bar.query);
+											copiedQueryIndex = bar.index;
+											setTimeout(() => (copiedQueryIndex = null), 1200);
+										}
+									}}
 								>
-								<text
-									x={bar.x + bar.width / 2}
-									y={barChartHeight - 12}
-									text-anchor="middle"
-									class="text-[9px] fill-on-surface-variant truncate"
-									style="max-width: {bar.width}px"
-									>{bar.label.slice(0, 20)}{bar.label.length > 20 ? '...' : ''}</text
-								>
+									<rect
+										x={bar.x}
+										y={bar.y}
+										width={bar.width}
+										height={bar.height}
+										fill={bar.color}
+										rx="2"
+										class="transition-opacity hover:opacity-80"
+									/>
+									<text
+										x={bar.x + bar.width / 2}
+										y={bar.y - 6}
+										text-anchor="middle"
+										class="text-[10px] fill-on-surface font-bold">{bar.value}</text
+									>
+									<text
+										x={bar.x + bar.width / 2}
+										y={barChartHeight - 12}
+										text-anchor="middle"
+										class="text-[9px] fill-on-surface-variant"
+										>{bar.label.slice(0, maxPreviewChars)}{bar.label.length > maxPreviewChars
+											? '...'
+											: ''}</text
+									>
+								</g>
 							{/each}
+							{#if topQueryHoverIndex !== null}
+								{@const bar = topQueryBars[topQueryHoverIndex]}
+								{@const tooltipX = Math.min(
+									Math.max(bar.x + bar.width / 2, 80),
+									barChartWidth - 80
+								)}
+								{@const tooltipY = bar.y - 8}
+								<g transform="translate({tooltipX}, {tooltipY})">
+									<rect
+										x="-75"
+										y="-46"
+										width="150"
+										height="44"
+										rx="6"
+										fill="currentColor"
+										class="text-surface-container-high"
+									/>
+									<text y="-26" text-anchor="middle" class="text-[10px] fill-on-surface font-bold"
+										>{bar.value.toLocaleString()} executions</text
+									>
+									<text y="-10" text-anchor="middle" class="text-[9px] fill-on-surface-variant"
+										>{copiedQueryIndex === bar.index ? 'Copied!' : 'Click to copy query'}</text
+									>
+								</g>
+							{/if}
 						</svg>
 					{/if}
 				</div>
