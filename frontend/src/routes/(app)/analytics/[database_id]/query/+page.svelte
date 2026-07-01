@@ -25,7 +25,7 @@
 	let selectedApplication = $state('');
 	let selectedState = $state('');
 	let searchTerm = $state('');
-	let excludeTerm = $state('');
+	let excludeTerm = $state('commit, begin');
 
 	let expandedQuery = $state<string | null>(null);
 	let pageOffset = $state(0);
@@ -87,6 +87,13 @@
 		if (value === null || value === undefined) return 'unknown';
 		if (value.trim() === '') return 'blank';
 		return value;
+	}
+
+	function parseExcludeTerms(value: string): string[] {
+		return value
+			.split(',')
+			.map((term) => term.trim())
+			.filter((term) => term.length > 0);
 	}
 
 	async function copyToClipboard(text: string) {
@@ -160,7 +167,8 @@
 			if (selectedApplication) options.applicationName = selectedApplication;
 			if (selectedState) options.state = selectedState;
 			if (searchTerm.trim()) options.search = searchTerm.trim();
-			if (excludeTerm.trim()) options.exclude = excludeTerm.trim();
+			const excludeTerms = parseExcludeTerms(excludeTerm);
+			if (excludeTerms.length > 0) options.exclude = excludeTerms;
 			options.limit = pageLimit;
 
 			data = await getQueryAnalytics(database.id, options);
@@ -500,7 +508,6 @@
 							<button
 								onclick={() => {
 									preset = p.value;
-									applyFilters();
 								}}
 								class="px-3 py-1.5 text-xs font-bold transition-colors {preset === p.value
 									? 'bg-primary text-on-primary'
@@ -545,7 +552,6 @@
 						>
 						<select
 							bind:value={selectedUser}
-							onchange={applyFilters}
 							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
 						>
 							<option value="">All users</option>
@@ -564,7 +570,6 @@
 						>
 						<select
 							bind:value={selectedApplication}
-							onchange={applyFilters}
 							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
 						>
 							<option value="">All apps</option>
@@ -583,7 +588,6 @@
 						>
 						<select
 							bind:value={selectedState}
-							onchange={applyFilters}
 							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
 						>
 							<option value="">All states</option>
@@ -599,20 +603,12 @@
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
 						>Search</span
 					>
-					<div class="flex items-center gap-2">
-						<input
-							type="text"
-							bind:value={searchTerm}
-							placeholder="Search query..."
-							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none w-48"
-						/>
-						<button
-							onclick={applyFilters}
-							class="px-4 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 cursor-pointer"
-						>
-							Search
-						</button>
-					</div>
+					<input
+						type="text"
+						bind:value={searchTerm}
+						placeholder="Search query..."
+						class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none w-48"
+					/>
 				</div>
 
 				<div class="flex flex-col gap-2">
@@ -620,21 +616,22 @@
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
 						>Exclude</span
 					>
-					<div class="flex items-center gap-2">
-						<input
-							type="text"
-							bind:value={excludeTerm}
-							placeholder="term1, term2..."
-							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none w-48"
-						/>
-						<button
-							onclick={applyFilters}
-							class="px-4 py-1.5 rounded-lg bg-surface-container border border-outline-variant text-on-surface text-xs font-bold hover:bg-surface-variant cursor-pointer"
-						>
-							Exclude
-						</button>
-					</div>
+					<input
+						type="text"
+						bind:value={excludeTerm}
+						placeholder="term1, term2..."
+						class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none w-48"
+					/>
 				</div>
+
+				<button
+					onclick={applyFilters}
+					disabled={loading}
+					class="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer"
+				>
+					<span class="material-symbols-outlined text-[14px]">search</span>
+					Search
+				</button>
 			</div>
 		</section>
 
@@ -707,7 +704,7 @@
 					<span class="material-symbols-outlined text-sm text-primary">show_chart</span>
 					<h2 class="m-0 font-headline-md text-headline-md">Executions over time</h2>
 				</div>
-				<div class="p-4" bind:clientWidth={timelineChartWidth}>
+				<div class="relative p-4" bind:clientWidth={timelineChartWidth}>
 					{#if loading}
 						<div class="flex items-center justify-center py-24">
 							<svg
@@ -811,7 +808,7 @@
 
 						{#if timelineTooltip}
 							<div
-								class="mt-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs"
+								class="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs shadow-lg"
 							>
 								<p class="font-bold text-on-surface mb-1">{timelineTooltip.fullDate}</p>
 								<p class="text-on-surface-variant">

@@ -603,7 +603,7 @@
       <div class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3">
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-sm text-primary">show_chart</span>
-          <h2 class="m-0 font-headline-md text-headline-md">Total Index Size & Hit Rate</h2>
+          <h2 class="m-0 font-headline-md text-headline-md">Total index size & hit rate</h2>
         </div>
         <div class="relative">
           <button
@@ -631,7 +631,7 @@
         </div>
       </div>
 
-      <div class="p-4" bind:clientWidth={timelineChartWidth}>
+      <div class="relative p-4" bind:clientWidth={timelineChartWidth}>
         {#if loading}
           <div class="flex items-center justify-center py-24">
             <svg class="h-8 w-8 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -701,7 +701,7 @@
           <!-- Tooltip -->
           {#if timelineHoverIndex !== null}
             {@const point = data.timeline[timelineHoverIndex]}
-            <div class="mt-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs">
+            <div class="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs shadow-lg">
               <p class="font-bold text-on-surface mb-1">{formatChartDate(point.collected_at)}</p>
               <p class="text-on-surface-variant">Total size: <span class="font-bold text-on-surface">{formatBytes(point.total_size_bytes)}</span></p>
               <p class="text-on-surface-variant">Total scans: <span class="font-bold text-on-surface">{formatNumber(point.total_scans)}</span></p>
