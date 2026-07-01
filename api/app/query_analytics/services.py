@@ -107,12 +107,6 @@ def _bucket_timestamp(ts: datetime, bucket_minutes: int = 5) -> datetime:
     )
 
 
-def _parse_exclude_terms(exclude: Optional[str]) -> list[str]:
-    if not exclude:
-        return []
-    return [term.strip().lower() for term in exclude.split(',') if term.strip()]
-
-
 def _avg_duration(durations: list[Optional[float]]) -> Optional[float]:
     total = 0.0
     count = 0
@@ -191,7 +185,7 @@ async def get_query_analytics(
     application_name: Optional[str],
     state: Optional[str],
     search: Optional[str],
-    exclude: Optional[str],
+    exclude: Optional[List[str]],
     limit: Optional[int] = 50,
 ) -> QueryAnalyticsResponse:
     db_result = await db.execute(
@@ -207,7 +201,7 @@ async def get_query_analytics(
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
     search_lower = search.lower() if search else None
-    exclude_terms = _parse_exclude_terms(exclude)
+    exclude_terms = [term.strip().lower() for term in (exclude or []) if term.strip()]
 
     # Stream rows in keyset-based batches to avoid OFFSET and large memory spikes.
     BATCH_SIZE = 50_000
