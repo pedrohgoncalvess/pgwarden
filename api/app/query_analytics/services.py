@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.query_analytics.models import (
@@ -28,6 +28,15 @@ PRESET_RANGES = {
     "2w": timedelta(weeks=2),
     "1m": timedelta(days=30),
 }
+
+# Pre-compiled regex patterns for query normalization.
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", flags=re.DOTALL)
+_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
+_DOUBLE_QUOTE_RE = re.compile(r'"([^"]+)"')
+_STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
+_NUMERIC_LITERAL_RE = re.compile(r"(?<![\w.])-?\d+(\.\d+)?(?![\w.])")
+_IN_CLAUSE_RE = re.compile(r"\bin\s*\(\s*(\?\s*,\s*)*\?\s*\)", flags=re.IGNORECASE)
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -61,10 +70,8 @@ def _resolve_date_range(
 
 
 def _remove_sql_comments(query: str) -> str:
-    # Remove block comments /* ... */
-    query = re.sub(r"/\*.*?\*/", " ", query, flags=re.DOTALL)
-    # Remove line comments -- ...
-    query = re.sub(r"--[^\n]*", " ", query)
+    query = _BLOCK_COMMENT_RE.sub(" ", query)
+    query = _LINE_COMMENT_RE.sub(" ", query)
     return query
 
 
@@ -73,27 +80,13 @@ def _normalize_query(query: Optional[str]) -> str:
         return ""
 
     query = _remove_sql_comments(query)
-
-    # Remove double quotes used as identifier quotes (PostgreSQL).
-    # Examples: "base"."user" -> base.user
-    query = re.sub(r'"([^"]+)"', r"\1", query)
-
-    # Lowercase
+    query = _DOUBLE_QUOTE_RE.sub(r"\1", query)
     query = query.lower()
+    query = _STRING_LITERAL_RE.sub("?", query)
+    query = _NUMERIC_LITERAL_RE.sub("?", query)
+    query = _IN_CLAUSE_RE.sub("in (?)", query)
+    query = _WHITESPACE_RE.sub(" ", query).strip()
 
-    # Replace string literals (single quotes, handling escaped quotes).
-    query = re.sub(r"'(?:''|[^'])*'", "?", query)
-
-    # Replace numeric literals (integers and floats), keeping an optional leading sign.
-    query = re.sub(r"(?<![\w.])-?\d+(\.\d+)?(?![\w.])", "?", query)
-
-    # Normalize IN clauses: in (?, ?, ?) -> in (?)
-    query = re.sub(r"\bin\s*\(\s*(\?\s*,\s*)*\?\s*\)", "in (?)", query, flags=re.IGNORECASE)
-
-    # Collapse whitespace
-    query = re.sub(r"\s+", " ", query).strip()
-
-    # Remove trailing semicolon
     if query.endswith(";"):
         query = query[:-1].strip()
 
@@ -120,32 +113,31 @@ def _parse_exclude_terms(exclude: Optional[str]) -> list[str]:
     return [term.strip().lower() for term in exclude.split(',') if term.strip()]
 
 
-async def get_query_analytics(
+def _avg_duration(durations: list[Optional[float]]) -> Optional[float]:
+    total = 0.0
+    count = 0
+    for d in durations:
+        if d is not None:
+            total += d
+            count += 1
+    if count == 0:
+        return None
+    return total / count
+
+
+async def _fetch_batch(
     db: AsyncSession,
-    database_id: UUID,
-    start_date: Optional[str],
-    end_date: Optional[str],
-    preset: Optional[str],
+    database_id: int,
+    start_dt: datetime,
+    end_dt: datetime,
     user_name: Optional[str],
     application_name: Optional[str],
     state: Optional[str],
-    search: Optional[str],
-    exclude: Optional[str],
-) -> QueryAnalyticsResponse:
-    db_result = await db.execute(
-        select(Database).where(
-            Database.public_id == database_id,
-            Database.deleted_at.is_(None),
-        )
-    )
-    database = db_result.scalar_one_or_none()
-    if not database:
-        raise DatabaseNotFoundError(str(database_id))
-
-    start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
-
+    cursor: Optional[tuple],
+    batch_size: int,
+):
     filters = [
-        NativeQueryMetric.database_id == database.id,
+        NativeQueryMetric.database_id == database_id,
         NativeQueryMetric.collected_at >= start_dt,
         NativeQueryMetric.collected_at <= end_dt,
     ]
@@ -157,7 +149,16 @@ async def get_query_analytics(
     if state is not None:
         filters.append(NativeQueryMetric.state == state)
 
-    rows_result = await db.execute(
+    if cursor:
+        filters.append(
+            tuple_(
+                NativeQueryMetric.collected_at,
+                NativeQueryMetric.pid,
+                NativeQueryMetric.backend_start,
+            ) > cursor
+        )
+
+    return await db.execute(
         select(
             NativeQueryMetric.collected_at,
             NativeQueryMetric.pid,
@@ -171,52 +172,113 @@ async def get_query_analytics(
             NativeQueryMetric.query_duration_ms,
         )
         .where(and_(*filters))
-        .order_by(NativeQueryMetric.collected_at)
+        .order_by(
+            NativeQueryMetric.collected_at,
+            NativeQueryMetric.pid,
+            NativeQueryMetric.backend_start,
+        )
+        .limit(batch_size)
     )
-    rows = rows_result.all()
 
-    # Build filter options from the full-period data before applying search filter.
-    users_set = set()
-    applications_set = set()
-    states_set = set()
-    for row in rows:
-        users_set.add(row.user_name)
-        applications_set.add(row.application_name)
-        states_set.add(row.state)
 
+async def get_query_analytics(
+    db: AsyncSession,
+    database_id: UUID,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    preset: Optional[str],
+    user_name: Optional[str],
+    application_name: Optional[str],
+    state: Optional[str],
+    search: Optional[str],
+    exclude: Optional[str],
+    limit: Optional[int] = 50,
+) -> QueryAnalyticsResponse:
+    db_result = await db.execute(
+        select(Database).where(
+            Database.public_id == database_id,
+            Database.deleted_at.is_(None),
+        )
+    )
+    database = db_result.scalar_one_or_none()
+    if not database:
+        raise DatabaseNotFoundError(str(database_id))
+
+    start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
+
+    search_lower = search.lower() if search else None
     exclude_terms = _parse_exclude_terms(exclude)
 
-    # Group by execution identity to avoid inflating counts by snapshot frequency.
+    # Stream rows in keyset-based batches to avoid OFFSET and large memory spikes.
+    BATCH_SIZE = 50_000
+    MAX_TOTAL_ROWS = 500_000
+
     executions: dict[tuple, dict] = {}
-    for row in rows:
-        query_text = row.query or ""
-        signature = _normalize_query(query_text)
-        if not signature:
-            continue
+    users_set: set[Optional[str]] = set()
+    applications_set: set[Optional[str]] = set()
+    states_set: set[Optional[str]] = set()
+    signature_cache: dict[Optional[str], str] = {}
+    total_rows = 0
+    truncated = False
+    cursor: Optional[tuple] = None
 
-        if search and search.lower() not in signature:
-            continue
+    while total_rows < MAX_TOTAL_ROWS:
+        rows_result = await _fetch_batch(
+            db, database.id, start_dt, end_dt, user_name, application_name,
+            state, cursor, BATCH_SIZE,
+        )
+        rows = rows_result.all()
+        if not rows:
+            break
 
-        if exclude_terms and any(term in signature for term in exclude_terms):
-            continue
+        total_rows += len(rows)
+        if total_rows >= MAX_TOTAL_ROWS:
+            truncated = True
 
-        exec_key = (row.pid, row.backend_start, row.query_start or row.collected_at, row.query_hash)
-        existing = executions.get(exec_key)
-        if existing is None or row.collected_at < existing["first_seen"]:
-            executions[exec_key] = {
-                "signature": signature,
-                "query_hash": row.query_hash,
-                "query": query_text,
-                "user_name": row.user_name,
-                "application_name": row.application_name,
-                "state": row.state,
-                "first_seen": row.collected_at,
-                "last_seen": row.collected_at,
-                "durations": [],
-            }
-        executions[exec_key]["durations"].append(row.query_duration_ms)
-        if row.collected_at > executions[exec_key]["last_seen"]:
-            executions[exec_key]["last_seen"] = row.collected_at
+        for row in rows:
+            users_set.add(row.user_name)
+            applications_set.add(row.application_name)
+            states_set.add(row.state)
+
+            query_hash = row.query_hash
+            signature = signature_cache.get(query_hash)
+            if signature is None:
+                query_text = row.query or ""
+                signature = _normalize_query(query_text)
+                signature_cache[query_hash] = signature
+
+            if not signature:
+                continue
+
+            if search_lower and search_lower not in signature:
+                continue
+
+            if exclude_terms and any(term in signature for term in exclude_terms):
+                continue
+
+            exec_key = (row.pid, row.backend_start, row.query_start or row.collected_at, query_hash)
+            existing = executions.get(exec_key)
+            if existing is None or row.collected_at < existing["first_seen"]:
+                executions[exec_key] = {
+                    "signature": signature,
+                    "query_hash": query_hash,
+                    "query": row.query or "",
+                    "user_name": row.user_name,
+                    "application_name": row.application_name,
+                    "state": row.state,
+                    "first_seen": row.collected_at,
+                    "last_seen": row.collected_at,
+                    "durations": [],
+                }
+            executions[exec_key]["durations"].append(row.query_duration_ms)
+            if row.collected_at > executions[exec_key]["last_seen"]:
+                executions[exec_key]["last_seen"] = row.collected_at
+
+        last_row = rows[-1]
+        cursor = (last_row.collected_at, last_row.pid, last_row.backend_start)
+
+        if len(rows) < BATCH_SIZE:
+            break
 
     # Aggregate by query signature.
     signatures: dict[str, dict] = defaultdict(
@@ -241,11 +303,7 @@ async def get_query_analytics(
             agg["query_preview"] = _build_preview(signature)
             agg["query_hash"] = exec_data["query_hash"]
 
-        exec_avg_duration = (
-            sum(d for d in exec_data["durations"] if d is not None) / len([d for d in exec_data["durations"] if d is not None])
-            if any(d is not None for d in exec_data["durations"])
-            else None
-        )
+        exec_avg_duration = _avg_duration(exec_data["durations"])
 
         agg["execution_count"] += 1
         if exec_avg_duration is not None:
@@ -261,8 +319,12 @@ async def get_query_analytics(
         bucket = _bucket_timestamp(exec_data["first_seen"])
         timeline_buckets[bucket].append(exec_avg_duration)
 
+    total = len(signatures)
+    sorted_signatures = sorted(signatures.items(), key=lambda x: x[1]["execution_count"], reverse=True)
+    page_signatures = sorted_signatures[:limit] if limit else sorted_signatures
+
     items = []
-    for signature, agg in sorted(signatures.items(), key=lambda x: x[1]["execution_count"], reverse=True):
+    for signature, agg in page_signatures:
         durations = agg["durations"]
         avg_duration = sum(durations) / len(durations) if durations else None
         max_duration = max(durations) if durations else None
@@ -314,6 +376,7 @@ async def get_query_analytics(
         start_at=start_dt,
         end_at=end_dt,
         items=items,
+        total=total,
         timeline=timeline,
         filters=QueryAnalyticsFilters(
             users=sorted(users_set, key=lambda x: (x is None, x or "")),

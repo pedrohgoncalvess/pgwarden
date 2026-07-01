@@ -132,6 +132,7 @@ async def test_query_analytics_aggregates(
 
     assert data["database_id"] == str(database.public_id)
     assert data["database_name"] == "analytics_db"
+    assert data["total"] == 2
     assert len(data["items"]) == 2
 
     select_item = next(i for i in data["items"] if i["query_signature"] == "select * from base.user where id = ?")
@@ -197,6 +198,7 @@ async def test_query_analytics_filters(
     )
     assert response.status_code == 200
     data = response.json()
+    assert data["total"] == 1
     assert len(data["items"]) == 1
     assert data["items"][0]["query_signature"] == "select ?"
     assert data["items"][0]["execution_count"] == 1
@@ -246,6 +248,7 @@ async def test_query_analytics_search(
     )
     assert response.status_code == 200
     data = response.json()
+    assert data["total"] == 1
     assert len(data["items"]) == 1
     assert "users" in data["items"][0]["query_signature"]
 
@@ -294,6 +297,7 @@ async def test_query_analytics_exclude(
     )
     assert response.status_code == 200
     data = response.json()
+    assert data["total"] == 1
     assert len(data["items"]) == 1
     assert "users" in data["items"][0]["query_signature"]
 

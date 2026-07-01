@@ -60,6 +60,7 @@ class QueryAnalyticsResponse(BaseModel):
     start_at: datetime
     end_at: datetime
     items: List[QueryAnalyticsItem]
+    total: int
     timeline: List[QueryAnalyticsTimelinePoint]
     filters: QueryAnalyticsFilters
 

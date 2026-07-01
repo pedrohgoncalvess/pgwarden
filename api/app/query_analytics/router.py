@@ -37,6 +37,7 @@ async def get_query_analytics(
     state: Optional[str] = Query(default=None, description="Filter by query state"),
     search: Optional[str] = Query(default=None, description="Search within the normalized query signature"),
     exclude: Optional[str] = Query(default=None, description="Exclude queries whose signature contains any of these comma-separated terms"),
+    limit: Optional[int] = Query(default=50, ge=1, le=500, description="Maximum number of query signatures to return"),
 ):
     async with DatabaseConnection() as conn:
         return await services.get_query_analytics(
@@ -50,4 +51,5 @@ async def get_query_analytics(
             state,
             search,
             exclude,
+            limit,
         )
