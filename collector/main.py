@@ -37,6 +37,9 @@ _INSERT_RUN_ERROR_DB = load_storage_query(schema="collector", table="run", query
 _INSERT_RUN_SUCCESS_SRV = load_storage_query(schema="collector", table="run", query_type="INSERT", query_name="success_server")
 _INSERT_RUN_ERROR_SRV = load_storage_query(schema="collector", table="run", query_type="INSERT", query_name="error_server")
 
+_UPDATE_LAST_SEEN_DB = load_storage_query(schema="metadata", table="database", query_type="UPDATE", query_name="last_seen")
+_UPDATE_LAST_SEEN_SRV = load_storage_query(schema="collector", table="server", query_type="UPDATE", query_name="last_seen")
+
 
 DATABASE_COLLECTOR_MAP = {
     "table_collector":           lambda mon, met, db: TableCollector(mon, met, db),
@@ -71,6 +74,10 @@ async def _run_collector_loop(
         q_force,
         q_run_success,
         q_run_error,
+        q_last_seen_db,
+        q_last_seen_srv,
+        database_id: int = None,
+        server_id: int = None,
 ) -> None:
     while True:
         try:
@@ -125,6 +132,10 @@ async def _run_collector_loop(
                             "config_id": config_id,
                             "command_id": command_id if is_force_run else None,
                         })
+                        if database_id is not None:
+                            await cur.execute(q_last_seen_db, {"id": database_id, "error": None})
+                        if server_id is not None:
+                            await cur.execute(q_last_seen_srv, {"server_id": server_id, "error": None})
                         await conn.commit()
 
             else:
@@ -146,6 +157,10 @@ async def _run_collector_loop(
                             "command_id": command_id if is_force_run else None,
                             "errors": [str(error)],
                         })
+                        if database_id is not None:
+                            await cur.execute(q_last_seen_db, {"id": database_id, "error": str(error)})
+                        if server_id is not None:
+                            await cur.execute(q_last_seen_srv, {"server_id": server_id, "error": str(error)})
                         await conn.commit()
             except Exception:
                 pass
@@ -154,7 +169,7 @@ async def _run_collector_loop(
             await asyncio.sleep(2)
 
 
-def run_database_collector_loop(metrics_db, collector, config_id, name):
+def run_database_collector_loop(metrics_db, collector, config_id, name, database_id=None, server_id=None):
     return _run_collector_loop(
         metrics_db=metrics_db,
         collector=collector,
@@ -167,10 +182,14 @@ def run_database_collector_loop(metrics_db, collector, config_id, name):
         q_force=_SET_DB_FORCE,
         q_run_success=_INSERT_RUN_SUCCESS_DB,
         q_run_error=_INSERT_RUN_ERROR_DB,
+        q_last_seen_db=_UPDATE_LAST_SEEN_DB,
+        q_last_seen_srv=_UPDATE_LAST_SEEN_SRV,
+        database_id=database_id,
+        server_id=server_id,
     )
 
 
-def run_server_collector_loop(metrics_db, collector, config_id, name):
+def run_server_collector_loop(metrics_db, collector, config_id, name, database_id=None, server_id=None):
     return _run_collector_loop(
         metrics_db=metrics_db,
         collector=collector,
@@ -183,6 +202,10 @@ def run_server_collector_loop(metrics_db, collector, config_id, name):
         q_force=_SET_SRV_FORCE,
         q_run_success=_INSERT_RUN_SUCCESS_SRV,
         q_run_error=_INSERT_RUN_ERROR_SRV,
+        q_last_seen_db=_UPDATE_LAST_SEEN_DB,
+        q_last_seen_srv=_UPDATE_LAST_SEEN_SRV,
+        database_id=database_id,
+        server_id=server_id,
     )
 
 
@@ -253,6 +276,7 @@ async def main() -> None:
                     collector=collector_instance,
                     config_id=cfg["id"],
                     name=f"{cfg['name']}:db{db.id}",
+                    database_id=db.id,
                 )
             )
             background_tasks.add(task)
@@ -276,6 +300,7 @@ async def main() -> None:
                     collector=collector_instance,
                     config_id=cfg["id"],
                     name=f"{cfg['name']}:srv{server_id}",
+                    server_id=server_id,
                 )
             )
             background_tasks.add(task)

@@ -32,3 +32,13 @@ SELECT id FROM "collector"."server"
 WHERE id = %(server_id)s
 AND deleted_at IS NULL
 """
+
+[UPDATE]
+last_seen = """
+UPDATE "collector"."server"
+SET
+    last_seen_at = CASE WHEN %(error)s::TEXT IS NULL THEN now() ELSE last_seen_at END,
+    last_error   = %(error)s::TEXT,
+    updated_at   = now()
+WHERE id = %(server_id)s
+"""
