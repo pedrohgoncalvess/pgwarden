@@ -1,9 +1,16 @@
 from uuid import UUID
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.tags.models import TagCreate, TagUpdate, TagResponse
+from app.tags.models import (
+    TagAssignmentCreate,
+    TagAssignmentDelete,
+    TagAssignmentResponse,
+    TagCreate,
+    TagResponse,
+    TagUpdate,
+)
 from app.tags import services
 from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
@@ -35,8 +42,8 @@ async def create_tag(tag_in: TagCreate):
 @router.get(
     "/",
     response_model=List[TagResponse],
-    summary="List all tags for a server",
-    description="Returns all tags created for the specified server.",
+    summary="List all tags",
+    description="Returns all classification tags.",
     responses={
         404: {"model": ErrorMessage, "description": "Server not found"},
         **COMMON_RESPONSES
@@ -74,3 +81,43 @@ async def update_tag(tag_id: UUID, tag_in: TagUpdate):
 async def delete_tag(tag_id: UUID):
     async with DatabaseConnection() as conn:
         await services.delete_tag(conn, tag_id)
+
+@router.get(
+    "/assignments",
+    response_model=List[TagAssignmentResponse],
+    summary="List tag assignments",
+    description="Returns tag assignments for direct database objects and documentation records.",
+    responses={**COMMON_RESPONSES}
+)
+async def list_assignments(database_id: UUID | None = Query(default=None)):
+    async with DatabaseConnection() as conn:
+        return await services.list_assignments(conn, database_id)
+
+@router.post(
+    "/{tag_id}/assignments",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Attach a tag",
+    description="Attaches a tag to a direct metadata object or to a documentation record.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Tag or target not found"},
+        **COMMON_RESPONSES
+    }
+)
+async def attach_tag(tag_id: UUID, assignment: TagAssignmentCreate):
+    async with DatabaseConnection() as conn:
+        await services.attach_tag(conn, tag_id, assignment)
+
+@router.api_route(
+    "/{tag_id}/assignments",
+    methods=["DELETE"],
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Detach a tag",
+    description="Detaches a tag from a direct metadata object or from a documentation record.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Tag or target not found"},
+        **COMMON_RESPONSES
+    }
+)
+async def detach_tag(tag_id: UUID, assignment: TagAssignmentDelete):
+    async with DatabaseConnection() as conn:
+        await services.detach_tag(conn, tag_id, assignment)
