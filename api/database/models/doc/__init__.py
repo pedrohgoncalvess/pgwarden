@@ -4,7 +4,10 @@ from database.models.doc.table import TableDoc
 from database.models.doc.column import ColumnDoc
 from database.models.doc.index import IndexDoc
 from database.models.doc.tag import Tag
-from database.models.doc.object_tag import DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag
+from database.models.doc.object_tag import (
+    DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag,
+    DatabaseObjectTag, TableObjectTag, ColumnObjectTag, IndexObjectTag, NativeQueryObjectTag
+)
 
 __all__ = [
     "DatabaseDoc",
@@ -17,5 +20,10 @@ __all__ = [
     "SchemaTag",
     "TableTag",
     "ColumnTag",
-    "IndexTag"
+    "IndexTag",
+    "DatabaseObjectTag",
+    "TableObjectTag",
+    "ColumnObjectTag",
+    "IndexObjectTag",
+    "NativeQueryObjectTag"
 ]

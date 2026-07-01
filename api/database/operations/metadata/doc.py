@@ -4,7 +4,10 @@ from database.models.doc.schema import SchemaDoc
 from database.models.doc.table import TableDoc
 from database.models.doc.column import ColumnDoc
 from database.models.doc.index import IndexDoc
-from database.models.doc.object_tag import DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag
+from database.models.doc.object_tag import (
+    DatabaseTag, SchemaTag, TableTag, ColumnTag, IndexTag,
+    DatabaseObjectTag, TableObjectTag, ColumnObjectTag, IndexObjectTag, NativeQueryObjectTag
+)
 
 
 class DatabaseDocRepository(Interface[DatabaseDoc]):
@@ -47,3 +50,23 @@ class ColumnTagRepository(Interface[ColumnTag]):
 class IndexTagRepository(Interface[IndexTag]):
     def __init__(self, db):
         super().__init__(IndexTag, db)
+
+class DatabaseObjectTagRepository(Interface[DatabaseObjectTag]):
+    def __init__(self, db):
+        super().__init__(DatabaseObjectTag, db)
+
+class TableObjectTagRepository(Interface[TableObjectTag]):
+    def __init__(self, db):
+        super().__init__(TableObjectTag, db)
+
+class ColumnObjectTagRepository(Interface[ColumnObjectTag]):
+    def __init__(self, db):
+        super().__init__(ColumnObjectTag, db)
+
+class IndexObjectTagRepository(Interface[IndexObjectTag]):
+    def __init__(self, db):
+        super().__init__(IndexObjectTag, db)
+
+class NativeQueryObjectTagRepository(Interface[NativeQueryObjectTag]):
+    def __init__(self, db):
+        super().__init__(NativeQueryObjectTag, db)

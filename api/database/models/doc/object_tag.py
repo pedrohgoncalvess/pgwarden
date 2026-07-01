@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, ForeignKey, DateTime, func, UniqueConstraint
+from sqlalchemy import Column, BigInteger, ForeignKey, DateTime, Text, func, UniqueConstraint
 from database.models.base_model import Base
 
 class DatabaseTag(Base):
@@ -60,3 +60,64 @@ class IndexTag(Base):
     index_doc_id    = Column(BigInteger, ForeignKey("doc.index.id", ondelete="CASCADE"), nullable=False)
     tag_id          = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
     created_at      = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+class DatabaseObjectTag(Base):
+    __tablename__ = "database_object_tag"
+    __table_args__ = (
+        UniqueConstraint("database_id", "tag_id"),
+        {"schema": "doc"}
+    )
+
+    id          = Column(BigInteger, primary_key=True, autoincrement=True)
+    database_id = Column(BigInteger, ForeignKey("metadata.database.id", ondelete="CASCADE"), nullable=False)
+    tag_id      = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
+    created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+class TableObjectTag(Base):
+    __tablename__ = "table_object_tag"
+    __table_args__ = (
+        UniqueConstraint("table_id", "tag_id"),
+        {"schema": "doc"}
+    )
+
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    table_id   = Column(BigInteger, ForeignKey("metadata.table.id", ondelete="CASCADE"), nullable=False)
+    tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+class ColumnObjectTag(Base):
+    __tablename__ = "column_object_tag"
+    __table_args__ = (
+        UniqueConstraint("column_id", "tag_id"),
+        {"schema": "doc"}
+    )
+
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    column_id  = Column(BigInteger, ForeignKey("metadata.column.id", ondelete="CASCADE"), nullable=False)
+    tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+class IndexObjectTag(Base):
+    __tablename__ = "index_object_tag"
+    __table_args__ = (
+        UniqueConstraint("index_id", "tag_id"),
+        {"schema": "doc"}
+    )
+
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    index_id   = Column(BigInteger, ForeignKey("metadata.index.id", ondelete="CASCADE"), nullable=False)
+    tag_id     = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+class NativeQueryObjectTag(Base):
+    __tablename__ = "native_query_object_tag"
+    __table_args__ = (
+        UniqueConstraint("database_id", "query_hash", "tag_id"),
+        {"schema": "doc"}
+    )
+
+    id          = Column(BigInteger, primary_key=True, autoincrement=True)
+    database_id = Column(BigInteger, ForeignKey("metadata.database.id", ondelete="CASCADE"), nullable=False)
+    query_hash  = Column(Text, nullable=False)
+    tag_id      = Column(BigInteger, ForeignKey("doc.tag.id", ondelete="CASCADE"), nullable=False)
+    created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
