@@ -6,6 +6,11 @@ DROP TABLE IF EXISTS doc.column_tag CASCADE;
 DROP TABLE IF EXISTS doc.table_tag CASCADE;
 DROP TABLE IF EXISTS doc.schema_tag CASCADE;
 DROP TABLE IF EXISTS doc.database_tag CASCADE;
+DROP TABLE IF EXISTS doc.native_query_object_tag CASCADE;
+DROP TABLE IF EXISTS doc.index_object_tag CASCADE;
+DROP TABLE IF EXISTS doc.column_object_tag CASCADE;
+DROP TABLE IF EXISTS doc.table_object_tag CASCADE;
+DROP TABLE IF EXISTS doc.database_object_tag CASCADE;
 
 DROP TABLE IF EXISTS doc."index" CASCADE;
 DROP TABLE IF EXISTS doc."column" CASCADE;
