@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { selectedServerId } from '$lib/stores/selectedServer';
 	import {
@@ -12,6 +13,7 @@
 		getSchemaDocumentation,
 		getTableDocumentation,
 		listDatabases,
+		listServers,
 		listTagAssignments,
 		listTags,
 		putColumnDocumentation,
@@ -19,10 +21,12 @@
 		putIndexDocumentation,
 		putSchemaDocumentation,
 		putTableDocumentation,
+		type DatabaseListItem,
 		type DatabaseSchema,
 		type SchemaColumn,
 		type SchemaIndex,
 		type SchemaTable,
+		type ServerListItem,
 		type TagAssignment,
 		type TagAssignmentInput,
 		type TagItem
@@ -50,6 +54,9 @@
 
 	const classificationOptions = ['internal', 'public', 'confidential', 'restricted'];
 
+	let servers = $state<ServerListItem[]>([]);
+	let databases = $state<DatabaseListItem[]>([]);
+	let selectedServerIdLocal = $state('');
 	let databaseName = $state('');
 	let schema = $state<DatabaseSchema | null>(null);
 	let tags = $state<TagItem[]>([]);
@@ -83,6 +90,9 @@
 	const availableTags = $derived(
 		tags.filter((tag) => !selectedAssignments.some((assignment) => assignment.tag.id === tag.id))
 	);
+	const serverDatabases = $derived(databases.filter((db) => db.server_id === selectedServerIdLocal));
+	const serverIsFixed = $derived(servers.length <= 1);
+	const databaseIsFixed = $derived(serverDatabases.length <= 1);
 
 	$effect(() => {
 		if (!tagToAttachId || !availableTags.some((tag) => tag.id === tagToAttachId)) {
@@ -101,19 +111,65 @@
 				return;
 			}
 
-			const databases = await listDatabases();
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 			const database = databases.find((db) => db.id === selectedDatabaseId);
 			if (!database) {
 				error = 'Database not found.';
 				return;
 			}
 
+			selectedServerIdLocal = database.server_id;
+			selectedServerId.set(selectedServerIdLocal);
 			databaseName = database.name;
-			selectedServerId.set(database.server_id);
-			tags = await listTags(database.server_id);
+			tags = await listTags(selectedServerIdLocal);
 			await loadDatabaseContext();
 		} catch (err: any) {
 			handleError(err, 'Failed to load documentation workspace.');
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function selectServer() {
+		if (!selectedServerIdLocal) return;
+
+		try {
+			loading = true;
+			error = '';
+			selectedServerId.set(selectedServerIdLocal);
+			const firstDatabase = serverDatabases[0];
+			if (firstDatabase) {
+				selectedDatabaseId = firstDatabase.id;
+				databaseName = firstDatabase.name;
+				await goto(`/metadata/${selectedDatabaseId}/documentation`, { replaceState: true });
+				tags = await listTags(selectedServerIdLocal);
+				await loadDatabaseContext();
+			} else {
+				selectedDatabaseId = '';
+				databaseName = '';
+				schema = null;
+				assignments = [];
+			}
+		} catch (err: any) {
+			handleError(err, 'Failed to switch server.');
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function selectDatabase() {
+		if (!selectedDatabaseId) return;
+
+		try {
+			loading = true;
+			error = '';
+			const database = databases.find((db) => db.id === selectedDatabaseId);
+			databaseName = database?.name ?? '';
+			await goto(`/metadata/${selectedDatabaseId}/documentation`, { replaceState: true });
+			tags = await listTags(selectedServerIdLocal);
+			await loadDatabaseContext();
+		} catch (err: any) {
+			handleError(err, 'Failed to switch database.');
 		} finally {
 			loading = false;
 		}
@@ -429,30 +485,59 @@
 		</div>
 	{/if}
 
-	<section class="rounded-lg border border-outline-variant bg-surface-container p-4">
-		<div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(14rem,24rem)]">
-			<div class="flex items-center gap-2 text-sm text-on-surface">
+	<section class="rounded-lg border border-outline-variant bg-surface-container p-3">
+		<div class="flex flex-wrap items-center gap-4">
+			<div class="flex items-center gap-2 text-sm text-on-surface min-w-0">
 				<span class="material-symbols-outlined text-on-surface-variant">database</span>
-				<span class="font-bold">{databaseName || 'Loading database...'}</span>
+				<span class="font-bold truncate">{databaseName || 'Loading database...'}</span>
 			</div>
-			<label class="flex flex-col gap-2 text-xs text-on-surface-variant">
-				Search schema, table, column or index
-				<div class="flex items-center rounded-lg border border-outline-variant bg-surface-container-high px-3 focus-within:border-primary">
-					<span class="material-symbols-outlined mr-2 text-[18px] text-on-surface-variant">search</span>
-					<input
-						bind:value={searchTerm}
-						class="h-10 min-w-0 flex-1 bg-transparent text-sm text-on-surface outline-none"
-						placeholder="Search metadata..."
-					/>
-				</div>
-			</label>
+
+			<div class="flex flex-wrap items-center gap-3 ml-auto">
+				<label class="flex items-center gap-2 text-xs text-on-surface-variant">
+					Server
+					<select
+						bind:value={selectedServerIdLocal}
+						onchange={selectServer}
+						disabled={loading || serverIsFixed}
+						class="min-w-40 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:border-primary disabled:opacity-80"
+					>
+						{#each servers as server}
+							<option value={server.id}>{server.name}</option>
+						{/each}
+					</select>
+				</label>
+
+				<label class="flex items-center gap-2 text-xs text-on-surface-variant">
+					Database
+					<select
+						bind:value={selectedDatabaseId}
+						onchange={selectDatabase}
+						disabled={loading || databaseIsFixed}
+						class="min-w-40 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:border-primary disabled:opacity-80"
+					>
+						{#each serverDatabases as database}
+							<option value={database.id}>{database.name}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
 		</div>
 	</section>
 
 	<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(24rem,34rem)_1fr]">
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div class="border-b border-outline-variant bg-surface-container-low px-4 py-3">
-				<h2 class="m-0 font-headline-md text-headline-md">Objects</h2>
+				<div class="flex items-center gap-3">
+					<h2 class="m-0 font-headline-md text-headline-md">Objects</h2>
+					<div class="flex-1 flex items-center rounded-lg border border-outline-variant bg-surface-container-high px-3 focus-within:border-primary">
+						<span class="material-symbols-outlined mr-2 text-[18px] text-on-surface-variant">search</span>
+						<input
+							bind:value={searchTerm}
+							class="h-9 min-w-0 flex-1 bg-transparent text-sm text-on-surface outline-none"
+							placeholder="Search schema, table, column or index..."
+						/>
+					</div>
+				</div>
 			</div>
 
 			<div class="max-h-[calc(100vh-15rem)] overflow-y-auto custom-scrollbar">
