@@ -40,3 +40,11 @@ class UptimeResponse(BaseModel):
     postmaster_start_time: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DatabaseMetricsSummaryResponse(BaseModel):
+    database_id: UUID
+    stats: DatabaseStatsResponse
+    uptime: UptimeResponse
+
+    model_config = ConfigDict(from_attributes=True)

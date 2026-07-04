@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.databases.models import UptimeResponse
 from database.models.metadata.database import Database
 from database.models.collector.server import Server
-from app.schemas.exceptions import DatabaseNotFoundError
+from app.databases.schemas.exceptions import DatabaseNotFoundError
 from utils import decrypt, decrypt_or_plain
 
 

@@ -8,7 +8,7 @@ from database.models.metadata.database import Database
 from database.models.metadata.table import Table
 from database.models.metadata.index import Index
 from database.models.metric.database_stat import DatabaseStat
-from app.schemas.exceptions import DatabaseNotFoundError
+from app.databases.schemas.exceptions import DatabaseNotFoundError
 
 
 async def get_database_stats(db: AsyncSession, database_id: UUID) -> DatabaseStatsResponse:

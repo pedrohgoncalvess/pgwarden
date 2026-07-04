@@ -5,8 +5,7 @@
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import {
 		listDatabases,
-		getDatabaseStats,
-		getDatabaseUptime,
+		getDatabaseMetricsSummary,
 		createTpsEventSource,
 		formatBytes,
 		listServers,
@@ -162,13 +161,9 @@
 			selectedDatabaseId.set(selectedDb.id);
 			const dbId = selectedDb.id;
 
-			const [statsData, uptimeData] = await Promise.all([
-				getDatabaseStats(dbId),
-				getDatabaseUptime(dbId)
-			]);
-
-			stats = statsData;
-			uptime = uptimeData;
+			const metricsSummary = await getDatabaseMetricsSummary(dbId);
+			stats = metricsSummary.stats;
+			uptime = metricsSummary.uptime;
 			connectStreams(selectedDb);
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
