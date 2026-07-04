@@ -56,7 +56,7 @@ async def test_force_run_creates_command(
     _, database, config = test_server_with_run
 
     response = await auth_client.patch(
-        f"/v1/databases/{database.public_id}/runs/{config.id}?run_type=database",
+        f"/v1/databases/{database.public_id}/runs/{config.id}",
         json={"action": "force_run"},
     )
     assert response.status_code == 200
@@ -76,7 +76,7 @@ async def test_force_run_paused_fails(
     await db_session.commit()
 
     response = await auth_client.patch(
-        f"/v1/databases/{database.public_id}/runs/{config.id}?run_type=database",
+        f"/v1/databases/{database.public_id}/runs/{config.id}",
         json={"action": "force_run"},
     )
     assert response.status_code == 400
