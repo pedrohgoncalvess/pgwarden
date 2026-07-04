@@ -7,8 +7,8 @@ from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
 
 from app.auth.router import router as auth_router
-from app.schemas.router import router as schema_router
-from app.schemas.history.router import router as schema_history_router
+from app.databases.schemas.router import router as schema_router
+from app.databases.schemas.history.router import router as schema_history_router
 from app.databases.router import router as database_router
 from app.servers.router import router as server_router
 from app.databases.sessions.router import router as sessions_router
@@ -17,15 +17,14 @@ from app.databases.configs.router import router as db_config_router
 from app.databases.runs.router import router as db_runs_router
 from app.databases.metrics.router import router as db_metrics_router
 from app.databases.native_queries.router import router as db_native_queries_router
-from app.databases.stats.router import router as db_stats_router
-from app.databases.uptime.router import router as db_uptime_router
 from app.databases.analytics.router import router as db_analytics_router
-from app.query_analytics.router import router as query_analytics_router
-from app.servers.config.router import router as srv_config_router
+from app.databases.analytics.query.router import router as query_analytics_router
+from app.servers.configs.router import router as srv_config_router
+from app.servers.runs.router import router as srv_runs_router
 from app.servers.metrics.router import router as srv_metrics_router
 from app.tags.router import router as tags_router
-from app.docs.router import router as docs_router
-from app.schemas.exceptions import BaseAppException
+from app.databases.docs.router import router as docs_router
+from app.databases.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
 from database.models.base import User
 from database.operations.base.user import UserRepository
@@ -173,11 +172,10 @@ app.include_router(db_config_router, prefix="/v1")
 app.include_router(db_runs_router, prefix="/v1")
 app.include_router(db_metrics_router, prefix="/v1")
 app.include_router(db_native_queries_router, prefix="/v1")
-app.include_router(db_stats_router, prefix="/v1")
-app.include_router(db_uptime_router, prefix="/v1")
 app.include_router(db_analytics_router, prefix="/v1")
 app.include_router(query_analytics_router, prefix="/v1")
 app.include_router(srv_config_router, prefix="/v1")
+app.include_router(srv_runs_router, prefix="/v1")
 app.include_router(srv_metrics_router, prefix="/v1")
 app.include_router(tags_router, prefix="/v1")
 app.include_router(docs_router, prefix="/v1")

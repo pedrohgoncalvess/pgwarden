@@ -21,6 +21,12 @@ type UptimeResponse = {
 	postmaster_start_time: string;
 };
 
+type DatabaseMetricsSummary = {
+	database_id: string;
+	stats: DatabaseStats;
+	uptime: UptimeResponse;
+};
+
 export type SchemaColumn = {
 	id: string;
 	name: string;
@@ -402,7 +408,7 @@ export async function listDatabases(): Promise<DatabaseListItem[]> {
 }
 
 export async function getDatabaseStats(databaseId: string): Promise<DatabaseStats> {
-	const res = await fetch(`/api/v1/databases/${databaseId}/stats`, {
+	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/stats`, {
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -412,7 +418,7 @@ export async function getDatabaseStats(databaseId: string): Promise<DatabaseStat
 }
 
 export async function getDatabaseUptime(databaseId: string): Promise<UptimeResponse> {
-	const res = await fetch(`/api/v1/databases/${databaseId}/uptime`, {
+	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/uptime`, {
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -421,8 +427,18 @@ export async function getDatabaseUptime(databaseId: string): Promise<UptimeRespo
 	return res.json();
 }
 
+export async function getDatabaseMetricsSummary(databaseId: string): Promise<DatabaseMetricsSummary> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/summary`, {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to get database metrics summary: ${res.status}`);
+	}
+	return res.json();
+}
+
 export async function getDatabaseSchema(databaseId: string): Promise<DatabaseSchema> {
-	const res = await fetch(`/api/v1/schemas/${databaseId}`, {
+	const res = await fetch(`/api/v1/databases/${databaseId}/schemas`, {
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -431,13 +447,173 @@ export async function getDatabaseSchema(databaseId: string): Promise<DatabaseSch
 	return res.json();
 }
 
+export type DocumentationTargetType = 'database' | 'schema' | 'table' | 'column' | 'index';
+
+export type DocumentationBase = {
+	description: string | null;
+	tags?: TagItem[];
+	created_at?: string;
+	updated_at?: string | null;
+};
+
+export type DatabaseDocumentation = DocumentationBase & {
+	owner: string | null;
+	classification: string | null;
+};
+
+export type SchemaDocumentation = DatabaseDocumentation;
+export type TableDocumentation = DatabaseDocumentation;
+
+export type ColumnDocumentation = DocumentationBase & {
+	is_pii: boolean;
+	sample_values: string | null;
+};
+
+export type IndexDocumentation = DocumentationBase;
+
+export type DocumentationPayload =
+	| Partial<DatabaseDocumentation>
+	| Partial<ColumnDocumentation>
+	| Partial<IndexDocumentation>;
+
+async function readOptionalJson<T>(res: Response, fallbackMessage: string): Promise<T | null> {
+	if (res.status === 404) return null;
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `${fallbackMessage}: ${res.status}`);
+	}
+	return res.json();
+}
+
+async function writeJson<T>(url: string, data: unknown, fallbackMessage: string): Promise<T> {
+	const res = await fetch(url, {
+		method: 'PUT',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `${fallbackMessage}: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function getDatabaseDocumentation(
+	databaseId: string
+): Promise<DatabaseDocumentation | null> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/docs`, {
+		headers: authHeaders()
+	});
+	return readOptionalJson<DatabaseDocumentation>(res, 'Failed to get database documentation');
+}
+
+export async function putDatabaseDocumentation(
+	databaseId: string,
+	data: Partial<DatabaseDocumentation>
+): Promise<DatabaseDocumentation> {
+	return writeJson<DatabaseDocumentation>(
+		`/api/v1/databases/${databaseId}/docs`,
+		data,
+		'Failed to save database documentation'
+	);
+}
+
+export async function getSchemaDocumentation(
+	databaseId: string,
+	schemaName: string
+): Promise<SchemaDocumentation | null> {
+	const res = await fetch(
+		`/api/v1/databases/${databaseId}/docs/schemas/${encodeURIComponent(schemaName)}`,
+		{ headers: authHeaders() }
+	);
+	return readOptionalJson<SchemaDocumentation>(res, 'Failed to get schema documentation');
+}
+
+export async function putSchemaDocumentation(
+	databaseId: string,
+	schemaName: string,
+	data: Partial<SchemaDocumentation>
+): Promise<SchemaDocumentation> {
+	return writeJson<SchemaDocumentation>(
+		`/api/v1/databases/${databaseId}/docs/schemas/${encodeURIComponent(schemaName)}`,
+		data,
+		'Failed to save schema documentation'
+	);
+}
+
+export async function getTableDocumentation(
+	databaseId: string,
+	tableId: string
+): Promise<TableDocumentation | null> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/docs/tables/${tableId}`, {
+		headers: authHeaders()
+	});
+	return readOptionalJson<TableDocumentation>(res, 'Failed to get table documentation');
+}
+
+export async function putTableDocumentation(
+	databaseId: string,
+	tableId: string,
+	data: Partial<TableDocumentation>
+): Promise<TableDocumentation> {
+	return writeJson<TableDocumentation>(
+		`/api/v1/databases/${databaseId}/docs/tables/${tableId}`,
+		data,
+		'Failed to save table documentation'
+	);
+}
+
+export async function getColumnDocumentation(
+	databaseId: string,
+	columnId: string
+): Promise<ColumnDocumentation | null> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/docs/columns/${columnId}`, {
+		headers: authHeaders()
+	});
+	return readOptionalJson<ColumnDocumentation>(res, 'Failed to get column documentation');
+}
+
+export async function putColumnDocumentation(
+	databaseId: string,
+	columnId: string,
+	data: Partial<ColumnDocumentation>
+): Promise<ColumnDocumentation> {
+	return writeJson<ColumnDocumentation>(
+		`/api/v1/databases/${databaseId}/docs/columns/${columnId}`,
+		data,
+		'Failed to save column documentation'
+	);
+}
+
+export async function getIndexDocumentation(
+	databaseId: string,
+	indexId: string
+): Promise<IndexDocumentation | null> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/docs/indexes/${indexId}`, {
+		headers: authHeaders()
+	});
+	return readOptionalJson<IndexDocumentation>(res, 'Failed to get index documentation');
+}
+
+export async function putIndexDocumentation(
+	databaseId: string,
+	indexId: string,
+	data: Partial<IndexDocumentation>
+): Promise<IndexDocumentation> {
+	return writeJson<IndexDocumentation>(
+		`/api/v1/databases/${databaseId}/docs/indexes/${indexId}`,
+		data,
+		'Failed to save index documentation'
+	);
+}
+
 export async function getDatabaseSchemaHistory(
 	databaseId: string,
 	tableId?: string,
 	limit = 100,
 	offset = 0
 ): Promise<SchemaHistoryResponse> {
-	const url = new URL(`/api/v1/schemas/${databaseId}/history`, window.location.origin);
+	const url = new URL(`/api/v1/databases/${databaseId}/schemas/history`, window.location.origin);
 	url.searchParams.set('limit', String(limit));
 	url.searchParams.set('offset', String(offset));
 	if (tableId) {
@@ -523,10 +699,10 @@ export async function listRunHistory(
 export async function controlRun(
 	databaseId: string,
 	runId: number,
-	runType: RunType,
+	_runType: RunType,
 	action: RunAction
 ): Promise<RunItem> {
-	const res = await fetch(`/api/v1/databases/${databaseId}/runs/${runId}?run_type=${runType}`, {
+	const res = await fetch(`/api/v1/databases/${databaseId}/runs/${runId}`, {
 		method: 'PATCH',
 		headers: authHeaders(),
 		body: JSON.stringify({ action })
@@ -701,6 +877,7 @@ export type TagItem = {
 };
 
 export type TagInput = {
+	server_id: string;
 	name: string;
 	description?: string | null;
 	color?: string | null;
@@ -731,8 +908,12 @@ export type TagAssignment = TagAssignmentInput & {
 	created_at: string;
 };
 
-export async function listTags(): Promise<TagItem[]> {
-	const res = await fetch('/api/v1/tags', {
+export async function listTags(serverId?: string): Promise<TagItem[]> {
+	const url = new URL('/api/v1/tags', window.location.origin);
+	if (serverId) {
+		url.searchParams.set('server_id', serverId);
+	}
+	const res = await fetch(url.toString(), {
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -754,7 +935,10 @@ export async function createTag(data: TagInput): Promise<TagItem> {
 	return res.json();
 }
 
-export async function updateTag(tagId: string, data: Partial<TagInput>): Promise<TagItem> {
+export async function updateTag(
+	tagId: string,
+	data: Partial<Omit<TagInput, 'server_id'>>
+): Promise<TagItem> {
 	const res = await fetch(`/api/v1/tags/${tagId}`, {
 		method: 'PATCH',
 		headers: authHeaders(),
@@ -956,4 +1140,4 @@ export function formatNumber(n: number | null | undefined): string {
 	return n.toLocaleString();
 }
 
-export { type DatabaseListItem, type DatabaseStats, type UptimeResponse };
+export { type DatabaseListItem, type DatabaseStats, type DatabaseMetricsSummary, type UptimeResponse };
