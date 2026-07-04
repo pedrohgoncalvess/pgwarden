@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from app.query_analytics.services import _normalize_query
+from app.databases.analytics.query.services import _normalize_query
 from database.models.collector.server import Server
 from database.models.metadata.database import Database
 from database.models.metric.native_query import NativeQueryMetric

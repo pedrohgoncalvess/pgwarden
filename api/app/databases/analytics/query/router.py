@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.query_analytics.models import QueryAnalyticsResponse
-from app.query_analytics import services
+from app.databases.analytics.query.models import QueryAnalyticsResponse
+from app.databases.analytics.query import services
 from app.auth.services import get_current_user
 from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection

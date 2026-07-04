@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select, and_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.query_analytics.models import (
+from app.databases.analytics.query.models import (
     QueryAnalyticsResponse,
     QueryAnalyticsItem,
     QueryAnalyticsTimelinePoint,
@@ -15,7 +15,7 @@ from app.query_analytics.models import (
     QueryAnalyticsUserBreakdown,
     QueryAnalyticsApplicationBreakdown,
 )
-from app.schemas.exceptions import DatabaseNotFoundError
+from app.databases.schemas.exceptions import DatabaseNotFoundError
 from database.models.metadata.database import Database
 from database.models.metric.native_query import NativeQueryMetric
 from utils import decrypt_or_plain
