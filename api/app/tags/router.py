@@ -49,9 +49,9 @@ async def create_tag(tag_in: TagCreate):
         **COMMON_RESPONSES
     }
 )
-async def list_tags():
+async def list_tags(server_id: UUID | None = Query(default=None)):
     async with DatabaseConnection() as conn:
-        return await services.list_tags(conn)
+        return await services.list_tags(conn, server_id)
 
 @router.patch(
     "/{tag_id}",

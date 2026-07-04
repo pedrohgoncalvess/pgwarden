@@ -6,17 +6,21 @@ CREATE SCHEMA IF NOT EXISTS doc;
 CREATE TABLE "doc"."tag" (
     id BIGSERIAL,
     public_id UUID NOT NULL DEFAULT uuid_generate_v4() UNIQUE,
+    server_id BIGINT NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
-    color TEXT DEFAULT '#6366F1',
+    color TEXT DEFAULT '#07a96e',
     type VARCHAR(20) NOT NULL DEFAULT 'default',
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT doc_tag_pk PRIMARY KEY (id)
+    CONSTRAINT doc_tag_pk PRIMARY KEY (id),
+    CONSTRAINT doc_tag_server_fk FOREIGN KEY (server_id) REFERENCES collector.server(id) ON DELETE CASCADE,
+    CONSTRAINT doc_tag_server_name_uq UNIQUE (server_id, name)
 );
 
 COMMENT ON TABLE "doc"."tag" IS 'Classification tags for databases, schemas, tables, columns, indexes and queries. Color-coded and typed for categorization.';
+COMMENT ON COLUMN "doc"."tag".server_id IS 'Server that owns this tag namespace.';
 COMMENT ON COLUMN "doc"."tag".type IS 'Tag category or classification type (e.g. default, owner, status, team).';
 COMMENT ON COLUMN "doc"."tag".color IS 'Hex color code for visual identification of the tag in the UI.';
 
@@ -237,11 +241,10 @@ CREATE TABLE "doc"."query_tag" (
     tag_id BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT doc_native_query_tag_pk PRIMARY KEY (id),
-    CONSTRAINT doc_native_query_tag_database_fk FOREIGN KEY (database_id) REFERENCES metadata.database(id) ON DELETE CASCADE,
-    CONSTRAINT doc_native_query_tag_tag_fk FOREIGN KEY (tag_id) REFERENCES doc.tag(id) ON DELETE CASCADE,
-    CONSTRAINT doc_native_query_tag_uq UNIQUE (database_id, query_hash, tag_id)
+    CONSTRAINT doc_query_tag_pk PRIMARY KEY (id),
+    CONSTRAINT doc_query_tag_database_fk FOREIGN KEY (database_id) REFERENCES metadata.database(id) ON DELETE CASCADE,
+    CONSTRAINT doc_query_tag_tag_fk FOREIGN KEY (tag_id) REFERENCES doc.tag(id) ON DELETE CASCADE,
+    CONSTRAINT doc_query_tag_uq UNIQUE (database_id, query_hash, tag_id)
 );
 
 COMMENT ON TABLE "doc"."query_tag" IS 'Links classification tags to native query analytics records by query hash within a database.';
-

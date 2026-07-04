@@ -6,18 +6,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TagBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=50, description="Name of the tag")
-    description: Optional[str] = Field(default=None, max_length=255, description="Optional description of the tag")
+    description: Optional[str] = Field(default=None, description="Optional description of the tag")
     color: Optional[str] = Field(default="#6366F1", description="Hex color code for the tag")
     type: str = Field(default="default", min_length=1, max_length=20, description="Tag category")
 
 
 class TagCreate(TagBase):
-    pass
+    server_id: UUID = Field(..., description="Server that owns this tag")
 
 
 class TagUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
-    description: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
     color: Optional[str] = None
     type: Optional[str] = Field(None, min_length=1, max_length=20)
 

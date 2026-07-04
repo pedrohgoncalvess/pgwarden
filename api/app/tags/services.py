@@ -28,17 +28,23 @@ from database.models.metadata.column import ColumnModel
 from database.models.metadata.database import Database
 from database.models.metadata.index import Index
 from database.models.metadata.table import Table
+from database.operations.collector.server import ServerRepository
 from database.operations.metadata.tag import TagRepository
 from utils import decrypt_or_plain
 
 
 async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
     tag_repo = TagRepository(db)
-    existing = await tag_repo.find_one_by(name=tag_in.name)
+    server = await ServerRepository(db).find_one_by(public_id=tag_in.server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    existing = await tag_repo.find_one_by(server_id=server.id, name=tag_in.name)
     if existing:
-        raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists")
+        raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists for this server")
 
     new_tag = Tag(
+        server_id=server.id,
         name=tag_in.name,
         description=tag_in.description,
         color=tag_in.color,
@@ -51,9 +57,15 @@ async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-async def list_tags(db: AsyncSession) -> List[Tag]:
+async def list_tags(db: AsyncSession, server_id: UUID | None = None) -> List[Tag]:
     tag_repo = TagRepository(db)
-    return await tag_repo.find_all(limit=1000)
+    if not server_id:
+        return await tag_repo.find_all(limit=1000)
+
+    server = await ServerRepository(db).find_one_by(public_id=server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return await tag_repo.find_by(server_id=server.id)
 
 
 async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
@@ -64,9 +76,9 @@ async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
         raise HTTPException(status_code=404, detail="Tag not found")
 
     if tag_in.name and tag_in.name != tag.name:
-        existing = await tag_repo.find_one_by(name=tag_in.name)
+        existing = await tag_repo.find_one_by(server_id=tag.server_id, name=tag_in.name)
         if existing:
-            raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists")
+            raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists for this server")
 
     update_data = tag_in.model_dump(exclude_unset=True)
     if not update_data:
@@ -91,6 +103,9 @@ async def delete_tag(db: AsyncSession, tag_id: UUID) -> None:
 async def attach_tag(db: AsyncSession, tag_id: UUID, assignment: TagAssignmentCreate) -> None:
     tag = await _get_tag(db, tag_id)
     model, values = await _resolve_assignment(db, assignment)
+    target_server_id = await _resolve_assignment_server_id(db, assignment)
+    if target_server_id != tag.server_id:
+        raise HTTPException(status_code=400, detail="Tag and target must belong to the same server")
     existing = await _find_assignment(db, model, values, tag.id)
     if existing:
         return
@@ -102,6 +117,9 @@ async def attach_tag(db: AsyncSession, tag_id: UUID, assignment: TagAssignmentCr
 async def detach_tag(db: AsyncSession, tag_id: UUID, assignment: TagAssignmentDelete) -> None:
     tag = await _get_tag(db, tag_id)
     model, values = await _resolve_assignment(db, assignment)
+    target_server_id = await _resolve_assignment_server_id(db, assignment)
+    if target_server_id != tag.server_id:
+        raise HTTPException(status_code=400, detail="Tag and target must belong to the same server")
     filters = [getattr(model, key) == value for key, value in values.items()]
     filters.append(model.tag_id == tag.id)
     await db.execute(delete(model).where(and_(*filters)))
@@ -168,6 +186,61 @@ async def _get_index(db: AsyncSession, public_id: UUID) -> Index:
     if not index:
         raise HTTPException(status_code=404, detail="Index not found")
     return index
+
+
+async def _get_database_by_id(db: AsyncSession, id: int) -> Database:
+    result = await db.execute(select(Database).where(Database.id == id, Database.deleted_at.is_(None)))
+    database = result.scalar_one_or_none()
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    return database
+
+
+async def _resolve_assignment_server_id(db: AsyncSession, assignment: TagAssignmentCreate) -> int:
+    if assignment.target_type == "database":
+        target_id = assignment.target_id or assignment.database_id
+        if not target_id:
+            raise HTTPException(status_code=400, detail="target_id or database_id is required")
+        return (await _get_database(db, target_id)).server_id
+
+    if assignment.target_type == "schema":
+        if not assignment.database_id:
+            raise HTTPException(status_code=400, detail="database_id is required")
+        return (await _get_database(db, assignment.database_id)).server_id
+
+    if assignment.target_type == "table":
+        if not assignment.target_id:
+            raise HTTPException(status_code=400, detail="target_id is required")
+        table = await _get_table(db, assignment.target_id)
+        return (await _get_database_by_id(db, table.database_id)).server_id
+
+    if assignment.target_type == "column":
+        if not assignment.target_id:
+            raise HTTPException(status_code=400, detail="target_id is required")
+        column = await _get_column(db, assignment.target_id)
+        table = await _get_table_by_id(db, column.table_id)
+        return (await _get_database_by_id(db, table.database_id)).server_id
+
+    if assignment.target_type == "index":
+        if not assignment.target_id:
+            raise HTTPException(status_code=400, detail="target_id is required")
+        index = await _get_index(db, assignment.target_id)
+        return (await _get_database_by_id(db, index.database_id)).server_id
+
+    if assignment.target_type == "native_query":
+        if not assignment.database_id:
+            raise HTTPException(status_code=400, detail="database_id is required")
+        return (await _get_database(db, assignment.database_id)).server_id
+
+    raise HTTPException(status_code=400, detail="Invalid target type")
+
+
+async def _get_table_by_id(db: AsyncSession, id: int) -> Table:
+    result = await db.execute(select(Table).where(Table.id == id, Table.deleted_at.is_(None)))
+    table = result.scalar_one_or_none()
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+    return table
 
 
 async def _resolve_assignment(db: AsyncSession, assignment: TagAssignmentCreate):
