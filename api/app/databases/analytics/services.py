@@ -18,7 +18,7 @@ from app.databases.analytics.models import (
     IndexAnalyticsItem,
     IndexAnalyticsResponse,
 )
-from app.schemas.exceptions import DatabaseNotFoundError
+from app.databases.schemas.exceptions import DatabaseNotFoundError
 from database.models.metadata.database import Database
 from database.models.metadata.table import Table
 from database.models.metadata.index import Index

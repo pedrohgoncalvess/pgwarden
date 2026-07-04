@@ -92,7 +92,7 @@ async def test_get_schema_success(auth_client: AsyncClient, full_schema_setup):
     """Tests successful retrieval of the full database schema metadata."""
     db = full_schema_setup
     
-    response = await auth_client.get(f"/v1/schemas/{db.public_id}")
+    response = await auth_client.get(f"/v1/databases/{db.public_id}/schemas")
     
     assert response.status_code == 200
     data = response.json()
@@ -110,7 +110,7 @@ async def test_get_schema_success(auth_client: AsyncClient, full_schema_setup):
 async def test_get_schema_not_found(auth_client: AsyncClient):
     """Tests schema retrieval failure when the database ID does not exist."""
     random_id = uuid.uuid4()
-    response = await auth_client.get(f"/v1/schemas/{random_id}")
+    response = await auth_client.get(f"/v1/databases/{random_id}/schemas")
     
     assert response.status_code == 404
     assert response.json()["message"] == f"Database {random_id} not found"
@@ -119,7 +119,7 @@ async def test_get_schema_not_found(auth_client: AsyncClient):
 async def test_get_schema_unauthorized(client: AsyncClient):
     """Tests that retrieving schema metadata requires authentication."""
     random_id = uuid.uuid4()
-    response = await client.get(f"/v1/schemas/{random_id}")
+    response = await client.get(f"/v1/databases/{random_id}/schemas")
     assert response.status_code == 401
 
 
@@ -198,7 +198,7 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
 
     await db_session.commit()
 
-    response = await auth_client.get(f"/v1/schemas/{db.public_id}/history?limit=100&offset=0")
+    response = await auth_client.get(f"/v1/databases/{db.public_id}/schemas/history?limit=100&offset=0")
 
     assert response.status_code == 200
     data = response.json()
@@ -227,7 +227,7 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
 async def test_get_schema_history_not_found(auth_client: AsyncClient):
     """Tests schema history retrieval failure when the database ID does not exist."""
     random_id = uuid.uuid4()
-    response = await auth_client.get(f"/v1/schemas/{random_id}/history")
+    response = await auth_client.get(f"/v1/databases/{random_id}/schemas/history")
 
     assert response.status_code == 404
     assert response.json()["message"] == f"Database {random_id} not found"
@@ -237,5 +237,5 @@ async def test_get_schema_history_not_found(auth_client: AsyncClient):
 async def test_get_schema_history_unauthorized(client: AsyncClient):
     """Tests that retrieving schema history requires authentication."""
     random_id = uuid.uuid4()
-    response = await client.get(f"/v1/schemas/{random_id}/history")
+    response = await client.get(f"/v1/databases/{random_id}/schemas/history")
     assert response.status_code == 401

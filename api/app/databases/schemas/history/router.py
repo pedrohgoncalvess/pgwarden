@@ -2,22 +2,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.schemas.history.models import SchemaHistoryResponse
-from app.schemas.history.services import get_database_schema_history
+from app.databases.schemas.history.models import SchemaHistoryResponse
+from app.databases.schemas.history.services import get_database_schema_history
 from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from app.auth.services import get_current_user
 
 
 router = APIRouter(
-    prefix="/schemas",
+    prefix="/databases/{database_id}/schemas",
     tags=["schemas"],
     dependencies=[Depends(get_current_user)],
 )
 
 
 @router.get(
-    "/{database_id}/history",
+    "/history",
     response_model=SchemaHistoryResponse,
     summary="Get database schema change history",
     description=(

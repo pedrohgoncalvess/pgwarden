@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.history.exceptions import HistoryDatabaseNotFoundError, HistoryFetchError
-from app.schemas.history.models import SchemaHistoryResponse, SchemaHistoryItem
+from app.databases.schemas.history.exceptions import HistoryDatabaseNotFoundError, HistoryFetchError
+from app.databases.schemas.history.models import SchemaHistoryResponse, SchemaHistoryItem
 from database.models.metadata import (
     Database, Table, ColumnModel, Index,
     TableHistory, ColumnHistory, IndexHistory

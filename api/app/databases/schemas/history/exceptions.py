@@ -1,4 +1,4 @@
-from app.schemas.exceptions import BaseAppException
+from app.databases.schemas.exceptions import BaseAppException
 
 
 class HistoryDatabaseNotFoundError(BaseAppException):
