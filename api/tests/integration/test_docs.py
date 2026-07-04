@@ -106,7 +106,7 @@ async def test_tag(db_session, test_server):
 @pytest.mark.asyncio
 async def test_put_database_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "This is a test database."}
-    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/doc", json=payload)
+    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/docs", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -114,9 +114,9 @@ async def test_put_database_doc_success(auth_client: AsyncClient, test_database)
 @pytest.mark.asyncio
 async def test_get_database_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "Database to test get."}
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/doc", json=payload)
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs", json=payload)
     
-    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/doc")
+    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/docs")
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -124,14 +124,15 @@ async def test_get_database_doc_success(auth_client: AsyncClient, test_database)
 @pytest.mark.asyncio
 async def test_attach_and_detach_database_tag(auth_client: AsyncClient, test_database, test_tag):
     # Setup doc first
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/doc", json={"description": "DB"})
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs", json={"description": "DB"})
     
     # Attach tag
-    res_attach = await auth_client.post(f"/v1/databases/{test_database.public_id}/tags/{test_tag.public_id}")
+    payload = {"scope": "doc", "target_type": "database", "target_id": str(test_database.public_id), "database_id": str(test_database.public_id)}
+    res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
     # Detach tag
-    res_detach = await auth_client.delete(f"/v1/databases/{test_database.public_id}/tags/{test_tag.public_id}")
+    res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204
 
 
@@ -139,7 +140,7 @@ async def test_attach_and_detach_database_tag(auth_client: AsyncClient, test_dat
 @pytest.mark.asyncio
 async def test_put_schema_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "Public schema"}
-    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/schemas/public/doc", json=payload)
+    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/schemas/public", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -147,21 +148,22 @@ async def test_put_schema_doc_success(auth_client: AsyncClient, test_database):
 @pytest.mark.asyncio
 async def test_get_schema_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "Public schema for get"}
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/schemas/public/doc", json=payload)
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/schemas/public", json=payload)
     
-    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/schemas/public/doc")
+    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/docs/schemas/public")
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
 
 @pytest.mark.asyncio
 async def test_attach_and_detach_schema_tag(auth_client: AsyncClient, test_database, test_tag):
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/schemas/public/doc", json={"description": "SC"})
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/schemas/public", json={"description": "SC"})
     
-    res_attach = await auth_client.post(f"/v1/databases/{test_database.public_id}/schemas/public/tags/{test_tag.public_id}")
+    payload = {"scope": "doc", "target_type": "schema", "database_id": str(test_database.public_id), "schema_name": "public"}
+    res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
-    res_detach = await auth_client.delete(f"/v1/databases/{test_database.public_id}/schemas/public/tags/{test_tag.public_id}")
+    res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204
 
 
@@ -169,7 +171,7 @@ async def test_attach_and_detach_schema_tag(auth_client: AsyncClient, test_datab
 @pytest.mark.asyncio
 async def test_put_table_doc_success(auth_client: AsyncClient, test_database, test_table):
     payload = {"description": "Users table"}
-    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/doc", json=payload)
+    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/tables/{test_table.public_id}", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -177,21 +179,22 @@ async def test_put_table_doc_success(auth_client: AsyncClient, test_database, te
 @pytest.mark.asyncio
 async def test_get_table_doc_success(auth_client: AsyncClient, test_database, test_table):
     payload = {"description": "Table for get"}
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/doc", json=payload)
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/tables/{test_table.public_id}", json=payload)
     
-    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/doc")
+    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/docs/tables/{test_table.public_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
 
 @pytest.mark.asyncio
 async def test_attach_and_detach_table_tag(auth_client: AsyncClient, test_database, test_table, test_tag):
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/doc", json={"description": "TBL"})
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/tables/{test_table.public_id}", json={"description": "TBL"})
     
-    res_attach = await auth_client.post(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/tags/{test_tag.public_id}")
+    payload = {"scope": "doc", "target_type": "table", "target_id": str(test_table.public_id)}
+    res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
-    res_detach = await auth_client.delete(f"/v1/databases/{test_database.public_id}/tables/{test_table.public_id}/tags/{test_tag.public_id}")
+    res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204
 
 
@@ -199,7 +202,7 @@ async def test_attach_and_detach_table_tag(auth_client: AsyncClient, test_databa
 @pytest.mark.asyncio
 async def test_put_column_doc_success(auth_client: AsyncClient, test_database, test_column):
     payload = {"description": "Email column"}
-    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/doc", json=payload)
+    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/columns/{test_column.public_id}", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -207,21 +210,22 @@ async def test_put_column_doc_success(auth_client: AsyncClient, test_database, t
 @pytest.mark.asyncio
 async def test_get_column_doc_success(auth_client: AsyncClient, test_database, test_column):
     payload = {"description": "Column for get"}
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/doc", json=payload)
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/columns/{test_column.public_id}", json=payload)
     
-    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/doc")
+    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/docs/columns/{test_column.public_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
 
 @pytest.mark.asyncio
 async def test_attach_and_detach_column_tag(auth_client: AsyncClient, test_database, test_column, test_tag):
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/doc", json={"description": "COL"})
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/columns/{test_column.public_id}", json={"description": "COL"})
     
-    res_attach = await auth_client.post(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/tags/{test_tag.public_id}")
+    payload = {"scope": "doc", "target_type": "column", "target_id": str(test_column.public_id)}
+    res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
-    res_detach = await auth_client.delete(f"/v1/databases/{test_database.public_id}/columns/{test_column.public_id}/tags/{test_tag.public_id}")
+    res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204
 
 
@@ -229,7 +233,7 @@ async def test_attach_and_detach_column_tag(auth_client: AsyncClient, test_datab
 @pytest.mark.asyncio
 async def test_put_index_doc_success(auth_client: AsyncClient, test_database, test_index):
     payload = {"description": "Index for user emails"}
-    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/doc", json=payload)
+    response = await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/indexes/{test_index.public_id}", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
@@ -237,19 +241,20 @@ async def test_put_index_doc_success(auth_client: AsyncClient, test_database, te
 @pytest.mark.asyncio
 async def test_get_index_doc_success(auth_client: AsyncClient, test_database, test_index):
     payload = {"description": "Index for get"}
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/doc", json=payload)
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/indexes/{test_index.public_id}", json=payload)
     
-    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/doc")
+    response = await auth_client.get(f"/v1/databases/{test_database.public_id}/docs/indexes/{test_index.public_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["description"] == payload["description"]
 
 @pytest.mark.asyncio
 async def test_attach_and_detach_index_tag(auth_client: AsyncClient, test_database, test_index, test_tag):
-    await auth_client.put(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/doc", json={"description": "IDX"})
+    await auth_client.put(f"/v1/databases/{test_database.public_id}/docs/indexes/{test_index.public_id}", json={"description": "IDX"})
     
-    res_attach = await auth_client.post(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/tags/{test_tag.public_id}")
+    payload = {"scope": "doc", "target_type": "index", "target_id": str(test_index.public_id)}
+    res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
-    res_detach = await auth_client.delete(f"/v1/databases/{test_database.public_id}/indexes/{test_index.public_id}/tags/{test_tag.public_id}")
+    res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204

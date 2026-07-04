@@ -4,10 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
-from app.docs.models import DatabaseDocPut
-from app.docs.services.common import resolve_object
+from app.databases.docs.models import DatabaseDocPut
+from app.databases.docs.services.common import resolve_object
 from database.models.doc.database import DatabaseDoc
-from database.models.doc.object_tag import DatabaseTag
+from database.models.doc.object_tag import DatabaseDocTag
 from database.models.doc.tag import Tag
 from database.operations.metadata.doc import DatabaseDocRepository
 
@@ -35,7 +35,7 @@ async def get_database_doc(db: AsyncSession, database_id: UUID) -> dict:
     if not doc:
         raise HTTPException(404, "Documentation not found")
         
-    tags_query = select(Tag).join(DatabaseTag).filter(DatabaseTag.database_doc_id == doc.id)
+    tags_query = select(Tag).join(DatabaseDocTag).filter(DatabaseDocTag.database_doc_id == doc.id)
     tags = (await db.execute(tags_query)).scalars().all()
     
     result = {c.name: getattr(doc, c.name) for c in doc.__table__.columns}

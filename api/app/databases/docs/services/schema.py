@@ -4,8 +4,8 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.docs.models import SchemaDocPut
-from app.docs.services.common import resolve_object
+from app.databases.docs.models import SchemaDocPut
+from app.databases.docs.services.common import resolve_object
 from database.models.doc.schema import SchemaDoc
 from database.models.doc.object_tag import SchemaDocTag
 from database.models.doc.tag import Tag
