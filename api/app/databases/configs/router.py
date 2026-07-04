@@ -18,7 +18,7 @@ router = APIRouter(
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[ConfigItem],
     summary="List collector configs for a database",
     description="Returns all collector configurations linked to a specific database, including their active status and collection interval.",
