@@ -22,8 +22,9 @@
 	];
 
 	const metadataItems = [
-		{ name: 'Tags', href: '/metadata/tags', icon: 'label', needsDb: false },
-		{ name: 'Documentation', href: '/metadata/documentation', icon: 'description', needsDb: false }
+		{ name: 'Search', href: '/metadata/search', icon: 'manage_search', needsDb: false },
+		{ name: 'Documentation', href: '/metadata/documentation', icon: 'description', needsDb: false },
+		{ name: 'Tags', href: '/metadata/tags', icon: 'label', needsDb: false }
 	];
 
 	const settingsItems = [
