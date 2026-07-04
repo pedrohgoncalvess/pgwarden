@@ -10,7 +10,7 @@
 		try {
 			const servers = await listServers();
 			if (servers[0]) {
-				await goto(`/metadata/tags/${servers[0].id}`, { replaceState: true });
+				await goto(`/metadata/${servers[0].id}/tag`, { replaceState: true });
 			}
 		} catch (err: any) {
 			if (err.message?.includes('401')) {

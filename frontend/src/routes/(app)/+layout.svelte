@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
+	import { selectedServerId } from '$lib/stores/selectedServer';
 
 	let { children } = $props();
 
@@ -22,9 +23,9 @@
 	];
 
 	const metadataItems = [
-		{ name: 'Search', href: '/metadata/search', icon: 'manage_search', needsDb: false },
-		{ name: 'Documentation', href: '/metadata/documentation', icon: 'description', needsDb: false },
-		{ name: 'Tags', href: '/metadata/tags', icon: 'label', needsDb: false }
+		{ name: 'Search', href: '/metadata/search', icon: 'manage_search' },
+		{ name: 'Documentation', href: '/metadata/documentation', icon: 'description' },
+		{ name: 'Tags', href: '/metadata/tag', icon: 'label' }
 	];
 
 	const settingsItems = [
@@ -61,6 +62,18 @@
 		return `${href}/${activeDb}`;
 	}
 
+	function resolveMetadataHref(href: string): string {
+		if (href === '/metadata/documentation') {
+			const activeDb = $selectedDatabaseId ?? $page.params.database_id;
+			return activeDb ? `/metadata/${activeDb}/documentation` : href;
+		}
+		if (href === '/metadata/tag') {
+			const activeServer = $selectedServerId;
+			return activeServer ? `/metadata/${activeServer}/tag` : href;
+		}
+		return href;
+	}
+
 	$effect(() => {
 		const routeDbId = $page.params.database_id;
 		const currentPath = $page.url.pathname;
@@ -86,6 +99,10 @@
 
 		if ((section === 'analytics' || section === 'runs') && segments.length >= 3) {
 			return `/${section}/${segments.slice(2).join('/')}`;
+		}
+
+		if (section === 'metadata' && segments.length >= 3) {
+			return `/metadata/${segments[2]}`;
 		}
 
 		return path;
@@ -255,6 +272,7 @@
 				{#if expandedMetadata}
 					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
 						{#each metadataItems as item}
+							{@const href = resolveMetadataHref(item.href)}
 							{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 							{#if active}
 								<a
@@ -270,7 +288,7 @@
 								</a>
 							{:else}
 								<a
-									href={item.href}
+									{href}
 									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
 								>
 									<span class="material-symbols-outlined mr-3">{item.icon}</span>
