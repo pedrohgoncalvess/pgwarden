@@ -3,6 +3,8 @@ from sqlalchemy import (
     DateTime, ForeignKey, UniqueConstraint, func
 )
 from sqlalchemy.dialects.postgresql import UUID
+from pgvector.sqlalchemy import Vector
+
 from database.models.base_model import Base
 
 
@@ -20,4 +22,5 @@ class Tag(Base):
     description = Column(Text, nullable=True)
     color       = Column(Text, default="#6366F1")
     type        = Column(String(20), nullable=False, default="default")
+    embedding   = Column(Vector(1024), nullable=True)
     created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -2,6 +2,8 @@ from sqlalchemy import (
     Column, BigInteger, Text,
     DateTime, func, ForeignKey, UniqueConstraint
 )
+from pgvector.sqlalchemy import Vector
+
 from database.models.base_model import Base
 
 
@@ -18,6 +20,7 @@ class SchemaDoc(Base):
     description    = Column(Text, nullable=True)
     owner          = Column(Text, nullable=True)
     classification = Column(Text, default="internal")
+    embedding      = Column(Vector(1024), nullable=True)
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())
     updated_by     = Column(BigInteger, nullable=True)

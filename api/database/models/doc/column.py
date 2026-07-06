@@ -2,6 +2,8 @@ from sqlalchemy import (
     Column, BigInteger, Text,
     Boolean, DateTime, func, ForeignKey
 )
+from pgvector.sqlalchemy import Vector
+
 from database.models.base_model import Base
 
 
@@ -14,6 +16,7 @@ class ColumnDoc(Base):
     description    = Column(Text, nullable=True)
     is_pii         = Column(Boolean, nullable=False, default=False)
     sample_values  = Column(Text, nullable=True)
+    embedding      = Column(Vector(1024), nullable=True)
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())
     updated_by     = Column(BigInteger, nullable=True)
