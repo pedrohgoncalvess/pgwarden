@@ -3,7 +3,7 @@
 .venv.*
 **/.venv
 .env
-.env.*
+.env.local
 **/.env
 **/.env.docker
 **/__pycache__
@@ -12,3 +12,4 @@
 *.log
 .codex
 .agents
+.uv-cache/

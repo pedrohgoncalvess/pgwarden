@@ -1,11 +1,14 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb:latest-pg16
     command: ["postgres", "-c", "timescaledb.enable_chunk_skipping=on"]
     container_name: pgwarden_db
     restart: unless-stopped
     ports:
       - "5438:5432"
+    # To use a dedicated env file for the database service, create .env.db
+    # env_file:
+    #  - .env.db
     env_file:
       - .env
     environment:
@@ -31,6 +34,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # To use a dedicated env file for the migrations service, create .env.migrations
+    # env_file:
+    #  - .env.migrations
     env_file:
       - .env
     environment:
@@ -54,6 +60,9 @@ services:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
+    # To use a dedicated env file for the API service, create .env.api
+    # env_file:
+    #  - .env.api
     env_file:
       - .env
     environment:
@@ -80,6 +89,9 @@ services:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
+    # To use a dedicated env file for the collector service, create .env.collector
+    # env_file:
+    #  - .env.collector
     env_file:
       - .env
     environment:
@@ -90,7 +102,7 @@ services:
       - DB_PORT=${DB_PORT:-5432}
     volumes:
       - ./config.yaml:/etc/pgwarden/config.yaml:ro
-      - ./log:/log:rw
+      - ./collector/log:/log:rw
     networks:
       - pgwarden_network
 
@@ -105,6 +117,9 @@ services:
         condition: service_started
     ports:
       - "3000:3000"
+    # To use a dedicated env file for the frontend service, create .env.frontend
+    # env_file:
+    #  - .env.frontend
     environment:
       - API_URL=http://api:8080
     networks:
