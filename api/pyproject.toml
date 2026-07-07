@@ -18,10 +18,12 @@ dependencies = [
     "sse-starlette>=2.0.0",
     "python-dotenv>=1.0.0",
     "aiofiles>=24.0.0",
+    "pgvector>=0.3.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.25.0",
     "pytest-html>=4.1.1",
     "httpx>=0.28.0",
+    "sentence-transformers>=5.6.0",
 ]
 
 [tool.pytest.ini_options]

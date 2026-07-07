@@ -1,61 +1,100 @@
-"""Embedding provider utilities.
+"""
+Embedding provider utilities.
 
-Embeddings are generated using the bgem3 model with a fixed dimension of 1024.
-The provider is enabled when ``OPENAI_API_KEY`` is present and is expected to
-expose an OpenAI-compatible ``/embeddings`` endpoint. If no key is configured,
-``generate_embedding`` returns ``None`` and callers store a NULL value. This
-keeps local development and unit tests working without external credentials.
+This module uses BGE-M3 embeddings (1024 dims). The generation priority is:
+
+1. OpenRouter (https://openrouter.ai/api/v1/embeddings) when OPENROUTER_API_KEY
+   is present. This avoids downloading any local model.
+2. Local sentence-transformers model ``BAAI/bge-m3`` when no OpenRouter key is
+   configured.
+
+There is no other provider switching; the model and dimension are hardcoded.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import TYPE_CHECKING
+
+import httpx
 
 from utils.env_var import get_env_var
 
-if TYPE_CHECKING:
-    from openai import AsyncOpenAI
-
 logger = logging.getLogger(__name__)
 
+EMBEDDING_MODEL = "BAAI/bge-m3"
 EMBEDDING_DIMENSION = 1024
-EMBEDDING_MODEL = "bgem3"
 
-_openai_client: AsyncOpenAI | None = None
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings"
+OPENROUTER_EMBEDDING_MODEL = "baai/bge-m3"
+
+_sentence_transformer_model: object | None = None
 
 
-def _get_openai_client() -> AsyncOpenAI | None:
-    global _openai_client
-    api_key = get_env_var("OPENAI_API_KEY")
-    if not api_key:
+def _get_openrouter_api_key() -> str | None:
+    return get_env_var("OPENROUTER_API_KEY")
+
+
+def _get_sentence_transformer_model() -> object:
+    global _sentence_transformer_model
+    if _sentence_transformer_model is None:
+        from sentence_transformers import SentenceTransformer
+
+        logger.info("Loading sentence-transformers model: %s", EMBEDDING_MODEL)
+        _sentence_transformer_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _sentence_transformer_model
+
+
+async def _generate_openrouter_embedding(text: str, api_key: str) -> list[float] | None:
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                OPENROUTER_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OPENROUTER_EMBEDDING_MODEL,
+                    "input": text,
+                    "encoding_format": "float",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["data"][0]["embedding"]
+        except Exception as exc:
+            logger.warning("OpenRouter embedding generation failed: %s", exc)
+            return None
+
+
+async def _generate_local_embedding(text: str) -> list[float] | None:
+    model = _get_sentence_transformer_model()
+    try:
+        embedding = await asyncio.to_thread(
+            model.encode,
+            text,
+            normalize_embeddings=True,
+        )
+        return embedding.tolist()
+    except Exception as exc:
+        logger.warning("Local embedding generation failed: %s", exc)
         return None
-    if _openai_client is None:
-        from openai import AsyncOpenAI
-
-        _openai_client = AsyncOpenAI(api_key=api_key)
-    return _openai_client
 
 
 async def generate_embedding(text: str) -> list[float] | None:
-    """Generate a dense embedding for ``text`` using the fixed bgem3 model.
+    """Generate a dense embedding for ``text`` using BGE-M3.
 
-    Returns ``None`` when the text is empty or no provider is configured.
+    OpenRouter is used when ``OPENROUTER_API_KEY`` is set; otherwise the local
+    sentence-transformers model is loaded and used.
+
+    Returns ``None`` when the text is empty or the configured generator fails.
     """
     if not text or not text.strip():
         return None
 
-    client = _get_openai_client()
-    if not client:
-        logger.debug("No embedding provider configured; skipping embedding generation.")
-        return None
+    api_key = _get_openrouter_api_key()
+    if api_key:
+        return await _generate_openrouter_embedding(text, api_key)
 
-    try:
-        response = await client.embeddings.create(
-            input=text,
-            model=EMBEDDING_MODEL,
-        )
-        return response.data[0].embedding
-    except Exception as exc:
-        logger.warning("Embedding generation failed: %s", exc)
-        return None
+    return await _generate_local_embedding(text)
