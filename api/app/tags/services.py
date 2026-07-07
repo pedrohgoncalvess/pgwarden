@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.databases.docs.services.embeddings import build_tag_embedding_text
 from app.tags.models import TagAssignmentCreate, TagAssignmentDelete, TagCreate, TagUpdate
 from database.models.doc.column import ColumnDoc
 from database.models.doc.database import DatabaseDoc
@@ -31,6 +32,7 @@ from database.models.metadata.table import Table
 from database.operations.collector.server import ServerRepository
 from database.operations.metadata.tag import TagRepository
 from utils import decrypt_or_plain
+from utils.embeddings import generate_embedding
 
 
 async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
@@ -43,12 +45,16 @@ async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
     if existing:
         raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists for this server")
 
+    embedding_text = build_tag_embedding_text(tag_in)
+    embedding = await generate_embedding(embedding_text)
+
     new_tag = Tag(
         server_id=server.id,
         name=tag_in.name,
         description=tag_in.description,
         color=tag_in.color,
         type=tag_in.type,
+        embedding=embedding,
     )
 
     try:
@@ -84,10 +90,27 @@ async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
     if not update_data:
         return tag
 
+    # Apply pending changes to a transient copy to build the embedding text.
+    pending_name = update_data.get("name", tag.name)
+    pending_description = update_data.get("description", tag.description)
+    pending_type = update_data.get("type", tag.type)
+    embedding_text = build_tag_embedding_text(tag)
+    if pending_name != tag.name or pending_description != tag.description or pending_type != tag.type:
+        embedding_text = build_tag_embedding_text(_transient_tag(pending_name, pending_description, pending_type))
+
+    embedding = await generate_embedding(embedding_text)
+    if embedding is not None:
+        update_data["embedding"] = embedding
+
     updated = await tag_repo.update(tag.id, update_data)
     if not updated:
         raise HTTPException(status_code=404, detail="Tag not found")
     return updated
+
+
+def _transient_tag(name: str, description: str | None, type: str) -> Tag:
+    """Return an unsaved Tag instance used only to build an embedding text."""
+    return Tag(name=name, description=description, type=type)
 
 
 async def delete_tag(db: AsyncSession, tag_id: UUID) -> None:
@@ -359,7 +382,12 @@ def _assignment_dict(tag: Tag, scope: str, target_type: str, target_id, target_l
 
 
 async def _list_database_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, DatabaseTag, Database).join(DatabaseTag).join(Database, Database.id == DatabaseTag.database_id)
+    query = (
+        select(Tag, DatabaseTag, Database)
+        .select_from(DatabaseTag)
+        .join(Tag, Tag.id == DatabaseTag.tag_id)
+        .join(Database, Database.id == DatabaseTag.database_id)
+    )
     if database:
         query = query.where(Database.id == database.id)
     rows = (await db.execute(query)).all()
@@ -370,7 +398,12 @@ async def _list_database_object_assignments(db: AsyncSession, database: Database
 
 
 async def _list_table_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, TableTag, Table).join(TableTag).join(Table, Table.id == TableTag.table_id)
+    query = (
+        select(Tag, TableTag, Table)
+        .select_from(TableTag)
+        .join(Tag, Tag.id == TableTag.tag_id)
+        .join(Table, Table.id == TableTag.table_id)
+    )
     if database:
         query = query.where(Table.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -383,7 +416,8 @@ async def _list_table_object_assignments(db: AsyncSession, database: Database | 
 async def _list_column_object_assignments(db: AsyncSession, database: Database | None):
     query = (
         select(Tag, ColumnTag, ColumnModel, Table)
-        .join(ColumnTag)
+        .select_from(ColumnTag)
+        .join(Tag, Tag.id == ColumnTag.tag_id)
         .join(ColumnModel, ColumnModel.id == ColumnTag.column_id)
         .join(Table, Table.id == ColumnModel.table_id)
     )
@@ -397,7 +431,12 @@ async def _list_column_object_assignments(db: AsyncSession, database: Database |
 
 
 async def _list_index_object_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, IndexTag, Index).join(IndexTag).join(Index, Index.id == IndexTag.index_id)
+    query = (
+        select(Tag, IndexTag, Index)
+        .select_from(IndexTag)
+        .join(Tag, Tag.id == IndexTag.tag_id)
+        .join(Index, Index.id == IndexTag.index_id)
+    )
     if database:
         query = query.where(Index.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -410,7 +449,8 @@ async def _list_index_object_assignments(db: AsyncSession, database: Database | 
 async def _list_native_query_object_assignments(db: AsyncSession, database: Database | None):
     query = (
         select(Tag, QueryTag, Database)
-        .join(QueryTag)
+        .select_from(QueryTag)
+        .join(Tag, Tag.id == QueryTag.tag_id)
         .join(Database, Database.id == QueryTag.database_id)
     )
     if database:
@@ -425,7 +465,8 @@ async def _list_native_query_object_assignments(db: AsyncSession, database: Data
 async def _list_database_doc_assignments(db: AsyncSession, database: Database | None):
     query = (
         select(Tag, DatabaseDocTag, DatabaseDoc, Database)
-        .join(DatabaseDocTag)
+        .select_from(DatabaseDocTag)
+        .join(Tag, Tag.id == DatabaseDocTag.tag_id)
         .join(DatabaseDoc, DatabaseDoc.id == DatabaseDocTag.database_doc_id)
         .join(Database, Database.id == DatabaseDoc.database_id)
     )
@@ -439,7 +480,13 @@ async def _list_database_doc_assignments(db: AsyncSession, database: Database | 
 
 
 async def _list_schema_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, SchemaDocTag, SchemaDoc, Database).join(SchemaDocTag).join(SchemaDoc, SchemaDoc.id == SchemaDocTag.schema_doc_id).join(Database, Database.id == SchemaDoc.database_id)
+    query = (
+        select(Tag, SchemaDocTag, SchemaDoc, Database)
+        .select_from(SchemaDocTag)
+        .join(Tag, Tag.id == SchemaDocTag.tag_id)
+        .join(SchemaDoc, SchemaDoc.id == SchemaDocTag.schema_doc_id)
+        .join(Database, Database.id == SchemaDoc.database_id)
+    )
     if database:
         query = query.where(Database.id == database.id)
     rows = (await db.execute(query)).all()
@@ -450,7 +497,13 @@ async def _list_schema_doc_assignments(db: AsyncSession, database: Database | No
 
 
 async def _list_table_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, TableDocTag, TableDoc, Table).join(TableDocTag).join(TableDoc, TableDoc.id == TableDocTag.table_doc_id).join(Table, Table.id == TableDoc.table_id)
+    query = (
+        select(Tag, TableDocTag, TableDoc, Table)
+        .select_from(TableDocTag)
+        .join(Tag, Tag.id == TableDocTag.tag_id)
+        .join(TableDoc, TableDoc.id == TableDocTag.table_doc_id)
+        .join(Table, Table.id == TableDoc.table_id)
+    )
     if database:
         query = query.where(Table.database_id == database.id)
     rows = (await db.execute(query)).all()
@@ -463,7 +516,8 @@ async def _list_table_doc_assignments(db: AsyncSession, database: Database | Non
 async def _list_column_doc_assignments(db: AsyncSession, database: Database | None):
     query = (
         select(Tag, ColumnDocTag, ColumnDoc, ColumnModel, Table)
-        .join(ColumnDocTag)
+        .select_from(ColumnDocTag)
+        .join(Tag, Tag.id == ColumnDocTag.tag_id)
         .join(ColumnDoc, ColumnDoc.id == ColumnDocTag.column_doc_id)
         .join(ColumnModel, ColumnModel.id == ColumnDoc.column_id)
         .join(Table, Table.id == ColumnModel.table_id)
@@ -478,7 +532,13 @@ async def _list_column_doc_assignments(db: AsyncSession, database: Database | No
 
 
 async def _list_index_doc_assignments(db: AsyncSession, database: Database | None):
-    query = select(Tag, IndexDocTag, IndexDoc, Index).join(IndexDocTag).join(IndexDoc, IndexDoc.id == IndexDocTag.index_doc_id).join(Index, Index.id == IndexDoc.index_id)
+    query = (
+        select(Tag, IndexDocTag, IndexDoc, Index)
+        .select_from(IndexDocTag)
+        .join(Tag, Tag.id == IndexDocTag.tag_id)
+        .join(IndexDoc, IndexDoc.id == IndexDocTag.index_doc_id)
+        .join(Index, Index.id == IndexDoc.index_id)
+    )
     if database:
         query = query.where(Index.database_id == database.id)
     rows = (await db.execute(query)).all()
