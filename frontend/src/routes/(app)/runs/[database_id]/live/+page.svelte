@@ -234,20 +234,38 @@
 	{:else}
 		<!-- Database selector -->
 		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
-				>Database</span
-			>
-			{#each databases as db}
-				<button
-					onclick={() => selectDatabase(db)}
-					class="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all {selectedDb?.id ===
-					db.id
-						? 'bg-primary text-on-primary'
-						: 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-variant'}"
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<select
+					value={selectedServer}
+					onchange={(event) => selectServer(eventValue(event))}
+					disabled={servers.length <= 1}
+					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
 				>
-					{db.name}
-				</button>
-			{/each}
+					{#each servers as server}
+						<option value={server.id}>{server.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<select
+					value={selectedDb?.id ?? ''}
+					onchange={(event) => {
+						const database = databases.find((item) => item.id === eventValue(event));
+						if (database) {
+							goto(`/runs/${database.id}/live`, { replaceState: true });
+							selectDatabase(database);
+						}
+					}}
+					disabled={serverDatabases.length <= 1}
+					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+				>
+					{#each serverDatabases as db}
+						<option value={db.id}>{db.name}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 
 		<!-- Run table -->
@@ -282,18 +300,14 @@
 										executing right now.
 									</li>
 									<li>
-										<span class="font-bold text-on-surface">Paused:</span> temporarily suspended. Use
-										Resume to continue on schedule.
+										<span class="font-bold text-on-surface">Paused:</span> temporarily suspended in
+										settings.
 									</li>
 									<li>
-										<span class="font-bold text-on-surface">Stopped:</span> execution halted. Like Paused,
-										but used to interrupt a running collector. Use Resume to continue.
+										<span class="font-bold text-on-surface">Stopped:</span> execution halted for a
+										running collector.
 									</li>
 								</ul>
-								<div class="mt-2 pt-2 border-t border-outline-variant/30 text-[10px]">
-									<span class="font-bold text-on-surface">Tip:</span> Pause is a temporary hold; Stop
-									interrupts the current execution. Both can be resumed.
-								</div>
 							</div>
 						{/if}
 					</div>
@@ -421,25 +435,6 @@
 									</td>
 									<td class="px-4 py-3 text-right">
 										<div class="flex items-center justify-end gap-2">
-											{#if run.is_paused}
-												<button
-													onclick={() => handleControl(run, 'resume')}
-													disabled={busy}
-													class="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 cursor-pointer"
-												>
-													<span class="material-symbols-outlined text-[12px]">play_arrow</span>
-													Resume
-												</button>
-											{:else}
-												<button
-													onclick={() => handleControl(run, 'pause')}
-													disabled={busy}
-													class="flex items-center gap-1 px-2 py-1 rounded bg-tertiary/10 text-tertiary border border-tertiary/20 text-[10px] font-bold hover:bg-tertiary/20 disabled:opacity-50 cursor-pointer"
-												>
-													<span class="material-symbols-outlined text-[12px]">pause</span>
-													Pause
-												</button>
-											{/if}
 											<button
 												onclick={() => handleControl(run, 'force_run')}
 												disabled={busy || run.is_paused}
