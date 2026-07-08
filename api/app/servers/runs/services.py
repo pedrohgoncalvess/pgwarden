@@ -185,16 +185,18 @@ async def list_run_history(server_id: str, limit: int = 100, offset: int = 0) ->
 
     async with DatabaseConnection() as conn:
         srv_result = await conn.execute(
-            select(ConfigServer.id).where(ConfigServer.server_id == internal_id)
+            select(ConfigServer.id, ConfigServer.name).where(ConfigServer.server_id == internal_id)
         )
-        server_config_ids = [row[0] for row in srv_result.all()]
+        server_config_rows = srv_result.all()
+        server_config_ids = [row[0] for row in server_config_rows]
 
         if not server_config_ids:
             return []
 
-        config_lookup = {}
-        for cid in server_config_ids:
-            config_lookup[cid] = {"type": "server", "name": None, "database_id": None, "database_name": None}
+        config_lookup = {
+            cid: {"type": "server", "name": name, "database_id": None, "database_name": None}
+            for cid, name in server_config_rows
+        }
 
         runs_result = await conn.execute(
             select(Run)
@@ -215,7 +217,7 @@ async def list_database_run_history(database_id: str, limit: int = 100, offset: 
 
     async with DatabaseConnection() as conn:
         db_cfg_result = await conn.execute(
-            select(ConfigDatabase.id, ConfigDatabase.database_id)
+            select(ConfigDatabase.id, ConfigDatabase.database_id, ConfigDatabase.name)
             .where(ConfigDatabase.database_id == internal_id)
         )
         db_config_rows = db_cfg_result.all()
@@ -232,11 +234,11 @@ async def list_database_run_history(database_id: str, limit: int = 100, offset: 
         config_lookup = {
             cfg_id: {
                 "type": "database",
-                "name": None,
+                "name": name,
                 "database_id": db_id,
                 "database_name": db_name,
             }
-            for cfg_id, db_id in db_config_rows
+            for cfg_id, db_id, name in db_config_rows
         }
 
         runs_result = await conn.execute(

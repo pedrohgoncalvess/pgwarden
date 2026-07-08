@@ -99,6 +99,13 @@ def _build_preview(query_signature: str, max_length: int = 120) -> str:
     return query_signature[:max_length].rstrip() + "..."
 
 
+def _normalize_search_terms(search: Optional[List[str]]) -> list[str]:
+    terms: list[str] = []
+    for value in search or []:
+        terms.extend(term.strip().lower() for term in value.split(","))
+    return [term for term in terms if term]
+
+
 def _bucket_timestamp(ts: datetime, bucket_minutes: int = 5) -> datetime:
     return ts.replace(
         minute=(ts.minute // bucket_minutes) * bucket_minutes,
@@ -184,7 +191,7 @@ async def get_query_analytics(
     user_name: Optional[str],
     application_name: Optional[str],
     state: Optional[str],
-    search: Optional[str],
+    search: Optional[List[str]],
     exclude: Optional[List[str]],
     limit: Optional[int] = 50,
 ) -> QueryAnalyticsResponse:
@@ -200,7 +207,7 @@ async def get_query_analytics(
 
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
-    search_lower = search.lower() if search else None
+    search_terms = _normalize_search_terms(search)
     exclude_terms = [term.strip().lower() for term in (exclude or []) if term.strip()]
 
     # Stream rows in keyset-based batches to avoid OFFSET and large memory spikes.
@@ -244,7 +251,7 @@ async def get_query_analytics(
             if not signature:
                 continue
 
-            if search_lower and search_lower not in signature:
+            if search_terms and not any(term in signature for term in search_terms):
                 continue
 
             if exclude_terms and any(term in signature for term in exclude_terms):

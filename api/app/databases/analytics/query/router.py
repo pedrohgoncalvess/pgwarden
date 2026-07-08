@@ -35,7 +35,7 @@ async def get_query_analytics(
     user_name: Optional[str] = Query(default=None, description="Filter by database user"),
     application_name: Optional[str] = Query(default=None, description="Filter by application name"),
     state: Optional[str] = Query(default=None, description="Filter by query state"),
-    search: Optional[str] = Query(default=None, description="Search within the normalized query signature"),
+    search: Optional[List[str]] = Query(default=None, description="Search terms within the normalized query signature. Repeated values are OR-ed."),
     exclude: Optional[List[str]] = Query(default=None, description="Exclude queries whose signature contains any of these terms"),
     limit: Optional[int] = Query(default=50, ge=1, le=500, description="Maximum number of query signatures to return"),
 ):
