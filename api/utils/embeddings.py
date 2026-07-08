@@ -17,7 +17,11 @@ import asyncio
 import logging
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.models.base.embedding_cache import EmbeddingCache
 from utils.env_var import get_env_var
 
 logger = logging.getLogger(__name__)
@@ -98,3 +102,32 @@ async def generate_embedding(text: str) -> list[float] | None:
         return await _generate_openrouter_embedding(text, api_key)
 
     return await _generate_local_embedding(text)
+
+
+def normalize_embedding_term(text: str) -> str:
+    return " ".join(text.strip().split())
+
+
+async def generate_embedding_cached(db: AsyncSession, text: str) -> list[float] | None:
+    """Return an embedding for ``text`` using base.embedding_cache when possible."""
+    term = normalize_embedding_term(text)
+    if not term:
+        return None
+
+    result = await db.execute(select(EmbeddingCache).where(EmbeddingCache.term == term))
+    cached = result.scalar_one_or_none()
+    if cached:
+        return list(cached.embedding)
+
+    embedding = await generate_embedding(term)
+    if embedding is None:
+        return None
+
+    stmt = (
+        insert(EmbeddingCache)
+        .values(term=term, embedding=embedding)
+        .on_conflict_do_nothing(index_elements=["term"])
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return embedding

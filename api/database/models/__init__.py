@@ -1,5 +1,5 @@
 from database.models.base_model import Base
-from database.models.base import User, Refresh
+from database.models.base import User, Refresh, EmbeddingCache
 from database.models.collector import Server, ConfigDatabase, ConfigServer, Command
 from database.models.metadata import (
     Database, Table, ColumnModel, Index,

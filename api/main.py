@@ -24,6 +24,7 @@ from app.servers.runs.router import router as srv_runs_router
 from app.servers.metrics.router import router as srv_metrics_router
 from app.tags.router import router as tags_router
 from app.databases.docs.router import router as docs_router
+from app.metadata.search.router import router as metadata_search_router
 from app.databases.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
 from database.models.base import User
@@ -105,7 +106,7 @@ tags_metadata = [
     },
     {
         "name": "tags",
-        "description": "Manage classification tags scoped to a server.",
+        "description": "Manage metadata tags scoped to a server.",
     },
     {
         "name": "database doc",
@@ -121,11 +122,15 @@ tags_metadata = [
     },
     {
         "name": "column doc",
-        "description": "Documentation for columns, including PII classification.",
+        "description": "Documentation for columns, including PII markers.",
     },
     {
         "name": "index doc",
         "description": "Documentation for indexes.",
+    },
+    {
+        "name": "metadata search",
+        "description": "Hybrid search over metadata objects, documentation and tags.",
     },
 ]
 
@@ -179,3 +184,4 @@ app.include_router(srv_runs_router, prefix="/v1")
 app.include_router(srv_metrics_router, prefix="/v1")
 app.include_router(tags_router, prefix="/v1")
 app.include_router(docs_router, prefix="/v1")
+app.include_router(metadata_search_router, prefix="/v1")
