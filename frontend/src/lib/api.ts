@@ -684,14 +684,35 @@ export function createRunEventSource(databaseId: string): EventSource {
 export async function listRunHistory(
 	databaseId: string,
 	limit = 100,
-	offset = 0
+	offset = 0,
+	options: {
+		runType?: RunType;
+		status?: string;
+		name?: string;
+		startedFrom?: string;
+		startedTo?: string;
+		minDurationSeconds?: number;
+		maxDurationSeconds?: number;
+	} = {}
 ): Promise<RunHistoryItem[]> {
-	const res = await fetch(
-		`/api/v1/databases/${databaseId}/runs/history?limit=${limit}&offset=${offset}`,
-		{
-			headers: authHeaders()
-		}
-	);
+	const params = new URLSearchParams();
+	params.set('limit', String(limit));
+	params.set('offset', String(offset));
+	if (options.runType) params.set('run_type', options.runType);
+	if (options.status) params.set('status', options.status);
+	if (options.name) params.set('name', options.name);
+	if (options.startedFrom) params.set('started_from', options.startedFrom);
+	if (options.startedTo) params.set('started_to', options.startedTo);
+	if (options.minDurationSeconds !== undefined) {
+		params.set('min_duration_seconds', String(options.minDurationSeconds));
+	}
+	if (options.maxDurationSeconds !== undefined) {
+		params.set('max_duration_seconds', String(options.maxDurationSeconds));
+	}
+
+	const res = await fetch(`/api/v1/databases/${databaseId}/runs/history?${params.toString()}`, {
+		headers: authHeaders()
+	});
 	if (!res.ok) {
 		throw new Error(`Failed to list run history: ${res.status}`);
 	}
