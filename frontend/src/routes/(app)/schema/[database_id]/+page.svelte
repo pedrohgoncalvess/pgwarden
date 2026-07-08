@@ -66,6 +66,7 @@
 	let tooltip = $state<{ text: string; x: number; y: number } | null>(null);
 	let tooltipTimeout: ReturnType<typeof setTimeout> | null = null;
 	let schemaHelpOpen = $state(false);
+	let routeFocusKey = $state('');
 	let panState = $state<{
 		pointerId: number;
 		startX: number;
@@ -88,6 +89,16 @@
 	const scaledCanvasWidth = $derived(canvasSize.width * zoom);
 	const boardWidth = $derived(Math.max(scaledCanvasWidth, boardViewportWidth));
 	const worldOffsetX = $derived(Math.max(0, (boardViewportWidth - scaledCanvasWidth) / 2));
+
+	$effect(() => {
+		const routeDbId = $page.params.database_id;
+		const tableId = $page.url.searchParams.get('table');
+		const schemaName = $page.url.searchParams.get('schema') ?? '';
+		const key = `${routeDbId}:${tableId ?? ''}:${schemaName}`;
+		if (!schema || !selectedDb || selectedDb.id !== routeDbId || key === routeFocusKey) return;
+		routeFocusKey = key;
+		applyRouteFocus(tableId, schemaName);
+	});
 
 	async function loadDatabases() {
 		try {
@@ -125,6 +136,8 @@
 		error = '';
 
 		try {
+			const requestedTableId = $page.url.searchParams.get('table');
+			const requestedSchema = $page.url.searchParams.get('schema') ?? '';
 			const nextSchema = await getDatabaseSchema(database.id);
 			schema = {
 				...nextSchema,
@@ -136,13 +149,22 @@
 					}))
 					.sort((a, b) => `${a.schema_name}.${a.name}`.localeCompare(`${b.schema_name}.${b.name}`))
 			};
-			selectedSchema = '';
+			const requestedTable = requestedTableId
+				? schema.tables.find((table) => table.id === requestedTableId)
+				: null;
+			routeFocusKey = `${database.id}:${requestedTableId ?? ''}:${requestedSchema}`;
+			selectedSchema = requestedTable?.schema_name ?? requestedSchema;
 			searchTerm = '';
 			zoom = 1;
 			userMovedLayout = false;
 			closeSidebar();
 			positions = createInitialPositions(schema.tables, selectedSchema);
-			await centerBoard();
+			if (requestedTable) {
+				await openSidebar(requestedTable.id);
+				await centerTable(requestedTable.id, 'instant');
+			} else {
+				await centerBoard();
+			}
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -436,6 +458,22 @@
 		centerBoard();
 	}
 
+	async function applyRouteFocus(tableId: string | null, schemaName: string) {
+		if (!schema) return;
+		const table = tableId ? schema.tables.find((item) => item.id === tableId) : null;
+		selectedSchema = table?.schema_name ?? schemaName;
+		userMovedLayout = false;
+		positions = createInitialPositions(schema.tables, selectedSchema);
+
+		if (table) {
+			await openSidebar(table.id);
+			await centerTable(table.id, 'instant');
+		} else {
+			closeSidebar();
+			await centerBoard();
+		}
+	}
+
 	function selectSchema(schemaName: string) {
 		selectedSchema = schemaName;
 		if (!schema) return;
@@ -456,6 +494,22 @@
 			left: Math.max(0, diagramCenter - schemaScrollEl.clientWidth / 2),
 			top: 0,
 			behavior: 'instant'
+		});
+	}
+
+	async function centerTable(tableId: string, behavior: ScrollBehavior | 'instant' = 'smooth') {
+		await tick();
+		if (!schemaScrollEl) return;
+		const position = positions[tableId];
+		if (!position) return;
+
+		const tableCenterX = (position.x + tableWidth / 2) * zoom + worldOffsetX;
+		const tableCenterY = (position.y + headerHeight) * zoom;
+
+		schemaScrollEl.scrollTo({
+			left: Math.max(0, tableCenterX - schemaScrollEl.clientWidth / 2),
+			top: Math.max(0, tableCenterY - schemaScrollEl.clientHeight / 2),
+			behavior
 		});
 	}
 
