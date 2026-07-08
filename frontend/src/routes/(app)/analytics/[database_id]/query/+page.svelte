@@ -3,17 +3,21 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
-	import { listDatabases, getQueryAnalytics } from '$lib/api';
+	import { selectedServerId } from '$lib/stores/selectedServer';
+	import { listDatabases, listServers, getQueryAnalytics } from '$lib/api';
 	import type {
 		DatabaseListItem,
 		QueryAnalyticsResponse,
 		QueryAnalyticsItem,
-		AnalyticsPreset
+		AnalyticsPreset,
+		ServerListItem
 	} from '$lib/api';
 
 	// ── State ────────────────────────────────────────────────────────────────────
+	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
+	let selectedServer = $state('');
 	let data = $state<QueryAnalyticsResponse | null>(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -118,6 +122,28 @@
 		return params.toString();
 	}
 
+	function eventValue(event: Event): string {
+		return (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	let serverDatabases = $derived(
+		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+	);
+
+	function analyticsHref(databaseId: string): string {
+		const queryString = buildSearchQueryString(searchTerm);
+		return `/analytics/${databaseId}/query${queryString ? `?${queryString}` : ''}`;
+	}
+
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDb?.id) {
+			await selectDatabase(database, true);
+		}
+	}
+
 	async function copyToClipboard(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -174,6 +200,8 @@
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
+		selectedServer = database.server_id;
+		selectedServerId.set(database.server_id);
 		loading = true;
 		error = '';
 		pageOffset = 0;
@@ -209,7 +237,7 @@
 
 	async function selectDatabase(database: DatabaseListItem, replace = false) {
 		if (replace) {
-			await goto(`/analytics/${database.id}/query`, { replaceState: true });
+			await goto(analyticsHref(database.id), { replaceState: true });
 		}
 		await loadData(database);
 	}
@@ -224,7 +252,7 @@
 			loading = true;
 			error = '';
 			searchTerm = readSearchTermsFromUrl().join(', ');
-			databases = await listDatabases();
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 			if (databases.length === 0) {
 				return;
 			}
@@ -232,10 +260,7 @@
 			const routeDbId = $page.params.database_id;
 			const db = databases.find((d) => d.id === routeDbId) ?? databases[0];
 			if (db.id !== routeDbId) {
-				const queryString = buildSearchQueryString(searchTerm);
-				await goto(`/analytics/${db.id}/query${queryString ? `?${queryString}` : ''}`, {
-					replaceState: true
-				});
+				await goto(analyticsHref(db.id), { replaceState: true });
 				return;
 			}
 			await selectDatabase(db);
@@ -505,20 +530,35 @@
 	{:else}
 		<!-- Database selector -->
 		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
-				>Database</span
-			>
-			{#each databases as db}
-				<button
-					onclick={() => selectDatabase(db, true)}
-					class="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all {selectedDb?.id ===
-					db.id
-						? 'bg-primary text-on-primary'
-						: 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-variant'}"
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<select
+					value={selectedServer}
+					onchange={(event) => selectServer(eventValue(event))}
+					disabled={servers.length <= 1}
+					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
 				>
-					{db.name}
-				</button>
-			{/each}
+					{#each servers as server}
+						<option value={server.id}>{server.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<select
+					value={selectedDb?.id ?? ''}
+					onchange={(event) => {
+						const database = databases.find((item) => item.id === eventValue(event));
+						if (database) selectDatabase(database, true);
+					}}
+					disabled={serverDatabases.length <= 1}
+					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+				>
+					{#each serverDatabases as db}
+						<option value={db.id}>{db.name}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 
 		<!-- Filters -->
