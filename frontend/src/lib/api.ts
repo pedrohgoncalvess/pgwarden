@@ -427,7 +427,9 @@ export async function getDatabaseUptime(databaseId: string): Promise<UptimeRespo
 	return res.json();
 }
 
-export async function getDatabaseMetricsSummary(databaseId: string): Promise<DatabaseMetricsSummary> {
+export async function getDatabaseMetricsSummary(
+	databaseId: string
+): Promise<DatabaseMetricsSummary> {
 	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/summary`, {
 		headers: authHeaders()
 	});
@@ -1140,4 +1142,62 @@ export function formatNumber(n: number | null | undefined): string {
 	return n.toLocaleString();
 }
 
-export { type DatabaseListItem, type DatabaseStats, type DatabaseMetricsSummary, type UptimeResponse };
+export type MetadataSearchObjectType =
+	| 'database'
+	| 'schema'
+	| 'table'
+	| 'column'
+	| 'index'
+	| 'tag';
+
+export type MetadataSearchResult = {
+	type: MetadataSearchObjectType;
+	id: string;
+	database_id: string | null;
+	database_name: string | null;
+	schema_name: string | null;
+	table_id: string | null;
+	table_name: string | null;
+	name: string;
+	subtitle: string | null;
+	description: string | null;
+	exact_score: number;
+	fuzzy_score: number;
+	vector_score: number;
+	score: number;
+};
+
+export type MetadataSearchResponse = {
+	query: string;
+	results: MetadataSearchResult[];
+};
+
+export async function searchMetadata(options: {
+	q: string;
+	database_id?: string;
+	server_id?: string;
+	limit?: number;
+	semantic?: boolean;
+}): Promise<MetadataSearchResponse> {
+	const url = new URL('/api/v1/search', window.location.origin);
+	url.searchParams.set('q', options.q);
+	if (options.database_id) url.searchParams.set('database_id', options.database_id);
+	if (options.server_id) url.searchParams.set('server_id', options.server_id);
+	url.searchParams.set('limit', String(options.limit ?? 25));
+	url.searchParams.set('semantic', String(options.semantic ?? true));
+
+	const res = await fetch(url.toString(), {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to search metadata: ${res.status}`);
+	}
+	return res.json();
+}
+
+export {
+	type DatabaseListItem,
+	type DatabaseStats,
+	type DatabaseMetricsSummary,
+	type UptimeResponse
+};
