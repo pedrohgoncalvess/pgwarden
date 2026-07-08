@@ -10,7 +10,7 @@
 		try {
 			const servers = await listServers();
 			if (servers[0]) {
-				await goto(`/settings/collector/server/${servers[0].id}`, { replaceState: true });
+				await goto(`/runs/${servers[0].id}/settings/server`, { replaceState: true });
 			}
 		} catch (err: any) {
 			if (err.message?.includes('401')) {

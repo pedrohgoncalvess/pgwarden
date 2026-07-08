@@ -13,7 +13,7 @@
 			const database =
 				databases.find((item) => item.id === $selectedDatabaseId) ?? databases[0] ?? null;
 			if (database) {
-				await goto(`/settings/collector/database/${database.id}`, { replaceState: true });
+				await goto(`/runs/${database.id}/settings/database`, { replaceState: true });
 			}
 		} catch (err: any) {
 			if (err.message?.includes('401')) {

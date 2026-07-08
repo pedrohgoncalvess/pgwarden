@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 
 	onMount(() => {
-		goto('/settings/collector/server', { replaceState: true });
+		goto('/runs/settings/server', { replaceState: true });
 	});
 </script>
 
@@ -11,7 +11,9 @@
 	<div class="settings-card px-6 py-16 flex flex-col items-center text-center">
 		<span class="material-symbols-outlined text-[48px] text-on-surface-variant mb-4">radar</span>
 		<p class="font-bold text-on-surface text-lg mb-2">Collector settings</p>
-		<p class="text-sm text-on-surface-variant max-w-xs">Opening server-level collector settings...</p>
+		<p class="text-sm text-on-surface-variant max-w-xs">
+			Opening server-level collector settings...
+		</p>
 	</div>
 </div>
 
