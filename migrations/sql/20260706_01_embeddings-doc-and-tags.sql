@@ -4,6 +4,9 @@
 -- The vector extension must already be available in the target cluster.
 -- This migration assumes it is enabled (or enables it idempotently).
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
+CREATE SCHEMA IF NOT EXISTS base;
 
 ALTER TABLE doc.database ADD COLUMN IF NOT EXISTS embedding vector(1024);
 ALTER TABLE doc.schema  ADD COLUMN IF NOT EXISTS embedding vector(1024);
@@ -22,3 +25,15 @@ CREATE INDEX IF NOT EXISTS doc_index_embedding_idx    ON doc."index"  USING hnsw
 
 -- Tags are optionally embedded (nullable), so only create the index when useful rows exist.
 CREATE INDEX IF NOT EXISTS doc_tag_embedding_idx ON doc.tag USING hnsw (embedding vector_cosine_ops);
+
+CREATE TABLE IF NOT EXISTS "base"."embedding_cache" (
+    id BIGSERIAL,
+    term TEXT NOT NULL,
+    embedding vector(1024) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT embedding_cache_pk PRIMARY KEY (id),
+    CONSTRAINT embedding_cache_term_uq UNIQUE (term)
+);
+
+CREATE INDEX IF NOT EXISTS embedding_cache_embedding_idx ON base.embedding_cache USING hnsw (embedding vector_cosine_ops);

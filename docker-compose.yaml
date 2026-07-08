@@ -34,11 +34,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # To use a dedicated env file for the migrations service, create .env.migrations
-    # env_file:
-    #  - .env.migrations
     env_file:
       - .env
+      # To use a dedicated env file for the migrations service, create .env.migrations
+      #  - .env.migrations
     environment:
       - DB_HOST=${DB_HOST:-db}
       - DB_USER=${DB_USER:-postgres}

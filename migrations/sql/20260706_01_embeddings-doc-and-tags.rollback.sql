@@ -1,6 +1,8 @@
 -- embeddings-doc-and-tags rollback
 -- depends: 20260630_01_query-analytics-indexes
 
+DROP TABLE IF EXISTS base.embedding_cache;
+
 ALTER TABLE doc.tag DROP COLUMN IF EXISTS embedding;
 
 ALTER TABLE doc."index"  DROP COLUMN IF EXISTS embedding;

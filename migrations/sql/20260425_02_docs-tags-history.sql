@@ -19,17 +19,15 @@ CREATE TABLE "doc"."tag" (
     CONSTRAINT doc_tag_server_name_uq UNIQUE (server_id, name)
 );
 
-COMMENT ON TABLE "doc"."tag" IS 'Classification tags for databases, schemas, tables, columns, indexes and queries. Color-coded and typed for categorization.';
+COMMENT ON TABLE "doc"."tag" IS 'Metadata tags for databases, schemas, tables, columns, indexes and queries. Color-coded and typed for categorization.';
 COMMENT ON COLUMN "doc"."tag".server_id IS 'Server that owns this tag namespace.';
-COMMENT ON COLUMN "doc"."tag".type IS 'Tag category or classification type (e.g. default, owner, status, team).';
+COMMENT ON COLUMN "doc"."tag".type IS 'Tag category type (e.g. default, status, team).';
 COMMENT ON COLUMN "doc"."tag".color IS 'Hex color code for visual identification of the tag in the UI.';
 
 CREATE TABLE "doc"."database" (
     id BIGSERIAL,
     database_id BIGINT NOT NULL,
     description TEXT,
-    owner TEXT,
-    classification TEXT DEFAULT 'internal',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -38,15 +36,13 @@ CREATE TABLE "doc"."database" (
     CONSTRAINT doc_database_database_fk FOREIGN KEY (database_id) REFERENCES metadata.database(id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE "doc"."database" IS 'Documentation record for a monitored database. Holds descriptions, ownership and classification metadata.';
+COMMENT ON TABLE "doc"."database" IS 'Documentation record for a monitored database.';
 
 CREATE TABLE "doc"."schema" (
     id BIGSERIAL,
     database_id BIGINT NOT NULL,
     schema_name TEXT NOT NULL,
     description TEXT,
-    owner TEXT,
-    classification TEXT DEFAULT 'internal',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -56,14 +52,12 @@ CREATE TABLE "doc"."schema" (
     CONSTRAINT doc_database_id_schema_name_uq UNIQUE (database_id, schema_name)
 );
 
-COMMENT ON TABLE "doc"."schema" IS 'Documentation record for a database schema. Holds descriptions, ownership and classification metadata.';
+COMMENT ON TABLE "doc"."schema" IS 'Documentation record for a database schema.';
 
 CREATE TABLE "doc"."table" (
     id BIGSERIAL,
     table_id BIGINT NOT NULL,
     description TEXT,
-    owner TEXT,
-    classification TEXT DEFAULT 'internal',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -73,7 +67,7 @@ CREATE TABLE "doc"."table" (
     CONSTRAINT doc_table_table_id_uq UNIQUE (table_id)
 );
 
-COMMENT ON TABLE "doc"."table" IS 'Documentation record for a database table. Holds descriptions, ownership and classification metadata.';
+COMMENT ON TABLE "doc"."table" IS 'Documentation record for a database table.';
 
 CREATE TABLE "doc"."column" (
     id BIGSERIAL,
@@ -120,7 +114,7 @@ CREATE TABLE "doc"."database_doc_tag" (
     CONSTRAINT doc_database_doc_tag_uq UNIQUE (database_doc_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."database_doc_tag" IS 'Links classification tags to database documentation records (doc.database).';
+COMMENT ON TABLE "doc"."database_doc_tag" IS 'Links metadata tags to database documentation records (doc.database).';
 
 CREATE TABLE "doc"."schema_doc_tag" (
     id BIGSERIAL,
@@ -134,7 +128,7 @@ CREATE TABLE "doc"."schema_doc_tag" (
     CONSTRAINT doc_schema_doc_tag_uq UNIQUE (schema_doc_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."schema_doc_tag" IS 'Links classification tags to schema documentation records (doc.schema).';
+COMMENT ON TABLE "doc"."schema_doc_tag" IS 'Links metadata tags to schema documentation records (doc.schema).';
 
 CREATE TABLE "doc"."table_doc_tag" (
     id BIGSERIAL,
@@ -148,7 +142,7 @@ CREATE TABLE "doc"."table_doc_tag" (
     CONSTRAINT doc_table_doc_tag_uq UNIQUE (table_doc_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."table_doc_tag" IS 'Links classification tags to table documentation records (doc.table).';
+COMMENT ON TABLE "doc"."table_doc_tag" IS 'Links metadata tags to table documentation records (doc.table).';
 
 CREATE TABLE "doc"."column_doc_tag" (
     id BIGSERIAL,
@@ -162,7 +156,7 @@ CREATE TABLE "doc"."column_doc_tag" (
     CONSTRAINT doc_column_doc_tag_uq UNIQUE (column_doc_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."column_doc_tag" IS 'Links classification tags to column documentation records (doc.column).';
+COMMENT ON TABLE "doc"."column_doc_tag" IS 'Links metadata tags to column documentation records (doc.column).';
 
 CREATE TABLE "doc"."index_doc_tag" (
     id BIGSERIAL,
@@ -176,7 +170,7 @@ CREATE TABLE "doc"."index_doc_tag" (
     CONSTRAINT doc_index_doc_tag_uq UNIQUE (index_doc_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."index_doc_tag" IS 'Links classification tags to index documentation records (doc.index).';
+COMMENT ON TABLE "doc"."index_doc_tag" IS 'Links metadata tags to index documentation records (doc.index).';
 
 CREATE TABLE "doc"."database_tag" (
     id BIGSERIAL,
@@ -190,7 +184,7 @@ CREATE TABLE "doc"."database_tag" (
     CONSTRAINT doc_database_tag_uq UNIQUE (database_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."database_tag" IS 'Links classification tags directly to metadata database objects (not doc records).';
+COMMENT ON TABLE "doc"."database_tag" IS 'Links metadata tags directly to metadata database objects (not doc records).';
 
 CREATE TABLE "doc"."table_tag" (
     id BIGSERIAL,
@@ -204,7 +198,7 @@ CREATE TABLE "doc"."table_tag" (
     CONSTRAINT doc_table_tag_uq UNIQUE (table_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."table_tag" IS 'Links classification tags directly to metadata table objects (not doc records).';
+COMMENT ON TABLE "doc"."table_tag" IS 'Links metadata tags directly to metadata table objects (not doc records).';
 
 CREATE TABLE "doc"."column_tag" (
     id BIGSERIAL,
@@ -218,7 +212,7 @@ CREATE TABLE "doc"."column_tag" (
     CONSTRAINT doc_column_tag_uq UNIQUE (column_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."column_tag" IS 'Links classification tags directly to metadata column objects (not doc records).';
+COMMENT ON TABLE "doc"."column_tag" IS 'Links metadata tags directly to metadata column objects (not doc records).';
 
 CREATE TABLE "doc"."index_tag" (
     id BIGSERIAL,
@@ -232,7 +226,7 @@ CREATE TABLE "doc"."index_tag" (
     CONSTRAINT doc_index_tag_uq UNIQUE (index_id, tag_id)
 );
 
-COMMENT ON TABLE "doc"."index_tag" IS 'Links classification tags directly to metadata index objects (not doc records).';
+COMMENT ON TABLE "doc"."index_tag" IS 'Links metadata tags directly to metadata index objects (not doc records).';
 
 CREATE TABLE "doc"."query_tag" (
     id BIGSERIAL,
@@ -247,4 +241,4 @@ CREATE TABLE "doc"."query_tag" (
     CONSTRAINT doc_query_tag_uq UNIQUE (database_id, query_hash, tag_id)
 );
 
-COMMENT ON TABLE "doc"."query_tag" IS 'Links classification tags to native query analytics records by query hash within a database.';
+COMMENT ON TABLE "doc"."query_tag" IS 'Links metadata tags to native query analytics records by query hash within a database.';
