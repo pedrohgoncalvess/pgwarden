@@ -14,8 +14,6 @@ class TableDoc(Base):
     id             = Column(BigInteger, primary_key=True, autoincrement=True)
     table_id       = Column(BigInteger, ForeignKey("metadata.table.id", ondelete="CASCADE"), nullable=False, unique=True)
     description    = Column(Text, nullable=True)
-    owner          = Column(Text, nullable=True)
-    classification = Column(Text, default="internal")
     embedding      = Column(Vector(1024), nullable=True)
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())

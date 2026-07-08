@@ -12,7 +12,7 @@ from database.models.doc.object_tag import IndexDocTag
 from database.models.doc.tag import Tag
 from database.models.metadata.table import Table
 from database.operations.metadata.doc import IndexDocRepository
-from utils.embeddings import generate_embedding
+from utils.embeddings import generate_embedding_cached
 
 
 async def put_index_doc(db: AsyncSession, database_id: UUID, index_id: int, doc_in: IndexDocPut, user_id: int) -> IndexDoc:
@@ -24,7 +24,7 @@ async def put_index_doc(db: AsyncSession, database_id: UUID, index_id: int, doc_
     table = await _load_index_table(db, obj.table_id)
     doc_or_data = existing_doc or IndexDoc(index_id=obj.id, **doc_in.model_dump())
     embedding_text = build_index_embedding_text(obj, table, doc_or_data)
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
 
     if not existing_doc:
         new_doc = IndexDoc(

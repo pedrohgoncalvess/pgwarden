@@ -14,7 +14,6 @@ from database.models.doc.database import DatabaseDoc
 from database.models.doc.index import IndexDoc
 from database.models.doc.schema import SchemaDoc
 from database.models.doc.table import TableDoc
-from database.models.doc.tag import Tag
 from database.models.metadata.column import ColumnModel
 from database.models.metadata.database import Database
 from database.models.metadata.index import Index
@@ -23,10 +22,6 @@ from database.models.metadata.table import Table
 
 def build_database_embedding_text(database: Database, db_name: str, doc: DatabaseDoc) -> str:
     parts = [f"Database: {db_name}"]
-    if doc.owner:
-        parts.append(f"Owner: {doc.owner}")
-    if doc.classification:
-        parts.append(f"Classification: {doc.classification}")
     if doc.description:
         parts.append(f"Description: {doc.description}")
     return "\n".join(parts)
@@ -34,10 +29,6 @@ def build_database_embedding_text(database: Database, db_name: str, doc: Databas
 
 def build_schema_embedding_text(database: Database, db_name: str, schema_name: str, doc: SchemaDoc) -> str:
     parts = [f"Schema: {schema_name}", f"Database: {db_name}"]
-    if doc.owner:
-        parts.append(f"Owner: {doc.owner}")
-    if doc.classification:
-        parts.append(f"Classification: {doc.classification}")
     if doc.description:
         parts.append(f"Description: {doc.description}")
     return "\n".join(parts)
@@ -52,10 +43,6 @@ def build_table_embedding_text(table: Table, columns: list[ColumnModel], doc: Ta
         )
         parts.append(f"Columns: {col_summary}")
 
-    if doc.owner:
-        parts.append(f"Owner: {doc.owner}")
-    if doc.classification:
-        parts.append(f"Classification: {doc.classification}")
     if doc.description:
         parts.append(f"Description: {doc.description}")
     return "\n".join(parts)
@@ -96,11 +83,3 @@ def build_index_embedding_text(index: Index, table: Table, doc: IndexDoc) -> str
         parts.append(f"Description: {doc.description}")
     return "\n".join(parts)
 
-
-def build_tag_embedding_text(tag: Tag) -> str:
-    parts = [f"Tag: {tag.name}"]
-    if tag.type and tag.type != "default":
-        parts.append(f"Type: {tag.type}")
-    if tag.description:
-        parts.append(f"Description: {tag.description}")
-    return "\n".join(parts)

@@ -18,8 +18,6 @@ class SchemaDoc(Base):
     database_id    = Column(BigInteger, ForeignKey("metadata.database.id", ondelete="CASCADE"), nullable=False)
     schema_name    = Column(Text, nullable=False)
     description    = Column(Text, nullable=True)
-    owner          = Column(Text, nullable=True)
-    classification = Column(Text, default="internal")
     embedding      = Column(Vector(1024), nullable=True)
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at     = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())

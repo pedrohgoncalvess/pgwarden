@@ -12,7 +12,7 @@ from database.models.doc.object_tag import ColumnDocTag
 from database.models.doc.tag import Tag
 from database.models.metadata.table import Table
 from database.operations.metadata.doc import ColumnDocRepository
-from utils.embeddings import generate_embedding
+from utils.embeddings import generate_embedding_cached
 
 
 async def put_column_doc(db: AsyncSession, database_id: UUID, column_id: int, doc_in: ColumnDocPut, user_id: int) -> ColumnDoc:
@@ -24,7 +24,7 @@ async def put_column_doc(db: AsyncSession, database_id: UUID, column_id: int, do
     table = await _load_column_table(db, obj.table_id)
     doc_or_data = existing_doc or ColumnDoc(column_id=obj.id, **doc_in.model_dump())
     embedding_text = build_column_embedding_text(obj, table, doc_or_data)
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
 
     if not existing_doc:
         new_doc = ColumnDoc(

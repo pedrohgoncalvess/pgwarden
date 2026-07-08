@@ -14,8 +14,7 @@ class DocWithTagsBase(DocBase):
 
 # Database
 class DatabaseDocPut(DocBase):
-    owner: Optional[str] = Field(None, description="Owner/Team responsible")
-    classification: Optional[str] = Field("internal", description="Data classification level")
+    pass
 
 class DatabaseDocResponse(DocWithTagsBase, DatabaseDocPut):
     model_config = ConfigDict(from_attributes=True)
@@ -24,8 +23,7 @@ class DatabaseDocResponse(DocWithTagsBase, DatabaseDocPut):
 
 # Schema
 class SchemaDocPut(DocBase):
-    owner: Optional[str] = Field(None, description="Owner/Team responsible")
-    classification: Optional[str] = Field("internal", description="Data classification level")
+    pass
 
 class SchemaDocResponse(DocWithTagsBase, SchemaDocPut):
     model_config = ConfigDict(from_attributes=True)
@@ -34,8 +32,7 @@ class SchemaDocResponse(DocWithTagsBase, SchemaDocPut):
 
 # Table
 class TableDocPut(DocBase):
-    owner: Optional[str] = Field(None, description="Owner/Team responsible")
-    classification: Optional[str] = Field("internal", description="Data classification level")
+    pass
 
 class TableDocResponse(DocWithTagsBase, TableDocPut):
     model_config = ConfigDict(from_attributes=True)

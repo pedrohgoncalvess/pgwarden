@@ -12,7 +12,7 @@ from database.models.doc.object_tag import DatabaseDocTag
 from database.models.doc.tag import Tag
 from database.operations.metadata.doc import DatabaseDocRepository
 from utils import decrypt_or_plain
-from utils.embeddings import generate_embedding
+from utils.embeddings import generate_embedding_cached
 
 
 async def put_database_doc(db: AsyncSession, database_id: UUID, doc_in: DatabaseDocPut, user_id: int) -> DatabaseDoc:
@@ -24,7 +24,7 @@ async def put_database_doc(db: AsyncSession, database_id: UUID, doc_in: Database
     db_name = decrypt_or_plain(obj.db_name)
     doc_or_data = existing_doc or DatabaseDoc(database_id=obj.id, **doc_in.model_dump())
     embedding_text = build_database_embedding_text(obj, db_name, doc_or_data)
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
 
     if not existing_doc:
         new_doc = DatabaseDoc(

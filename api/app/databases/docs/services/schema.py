@@ -12,7 +12,7 @@ from database.models.doc.object_tag import SchemaDocTag
 from database.models.doc.tag import Tag
 from database.operations.metadata.doc import SchemaDocRepository
 from utils import decrypt_or_plain
-from utils.embeddings import generate_embedding
+from utils.embeddings import generate_embedding_cached
 
 
 async def put_schema_doc(db: AsyncSession, database_id: UUID, schema_name: str, doc_in: SchemaDocPut, user_id: int) -> SchemaDoc:
@@ -24,7 +24,7 @@ async def put_schema_doc(db: AsyncSession, database_id: UUID, schema_name: str, 
     db_name = decrypt_or_plain(obj.db_name)
     doc_or_data = existing_doc or SchemaDoc(database_id=obj.id, schema_name=schema_name, **doc_in.model_dump())
     embedding_text = build_schema_embedding_text(obj, db_name, schema_name, doc_or_data)
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
 
     if not existing_doc:
         new_doc = SchemaDoc(
