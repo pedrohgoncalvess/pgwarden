@@ -3,13 +3,15 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
-	import { getDatabaseSchema, getDatabaseSchemaHistory, listDatabases } from '$lib/api';
+	import { selectedServerId } from '$lib/stores/selectedServer';
+	import { getDatabaseSchema, getDatabaseSchemaHistory, listDatabases, listServers } from '$lib/api';
 	import type {
 		DatabaseListItem,
 		DatabaseSchema,
 		SchemaColumn,
 		SchemaHistoryItem,
-		SchemaTable
+		SchemaTable,
+		ServerListItem
 	} from '$lib/api';
 
 	type Position = {
@@ -43,8 +45,10 @@
 	const minZoom = 0.45;
 	const maxZoom = 1.6;
 
+	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
+	let selectedServer = $state('');
 	let schema = $state<DatabaseSchema | null>(null);
 	let loading = $state(true);
 	let schemaLoading = $state(false);
@@ -77,6 +81,9 @@
 	let isPanning = $state(false);
 
 	const tables = $derived(schema?.tables ?? []);
+	const serverDatabases = $derived(
+		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+	);
 	const schemaNames = $derived([...new Set(tables.map((table) => table.schema_name))].sort());
 	const visibleTables = $derived(filterTables(tables, searchTerm, selectedSchema));
 	const tableById = $derived(new Map(tables.map((table) => [table.id, table])));
@@ -104,7 +111,7 @@
 		try {
 			loading = true;
 			error = '';
-			databases = await listDatabases();
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 
 			if (databases.length === 0) {
 				return;
@@ -132,6 +139,8 @@
 	async function selectDatabase(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
+		selectedServer = database.server_id;
+		selectedServerId.set(database.server_id);
 		schemaLoading = true;
 		error = '';
 
@@ -176,6 +185,30 @@
 			error = err.message || 'Failed to load schema.';
 		} finally {
 			schemaLoading = false;
+		}
+	}
+
+	function eventValue(event: Event): string {
+		return (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	function schemaHref(databaseId: string): string {
+		const params = new URLSearchParams();
+		const tableId = $page.url.searchParams.get('table');
+		const schemaName = $page.url.searchParams.get('schema');
+		if (tableId) params.set('table', tableId);
+		if (schemaName) params.set('schema', schemaName);
+		const queryString = params.toString();
+		return `/schema/${databaseId}${queryString ? `?${queryString}` : ''}`;
+	}
+
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDb?.id) {
+			await goto(schemaHref(database.id), { replaceState: true });
+			await selectDatabase(database);
 		}
 	}
 
@@ -738,21 +771,38 @@
 	{:else}
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div class="flex flex-wrap items-center gap-3">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
-					>Database</span
-				>
-				{#each databases as db}
-					<button
-						onclick={() => selectDatabase(db)}
-						disabled={schemaLoading}
-						class="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60 {selectedDb?.id ===
-						db.id
-							? 'bg-primary text-on-primary'
-							: 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-variant'}"
+				<label class="flex items-center gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+					<select
+						value={selectedServer}
+						onchange={(event) => selectServer(eventValue(event))}
+						disabled={schemaLoading || servers.length <= 1}
+						class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
 					>
-						{db.name}
-					</button>
-				{/each}
+						{#each servers as server}
+							<option value={server.id}>{server.name}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="flex items-center gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+					<select
+						value={selectedDb?.id ?? ''}
+						onchange={(event) => {
+							const database = databases.find((item) => item.id === eventValue(event));
+							if (database) {
+								goto(schemaHref(database.id), { replaceState: true });
+								selectDatabase(database);
+							}
+						}}
+						disabled={schemaLoading || serverDatabases.length <= 1}
+						class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+					>
+						{#each serverDatabases as db}
+							<option value={db.id}>{db.name}</option>
+						{/each}
+					</select>
+				</label>
 			</div>
 		</div>
 
