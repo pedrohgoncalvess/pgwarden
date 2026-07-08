@@ -29,7 +29,9 @@
 	let saving = $state(false);
 	let error = $state('');
 
-	const selectedServer = $derived(servers.find((server) => server.id === selectedServerIdLocal) ?? null);
+	const selectedServer = $derived(
+		servers.find((server) => server.id === selectedServerIdLocal) ?? null
+	);
 	const selectedTag = $derived(tags.find((tag) => tag.id === selectedTagId) ?? null);
 	const isEditing = $derived(Boolean(editingTagId));
 	const serverIsFixed = $derived(servers.length <= 1);
@@ -39,7 +41,9 @@
 		if (!term) return tags;
 
 		return tags.filter((tag) =>
-			[tag.name, tag.type, tag.description ?? ''].some((value) => value.toLowerCase().includes(term))
+			[tag.name, tag.type, tag.description ?? ''].some((value) =>
+				value.toLowerCase().includes(term)
+			)
 		);
 	});
 
@@ -177,7 +181,9 @@
 
 <div class="pt-24 px-container-padding pb-12 space-y-6">
 	{#if error}
-		<div class="p-4 bg-error-container/20 border-l-4 border-error rounded-r flex items-center gap-3">
+		<div
+			class="p-4 bg-error-container/20 border-l-4 border-error rounded-r flex items-center gap-3"
+		>
 			<span class="material-symbols-outlined text-error">error</span>
 			<p class="text-sm text-error">{error}</p>
 		</div>
@@ -219,7 +225,9 @@
 
 	<div class="grid grid-cols-1 xl:grid-cols-[minmax(20rem,26rem)_1fr] gap-6">
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
-			<div class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3">
+			<div
+				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
+			>
 				<h2 class="m-0 font-headline-md text-headline-md">Tags</h2>
 				<button
 					type="button"
@@ -233,7 +241,9 @@
 
 			<div class="border-b border-outline-variant px-4 py-3">
 				<label class="relative block">
-					<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">
+					<span
+						class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant"
+					>
 						search
 					</span>
 					<input
@@ -244,7 +254,9 @@
 				</label>
 			</div>
 
-			<div class="max-h-[calc(100vh-24rem)] min-h-80 overflow-y-auto divide-y divide-outline-variant/20">
+			<div
+				class="max-h-[calc(100vh-24rem)] min-h-80 overflow-y-auto divide-y divide-outline-variant/20"
+			>
 				{#if loading}
 					<div class="px-4 py-8 text-sm text-on-surface-variant">Loading tags...</div>
 				{:else if tags.length === 0}
@@ -255,7 +267,9 @@
 					{#each filteredTags as tag}
 						<div
 							class={`flex items-center gap-3 px-4 py-3 transition-colors ${
-								selectedTagId === tag.id ? 'bg-primary-container/20' : 'hover:bg-surface-container-high'
+								selectedTagId === tag.id
+									? 'bg-primary-container/20'
+									: 'hover:bg-surface-container-high'
 							}`}
 						>
 							<button
@@ -308,10 +322,10 @@
 						</h2>
 					</div>
 
-					<div class="flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-high px-3 py-1.5">
-						<span
-							class="h-3 w-3 rounded-full"
-							style={`background-color: ${formColor || colors[0]}`}
+					<div
+						class="flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-high px-3 py-1.5"
+					>
+						<span class="h-3 w-3 rounded-full" style={`background-color: ${formColor || colors[0]}`}
 						></span>
 						<span class="max-w-52 truncate text-xs font-bold text-on-surface">
 							{formName || 'Tag preview'}
@@ -365,7 +379,9 @@
 								type="button"
 								onclick={() => (formColor = color)}
 								class={`h-8 w-8 rounded-full border ${
-									formColor === color ? 'border-on-surface ring-2 ring-primary' : 'border-outline-variant'
+									formColor === color
+										? 'border-on-surface ring-2 ring-primary'
+										: 'border-outline-variant'
 								}`}
 								style={`background-color: ${color}`}
 								title={color}
@@ -427,7 +443,9 @@
 									style={`background-color: ${selectedTag.color ?? colors[0]}`}
 								></span>
 								<p class="m-0 text-sm font-bold text-on-surface">{selectedTag.name}</p>
-								<span class="rounded-full bg-surface-container-high px-2 py-1 text-[11px] text-on-surface-variant">
+								<span
+									class="rounded-full bg-surface-container-high px-2 py-1 text-[11px] text-on-surface-variant"
+								>
 									{selectedTag.type}
 								</span>
 							</div>

@@ -27,7 +27,9 @@
 
 <div class="pt-24 px-container-padding pb-12">
 	<div class="rounded-lg border border-outline-variant bg-surface-container px-6 py-16 text-center">
-		<span class="material-symbols-outlined text-[40px] text-on-surface-variant mb-3">description</span>
+		<span class="material-symbols-outlined text-[40px] text-on-surface-variant mb-3"
+			>description</span
+		>
 		<p class="font-bold text-on-surface mb-1">Documentation</p>
 		<p class="text-sm text-on-surface-variant">
 			{#if loading}

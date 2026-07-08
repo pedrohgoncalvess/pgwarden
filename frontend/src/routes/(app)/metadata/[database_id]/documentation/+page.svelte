@@ -85,12 +85,16 @@
 	);
 	const schemaGroups = $derived.by(() => buildSchemaGroups());
 	const selectedAssignments = $derived.by(() =>
-		selectedTarget ? assignments.filter((assignment) => matchesTarget(assignment, selectedTarget)) : []
+		selectedTarget
+			? assignments.filter((assignment) => matchesTarget(assignment, selectedTarget))
+			: []
 	);
 	const availableTags = $derived(
 		tags.filter((tag) => !selectedAssignments.some((assignment) => assignment.tag.id === tag.id))
 	);
-	const serverDatabases = $derived(databases.filter((db) => db.server_id === selectedServerIdLocal));
+	const serverDatabases = $derived(
+		databases.filter((db) => db.server_id === selectedServerIdLocal)
+	);
 	const serverIsFixed = $derived(servers.length <= 1);
 	const databaseIsFixed = $derived(serverDatabases.length <= 1);
 
@@ -187,13 +191,48 @@
 				getDatabaseSchema(selectedDatabaseId),
 				listTagAssignments(selectedDatabaseId)
 			]);
-			expandedSchemas = Array.from(new Set(schema.tables.map((table) => table.schema_name))).slice(0, 3);
+			expandedSchemas = Array.from(new Set(schema.tables.map((table) => table.schema_name))).slice(
+				0,
+				3
+			);
 			expandedTables = [];
-			selectedTargetKey = buildDatabaseTarget().key;
-			await loadDocumentation(buildDatabaseTarget());
+
+			const targetKeyFromUrl = $page.url.searchParams.get('target');
+			if (targetKeyFromUrl) {
+				applyTargetKey(targetKeyFromUrl);
+			} else {
+				selectedTargetKey = buildDatabaseTarget().key;
+				await loadDocumentation(buildDatabaseTarget());
+			}
 		} catch (err: any) {
 			handleError(err, 'Failed to load database documentation context.');
 		}
+	}
+
+	async function applyTargetKey(targetKey: string) {
+		const target = allTargets.find((t) => t.key === targetKey);
+		if (!target) {
+			selectedTargetKey = buildDatabaseTarget().key;
+			loadDocumentation(buildDatabaseTarget());
+			return;
+		}
+
+		if (target.table) {
+			expandedSchemas = [...new Set([...expandedSchemas, target.table.schema_name])];
+			expandedTables = [...new Set([...expandedTables, target.table.id])];
+		} else if (target.schemaName) {
+			expandedSchemas = [...new Set([...expandedSchemas, target.schemaName])];
+		}
+
+		selectedTargetKey = target.key;
+		loadDocumentation(target);
+
+		requestAnimationFrame(() => {
+			const element = document.getElementById(`doc-target-${target.key}`);
+			if (element) {
+				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
+		});
 	}
 
 	async function selectTarget(target: DocTarget) {
@@ -220,7 +259,8 @@
 
 			description = doc?.description ?? '';
 			owner = 'owner' in (doc ?? {}) ? ((doc as any).owner ?? '') : '';
-			classification = 'classification' in (doc ?? {}) ? ((doc as any).classification ?? 'internal') : 'internal';
+			classification =
+				'classification' in (doc ?? {}) ? ((doc as any).classification ?? 'internal') : 'internal';
 			isPii = 'is_pii' in (doc ?? {}) ? Boolean((doc as any).is_pii) : false;
 			sampleValues = 'sample_values' in (doc ?? {}) ? ((doc as any).sample_values ?? '') : '';
 		} catch (err: any) {
@@ -418,7 +458,10 @@
 	function matchesTarget(assignment: TagAssignment, target: DocTarget) {
 		if (assignment.scope !== 'doc' || assignment.target_type !== target.type) return false;
 		if (target.type === 'schema') {
-			return assignment.database_id === selectedDatabaseId && assignment.target_label === target.schemaName;
+			return (
+				assignment.database_id === selectedDatabaseId &&
+				assignment.target_label === target.schemaName
+			);
 		}
 		return assignment.target_id === target.id;
 	}
@@ -479,7 +522,9 @@
 
 <div class="pt-24 px-container-padding pb-12 space-y-6">
 	{#if error}
-		<div class="p-4 bg-error-container/20 border-l-4 border-error rounded-r flex items-center gap-3">
+		<div
+			class="p-4 bg-error-container/20 border-l-4 border-error rounded-r flex items-center gap-3"
+		>
 			<span class="material-symbols-outlined text-error">error</span>
 			<p class="text-sm text-error">{error}</p>
 		</div>
@@ -529,8 +574,12 @@
 			<div class="border-b border-outline-variant bg-surface-container-low px-4 py-3">
 				<div class="flex items-center gap-3">
 					<h2 class="m-0 font-headline-md text-headline-md">Objects</h2>
-					<div class="flex-1 flex items-center rounded-lg border border-outline-variant bg-surface-container-high px-3 focus-within:border-primary">
-						<span class="material-symbols-outlined mr-2 text-[18px] text-on-surface-variant">search</span>
+					<div
+						class="flex-1 flex items-center rounded-lg border border-outline-variant bg-surface-container-high px-3 focus-within:border-primary"
+					>
+						<span class="material-symbols-outlined mr-2 text-[18px] text-on-surface-variant"
+							>search</span
+						>
 						<input
 							bind:value={searchTerm}
 							class="h-9 min-w-0 flex-1 bg-transparent text-sm text-on-surface outline-none"
@@ -542,13 +591,18 @@
 
 			<div class="max-h-[calc(100vh-15rem)] overflow-y-auto custom-scrollbar">
 				{#if loading}
-					<div class="px-4 py-8 text-sm text-on-surface-variant">Loading documentation workspace...</div>
+					<div class="px-4 py-8 text-sm text-on-surface-variant">
+						Loading documentation workspace...
+					</div>
 				{:else if !selectedDatabaseId}
 					<div class="px-4 py-8 text-sm text-on-surface-variant">No database selected.</div>
 				{:else}
 					<button
 						onclick={() => selectTarget(databaseTarget)}
-						class="flex w-full items-center gap-3 border-b border-outline-variant/30 px-4 py-3 text-left transition-colors {selectedTarget?.key === databaseTarget.key ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container-high text-on-surface'}"
+						class="flex w-full items-center gap-3 border-b border-outline-variant/30 px-4 py-3 text-left transition-colors {selectedTarget?.key ===
+						databaseTarget.key
+							? 'bg-secondary-container text-on-secondary-container'
+							: 'hover:bg-surface-container-high text-on-surface'}"
 					>
 						<span class="material-symbols-outlined text-[20px]">database</span>
 						<div class="min-w-0">
@@ -572,7 +626,10 @@
 								</button>
 								<button
 									onclick={() => selectTarget(group.target)}
-									class="flex min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition-colors {selectedTarget?.key === group.target.key ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container-high text-on-surface'}"
+									class="flex min-w-0 flex-1 items-center gap-3 px-2 py-3 text-left transition-colors {selectedTarget?.key ===
+									group.target.key
+										? 'bg-secondary-container text-on-secondary-container'
+										: 'hover:bg-surface-container-high text-on-surface'}"
 								>
 									<span class="material-symbols-outlined text-[20px]">account_tree</span>
 									<div class="min-w-0">
@@ -593,13 +650,17 @@
 												>
 													<span
 														class="material-symbols-outlined text-[18px] transition-transform"
-														style="transform: rotate({expandedTables.includes(table.id) ? 90 : 0}deg)"
-														>chevron_right</span
+														style="transform: rotate({expandedTables.includes(table.id)
+															? 90
+															: 0}deg)">chevron_right</span
 													>
 												</button>
 												<button
 													onclick={() => selectTarget(tableTarget(table))}
-													class="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 text-left transition-colors {selectedTarget?.key === tableTarget(table).key ? 'bg-secondary-container text-on-secondary-container' : 'hover:bg-surface-container-high text-on-surface'}"
+													class="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 text-left transition-colors {selectedTarget?.key ===
+													tableTarget(table).key
+														? 'bg-secondary-container text-on-secondary-container'
+														: 'hover:bg-surface-container-high text-on-surface'}"
 												>
 													<span class="material-symbols-outlined text-[19px]">table</span>
 													<div class="min-w-0">
@@ -616,24 +677,37 @@
 													{#each table.columns as column}
 														<button
 															onclick={() => selectTarget(columnTarget(table, column))}
-															class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors {selectedTarget?.key === columnTarget(table, column).key ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
+															class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors {selectedTarget?.key ===
+															columnTarget(table, column).key
+																? 'bg-secondary-container text-on-secondary-container'
+																: 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
 														>
 															<span class="material-symbols-outlined text-[16px]">view_column</span>
 															<span class="min-w-0 flex-1 truncate">{column.name}</span>
-															<span class="truncate text-[10px] opacity-70">{column.data_type}</span>
+															<span class="truncate text-[10px] opacity-70">{column.data_type}</span
+															>
 														</button>
 													{/each}
 													{#each table.indexes as index}
 														<button
 															onclick={() => selectTarget(indexTarget(table, index))}
-															class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors {selectedTarget?.key === indexTarget(table, index).key ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
+															class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors {selectedTarget?.key ===
+															indexTarget(table, index).key
+																? 'bg-secondary-container text-on-secondary-container'
+																: 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
 														>
 															<span class="material-symbols-outlined text-[16px]">speed</span>
 															<span class="min-w-0 flex-1 truncate">{index.name}</span>
 															{#if index.is_primary}
-																<span class="rounded bg-primary-container px-1.5 py-0.5 text-[10px] text-on-primary-container">PK</span>
+																<span
+																	class="rounded bg-primary-container px-1.5 py-0.5 text-[10px] text-on-primary-container"
+																	>PK</span
+																>
 															{:else if index.is_unique}
-																<span class="rounded bg-tertiary-container px-1.5 py-0.5 text-[10px] text-on-tertiary-container">Unique</span>
+																<span
+																	class="rounded bg-tertiary-container px-1.5 py-0.5 text-[10px] text-on-tertiary-container"
+																	>Unique</span
+																>
 															{/if}
 														</button>
 													{/each}
@@ -652,7 +726,9 @@
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div class="border-b border-outline-variant bg-surface-container-low px-5 py-4">
 				<div class="flex items-start gap-3">
-					<span class="material-symbols-outlined mt-0.5 text-primary">{targetIcon(selectedTarget.type)}</span>
+					<span class="material-symbols-outlined mt-0.5 text-primary"
+						>{targetIcon(selectedTarget.type)}</span
+					>
 					<div class="min-w-0 flex-1">
 						<h2 class="m-0 truncate font-headline-md text-headline-md">{selectedTarget.label}</h2>
 						<p class="mt-1 truncate text-xs text-on-surface-variant">{selectedTarget.subtitle}</p>
@@ -665,7 +741,10 @@
 					<div class="mb-3 flex items-center justify-between gap-3">
 						<h3 class="m-0 text-sm font-bold text-on-surface">Tags</h3>
 						{#if tags.length === 0}
-							<a href="/metadata/{$selectedServerId}/tag" class="text-xs font-bold text-primary hover:underline">Create tags</a>
+							<a
+								href="/metadata/{$selectedServerId}/tag"
+								class="text-xs font-bold text-primary hover:underline">Create tags</a
+							>
 						{/if}
 					</div>
 
@@ -679,7 +758,10 @@
 									disabled={tagSaving}
 									class="inline-flex items-center gap-1 rounded-full border border-outline-variant bg-surface-container-high px-3 py-1 text-xs font-bold text-on-surface hover:border-error hover:text-error disabled:opacity-60"
 								>
-									<span class="h-2.5 w-2.5 rounded-full" style={`background: ${assignment.tag.color ?? '#6366F1'}`}></span>
+									<span
+										class="h-2.5 w-2.5 rounded-full"
+										style={`background: ${assignment.tag.color ?? '#6366F1'}`}
+									></span>
 									{assignment.tag.name}
 									<span class="material-symbols-outlined text-[14px]">close</span>
 								</button>
@@ -735,7 +817,9 @@
 						{/if}
 
 						{#if selectedTarget.type === 'column'}
-							<label class="flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm text-on-surface">
+							<label
+								class="flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm text-on-surface"
+							>
 								<input type="checkbox" bind:checked={isPii} disabled={docLoading} />
 								Contains PII
 							</label>
