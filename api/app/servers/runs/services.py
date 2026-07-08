@@ -45,7 +45,8 @@ def _derive_status(is_paused: bool, next_run_at: Optional[datetime]) -> str:
 
 def _serialize_run(row: Run, config_lookup: dict) -> dict:
     config_id = row.config_server_id or row.config_database_id
-    meta = config_lookup.get(config_id, {})
+    lookup_key = ("server", row.config_server_id) if row.config_server_id else ("database", row.config_database_id)
+    meta = config_lookup.get(lookup_key) or config_lookup.get(config_id, {})
     finished = row.finished_at.isoformat() if row.finished_at else None
     inserted = row.inserted_at.isoformat() if row.inserted_at else None
     return {
