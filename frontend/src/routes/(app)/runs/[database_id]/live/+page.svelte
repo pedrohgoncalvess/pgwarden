@@ -3,18 +3,24 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
-	import { listDatabases, createRunEventSource, controlRun } from '$lib/api';
-	import type { DatabaseListItem, RunItem, RunAction, RunType } from '$lib/api';
+	import { selectedServerId } from '$lib/stores/selectedServer';
+	import { listDatabases, listServers, createRunEventSource, controlRun } from '$lib/api';
+	import type { DatabaseListItem, RunItem, RunAction, RunType, ServerListItem } from '$lib/api';
 
 	// ── State ────────────────────────────────────────────────────────────────────
+	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
+	let selectedServer = $state('');
 	let runs = $state<RunItem[] | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let eventSource = $state<EventSource | null>(null);
 	let controlling = $state<Set<string>>(new Set());
 	let showStatusHelp = $state(false);
+	let serverDatabases = $derived(
+		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+	);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	function statusColor(status: string): string {
@@ -68,6 +74,20 @@
 		return `${r.type}:${r.id}`;
 	}
 
+	function eventValue(event: Event): string {
+		return (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDb?.id) {
+			await goto(`/runs/${database.id}/live`, { replaceState: true });
+			await selectDatabase(database);
+		}
+	}
+
 	async function handleControl(r: RunItem, action: RunAction) {
 		if (!selectedDb) return;
 		const key = controlKey(r);
@@ -108,6 +128,8 @@
 	async function selectDatabase(db: DatabaseListItem) {
 		selectedDb = db;
 		selectedDatabaseId.set(db.id);
+		selectedServer = db.server_id;
+		selectedServerId.set(db.server_id);
 		error = '';
 		connectStream(db.id);
 	}
@@ -116,7 +138,7 @@
 		try {
 			loading = true;
 			error = '';
-			databases = await listDatabases();
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 
 			if (databases.length === 0) {
 				return;
