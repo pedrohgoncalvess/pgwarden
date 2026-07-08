@@ -96,6 +96,28 @@
 			.filter((term) => term.length > 0);
 	}
 
+	function parseSearchTerms(value: string): string[] {
+		return value
+			.split(',')
+			.map((term) => term.trim())
+			.filter((term) => term.length > 0);
+	}
+
+	function readSearchTermsFromUrl(): string[] {
+		return $page.url.searchParams
+			.getAll('search')
+			.map((term) => term.trim())
+			.filter((term) => term.length > 0);
+	}
+
+	function buildSearchQueryString(value: string): string {
+		const params = new URLSearchParams();
+		for (const term of parseSearchTerms(value)) {
+			params.append('search', term);
+		}
+		return params.toString();
+	}
+
 	async function copyToClipboard(text: string) {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -201,6 +223,7 @@
 		try {
 			loading = true;
 			error = '';
+			searchTerm = readSearchTermsFromUrl().join(', ');
 			databases = await listDatabases();
 			if (databases.length === 0) {
 				return;
@@ -209,7 +232,10 @@
 			const routeDbId = $page.params.database_id;
 			const db = databases.find((d) => d.id === routeDbId) ?? databases[0];
 			if (db.id !== routeDbId) {
-				await goto(`/analytics/${db.id}/query`, { replaceState: true });
+				const queryString = buildSearchQueryString(searchTerm);
+				await goto(`/analytics/${db.id}/query${queryString ? `?${queryString}` : ''}`, {
+					replaceState: true
+				});
 				return;
 			}
 			await selectDatabase(db);
