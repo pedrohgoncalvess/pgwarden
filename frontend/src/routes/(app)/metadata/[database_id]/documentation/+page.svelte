@@ -544,7 +544,7 @@
 						bind:value={selectedServerIdLocal}
 						onchange={selectServer}
 						disabled={loading || serverIsFixed}
-						class="min-w-40 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:border-primary disabled:opacity-80"
+						class="min-w-40 cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
 					>
 						{#each servers as server}
 							<option value={server.id}>{server.name}</option>
@@ -558,7 +558,7 @@
 						bind:value={selectedDatabaseId}
 						onchange={selectDatabase}
 						disabled={loading || databaseIsFixed}
-						class="min-w-40 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:border-primary disabled:opacity-80"
+						class="min-w-40 cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
 					>
 						{#each serverDatabases as database}
 							<option value={database.id}>{database.name}</option>
