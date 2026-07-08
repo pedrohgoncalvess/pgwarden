@@ -6,6 +6,7 @@
 	let { children } = $props();
 
 	const navItems = [
+		{ name: 'Search', href: '/search', icon: 'search', needsDb: false },
 		{ name: 'Overview', href: '/overview', icon: 'dashboard', needsDb: true },
 		{ name: 'Schema', href: '/schema', icon: 'account_tree', needsDb: true },
 		{ name: 'Servers', href: '/servers', icon: 'dns', needsDb: false }
@@ -22,8 +23,12 @@
 		{ name: 'History', href: '/runs/history', icon: 'history', needsDb: true }
 	];
 
+	const runSettingsItems = [
+		{ name: 'Server', href: '/runs', suffix: '/settings/server', idType: 'server', icon: 'dns' },
+		{ name: 'Database', href: '/runs', suffix: '/settings/database', idType: 'database', icon: 'database' }
+	];
+
 	const metadataItems = [
-		{ name: 'Search', href: '/metadata/search', icon: 'manage_search' },
 		{ name: 'Documentation', href: '/metadata/documentation', icon: 'description' },
 		{ name: 'Tags', href: '/metadata/tag', icon: 'label' }
 	];
@@ -34,16 +39,13 @@
 		{ name: 'Account', href: '/settings/account', icon: 'manage_accounts', needsDb: false }
 	];
 
-	const collectorItems = [
-		{ name: 'Server', href: '/settings/collector/server', icon: 'dns', needsDb: false },
-		{ name: 'Database', href: '/settings/collector/database', icon: 'database', needsDb: false }
-	];
-
 	let expandedAnalytics = $state($page.url.pathname.startsWith('/analytics'));
 	let expandedRuns = $state($page.url.pathname.startsWith('/runs'));
+	let expandedRunsSettings = $state(
+		/^\/runs\/[^/]+\/settings\/(server|database)/.test($page.url.pathname)
+	);
 	let expandedMetadata = $state($page.url.pathname.startsWith('/metadata'));
 	let expandedSettings = $state($page.url.pathname.startsWith('/settings'));
-	let expandedSettingsCollector = $state($page.url.pathname.startsWith('/settings/collector'));
 
 	function resolveHref(href: string, needsDb: boolean, dbId: string | null): string {
 		if (!needsDb) return href;
@@ -84,9 +86,9 @@
 
 		if (isActive('/analytics', currentPath)) expandedAnalytics = true;
 		if (isActive('/runs', currentPath)) expandedRuns = true;
+		if (/^\/runs\/[^/]+\/settings\/(server|database)/.test(currentPath)) expandedRunsSettings = true;
 		if (isActive('/metadata', currentPath)) expandedMetadata = true;
 		if (isActive('/settings', currentPath)) expandedSettings = true;
-		if (isActive('/settings/collector', currentPath)) expandedSettingsCollector = true;
 	});
 
 	function isActive(href: string, currentPath: string) {
@@ -110,6 +112,16 @@
 
 	function isSubmenuActive(href: string, currentPath: string) {
 		return isActive(href, normalizeSubmenuPath(currentPath));
+	}
+
+	function resolveRunSettingsHref(item: (typeof runSettingsItems)[number]) {
+		const id = item.idType === 'server' ? $selectedServerId : $selectedDatabaseId;
+		return id ? `${item.href}/${id}${item.suffix}` : `${item.href}${item.suffix}`;
+	}
+
+	function isRunSettingsActive(item: (typeof runSettingsItems)[number], currentPath: string) {
+		const pattern = new RegExp(`^${item.href}/[^/]+${item.suffix}(/.*)?$`);
+		return pattern.test(currentPath);
 	}
 </script>
 
@@ -248,6 +260,52 @@
 								</a>
 							{/if}
 						{/each}
+
+						<div class="space-y-1">
+							<button
+								onclick={() => (expandedRunsSettings = !expandedRunsSettings)}
+								class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+							>
+								<div class="flex items-center">
+									<span class="material-symbols-outlined mr-3">settings</span>
+									<span class="font-body-md text-body-md">Settings</span>
+								</div>
+								<span
+									class="material-symbols-outlined text-[18px] transition-transform duration-200"
+									style="transform: rotate({expandedRunsSettings ? 180 : 0}deg)"
+									>expand_more</span
+								>
+							</button>
+							{#if expandedRunsSettings}
+								<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
+									{#each runSettingsItems as item}
+										{@const href = resolveRunSettingsHref(item)}
+										{@const active = isRunSettingsActive(item, $page.url.pathname)}
+										{#if active}
+											<a
+												href={$page.url.pathname}
+												aria-current="page"
+												class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+											>
+												<span
+													class="material-symbols-outlined mr-3"
+													style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+												>
+												<span class="font-body-md text-body-md">{item.name}</span>
+											</a>
+										{:else}
+											<a
+												{href}
+												class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+											>
+												<span class="material-symbols-outlined mr-3">{item.icon}</span>
+												<span class="font-body-md text-body-md">{item.name}</span>
+											</a>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
 					</div>
 				{/if}
 			</nav>
@@ -344,54 +402,6 @@
 								</a>
 							{/if}
 						{/each}
-
-						<!-- Collector nested dropdown -->
-						<div class="space-y-1">
-							<button
-								onclick={() => (expandedSettingsCollector = !expandedSettingsCollector)}
-								class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-							>
-								<div class="flex items-center">
-									<span class="material-symbols-outlined mr-3">radar</span>
-									<span class="font-body-md text-body-md">Collector</span>
-								</div>
-								<span
-									class="material-symbols-outlined text-[18px] transition-transform duration-200"
-									style="transform: rotate({expandedSettingsCollector ? 180 : 0}deg)"
-									>expand_more</span
-								>
-							</button>
-							{#if expandedSettingsCollector}
-								<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-									{#each collectorItems as item}
-										{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-										{@const active = isSubmenuActive(item.href, $page.url.pathname)}
-										{#if active}
-											<a
-												href={$page.url.pathname}
-												aria-current="page"
-												class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
-											>
-												<span
-													class="material-symbols-outlined mr-3"
-													style="font-variation-settings: 'FILL' 1;"
-													>{item.icon}</span
-												>
-												<span class="font-body-md text-body-md">{item.name}</span>
-											</a>
-										{:else}
-											<a
-												{href}
-												class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-											>
-												<span class="material-symbols-outlined mr-3">{item.icon}</span>
-												<span class="font-body-md text-body-md">{item.name}</span>
-											</a>
-										{/if}
-									{/each}
-								</div>
-							{/if}
-						</div>
 					</div>
 				{/if}
 			</nav>
