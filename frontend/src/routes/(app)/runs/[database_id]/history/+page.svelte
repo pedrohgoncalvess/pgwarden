@@ -3,17 +3,30 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
-	import { listDatabases, listRunHistory } from '$lib/api';
-	import type { DatabaseListItem, RunHistoryItem, RunType } from '$lib/api';
+	import { selectedServerId } from '$lib/stores/selectedServer';
+	import { listDatabases, listServers, listRunHistory } from '$lib/api';
+	import type { DatabaseListItem, RunHistoryItem, RunType, ServerListItem } from '$lib/api';
 
 	// ── State ────────────────────────────────────────────────────────────────────
+	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
+	let selectedServer = $state('');
 	let history = $state<RunHistoryItem[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 	let offset = $state(0);
+	let filterStartedFrom = $state('');
+	let filterStartedTo = $state('');
+	let filterType = $state<RunType | ''>('');
+	let filterStatus = $state('');
+	let filterName = $state('');
+	let filterMinDuration = $state('');
+	let filterMaxDuration = $state('');
 	const limit = 50;
+	let serverDatabases = $derived(
+		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+	);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	function typeBadge(type: RunType | null): string {
@@ -46,14 +59,53 @@
 		return `${m}m ${s % 60}s`;
 	}
 
+	function fromInputDate(value: string): string | undefined {
+		if (!value) return undefined;
+		return new Date(value).toISOString();
+	}
+
+	function optionalNumber(value: string): number | undefined {
+		if (!value.trim()) return undefined;
+		const parsed = Number(value);
+		return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+	}
+
+	function historyFilters() {
+		return {
+			runType: filterType || undefined,
+			status: filterStatus || undefined,
+			name: filterName.trim() || undefined,
+			startedFrom: fromInputDate(filterStartedFrom),
+			startedTo: fromInputDate(filterStartedTo),
+			minDurationSeconds: optionalNumber(filterMinDuration),
+			maxDurationSeconds: optionalNumber(filterMaxDuration)
+		};
+	}
+
+	function eventValue(event: Event): string {
+		return (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDb?.id) {
+			await goto(`/runs/${database.id}/history`, { replaceState: true });
+			await loadDatabaseHistory(database);
+		}
+	}
+
 	async function loadDatabaseHistory(db: DatabaseListItem, resetOffset = true) {
 		selectedDb = db;
 		selectedDatabaseId.set(db.id);
+		selectedServer = db.server_id;
+		selectedServerId.set(db.server_id);
 		if (resetOffset) offset = 0;
 		loading = true;
 		error = '';
 		try {
-			history = await listRunHistory(db.id, limit, offset);
+			history = await listRunHistory(db.id, limit, offset, historyFilters());
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -74,11 +126,28 @@
 		await loadDatabaseHistory(selectedDb, false);
 	}
 
+	async function applyFilters() {
+		if (!selectedDb) return;
+		offset = 0;
+		await loadDatabaseHistory(selectedDb, false);
+	}
+
+	async function clearFilters() {
+		filterStartedFrom = '';
+		filterStartedTo = '';
+		filterType = '';
+		filterStatus = '';
+		filterName = '';
+		filterMinDuration = '';
+		filterMaxDuration = '';
+		await applyFilters();
+	}
+
 	async function load() {
 		try {
 			loading = true;
 			error = '';
-			databases = await listDatabases();
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 			if (databases.length === 0) {
 				history = [];
 				return;
@@ -171,21 +240,125 @@
 	{:else}
 		<!-- Database selector -->
 		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
-				>Database</span
-			>
-			{#each databases as db}
-				<button
-					onclick={() => loadDatabaseHistory(db)}
-					class="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition-all {selectedDb?.id ===
-					db.id
-						? 'bg-primary text-on-primary'
-						: 'border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-variant'}"
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<select
+					value={selectedServer}
+					onchange={(event) => selectServer(eventValue(event))}
+					disabled={servers.length <= 1}
+					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
 				>
-					{db.name}
-				</button>
-			{/each}
+					{#each servers as server}
+						<option value={server.id}>{server.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<select
+					value={selectedDb?.id ?? ''}
+					onchange={(event) => {
+						const database = databases.find((item) => item.id === eventValue(event));
+						if (database) {
+							goto(`/runs/${database.id}/history`, { replaceState: true });
+							loadDatabaseHistory(database);
+						}
+					}}
+					disabled={serverDatabases.length <= 1}
+					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+				>
+					{#each serverDatabases as db}
+						<option value={db.id}>{db.name}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
+
+		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
+			<div class="flex flex-wrap items-end gap-4">
+				<label class="flex flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">From</span>
+					<input
+						type="datetime-local"
+						bind:value={filterStartedFrom}
+						class="h-9 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs text-on-surface outline-none focus:border-primary"
+					/>
+				</label>
+				<label class="flex flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">To</span>
+					<input
+						type="datetime-local"
+						bind:value={filterStartedTo}
+						class="h-9 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs text-on-surface outline-none focus:border-primary"
+					/>
+				</label>
+				<label class="flex flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Type</span>
+					<select
+						bind:value={filterType}
+						class="h-9 cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface outline-none focus:border-primary"
+					>
+						<option value="">All types</option>
+						<option value="server">Server</option>
+						<option value="database">Database</option>
+					</select>
+				</label>
+				<label class="flex flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Status</span>
+					<select
+						bind:value={filterStatus}
+						class="h-9 cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface outline-none focus:border-primary"
+					>
+						<option value="">All status</option>
+						<option value="success">Success</option>
+						<option value="error">Error</option>
+						<option value="running">Running</option>
+					</select>
+				</label>
+				<label class="flex min-w-48 flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Name</span>
+					<input
+						type="search"
+						bind:value={filterName}
+						placeholder="Collector name"
+						class="h-9 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
+					/>
+				</label>
+				<label class="flex w-32 flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Min sec</span>
+					<input
+						type="number"
+						min="0"
+						bind:value={filterMinDuration}
+						class="h-9 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs text-on-surface outline-none focus:border-primary"
+					/>
+				</label>
+				<label class="flex w-32 flex-col gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Max sec</span>
+					<input
+						type="number"
+						min="0"
+						bind:value={filterMaxDuration}
+						class="h-9 rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs text-on-surface outline-none focus:border-primary"
+					/>
+				</label>
+				<button
+					onclick={applyFilters}
+					disabled={loading}
+					class="flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-bold text-on-primary transition-all hover:bg-primary/90 disabled:opacity-50"
+				>
+					<span class="material-symbols-outlined text-[16px]">search</span>
+					Search
+				</button>
+				<button
+					onclick={clearFilters}
+					disabled={loading}
+					class="flex h-9 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container px-3 text-xs font-bold text-on-surface transition-all hover:bg-surface-variant disabled:opacity-50"
+				>
+					<span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+				</button>
+			</div>
+		</section>
 
 		<!-- History table -->
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
@@ -215,10 +388,6 @@
 							>
 							<th
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>SCOPE</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 								>STATUS</th
 							>
 							<th
@@ -238,7 +407,7 @@
 					<tbody class="divide-y divide-outline-variant/20">
 						{#if loading}
 							<tr>
-								<td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-sm">
+								<td colspan="6" class="px-4 py-8 text-center text-on-surface-variant text-sm">
 									<div class="flex items-center justify-center gap-2">
 										<svg
 											class="animate-spin h-4 w-4 text-primary"
@@ -266,7 +435,7 @@
 							</tr>
 						{:else if history.length === 0}
 							<tr>
-								<td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-sm">
+								<td colspan="6" class="px-4 py-8 text-center text-on-surface-variant text-sm">
 									No run history found for this database.
 								</td>
 							</tr>
@@ -284,13 +453,6 @@
 										>
 											{run.type || 'unknown'}
 										</span>
-									</td>
-									<td class="px-4 py-3 text-sm text-on-surface-variant">
-										{#if run.database_name}
-											{run.database_name}
-										{:else}
-											<span class="text-on-surface-variant">server-wide</span>
-										{/if}
 									</td>
 									<td class="px-4 py-3">
 										<span
