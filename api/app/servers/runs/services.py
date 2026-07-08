@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func, or_
 
 from database.connection import DatabaseConnection
 from database.models.collector.server import Server
@@ -61,6 +61,23 @@ def _serialize_run(row: Run, config_lookup: dict) -> dict:
         "started_at": inserted,
         "finished_at": finished,
     }
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _duration_seconds():
+    return func.extract("epoch", Run.finished_at - Run.inserted_at)
 
 
 async def _get_server_internal_id(server_id: str) -> Optional[int]:
@@ -211,12 +228,38 @@ async def list_run_history(server_id: str, limit: int = 100, offset: int = 0) ->
         return [_serialize_run(r, config_lookup) for r in runs]
 
 
-async def list_database_run_history(database_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
+async def list_database_run_history(
+    database_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    run_type: str | None = None,
+    status: str | None = None,
+    name: str | None = None,
+    started_from: str | None = None,
+    started_to: str | None = None,
+    min_duration_seconds: float | None = None,
+    max_duration_seconds: float | None = None,
+) -> List[dict]:
     internal_id = await _get_database_internal_id(database_id)
     if internal_id is None:
         return []
 
     async with DatabaseConnection() as conn:
+        db_meta_result = await conn.execute(
+            select(Database.server_id, Database.db_name).where(Database.id == internal_id)
+        )
+        db_meta = db_meta_result.one_or_none()
+        if db_meta is None:
+            return []
+        server_internal_id, db_name = db_meta
+
+        srv_cfg_result = await conn.execute(
+            select(ConfigServer.id, ConfigServer.name)
+            .where(ConfigServer.server_id == server_internal_id)
+        )
+        server_config_rows = srv_cfg_result.all()
+        server_config_ids = [row[0] for row in server_config_rows]
+
         db_cfg_result = await conn.execute(
             select(ConfigDatabase.id, ConfigDatabase.database_id, ConfigDatabase.name)
             .where(ConfigDatabase.database_id == internal_id)
@@ -224,30 +267,73 @@ async def list_database_run_history(database_id: str, limit: int = 100, offset: 
         db_config_rows = db_cfg_result.all()
         db_config_ids = [row[0] for row in db_config_rows]
 
-        if not db_config_ids:
+        if not server_config_ids and not db_config_ids:
             return []
 
-        db_name_result = await conn.execute(
-            select(Database.db_name).where(Database.id == internal_id)
-        )
-        db_name = db_name_result.scalar_one_or_none()
-
         config_lookup = {
-            cfg_id: {
+            ("server", cfg_id): {
+                "type": "server",
+                "name": name,
+                "database_id": None,
+                "database_name": None,
+            }
+            for cfg_id, name in server_config_rows
+        }
+        config_lookup.update({
+            ("database", cfg_id): {
                 "type": "database",
                 "name": name,
                 "database_id": db_id,
                 "database_name": db_name,
             }
             for cfg_id, db_id, name in db_config_rows
-        }
+        })
+
+        type_filters = []
+        if run_type in (None, "server") and server_config_ids:
+            type_filters.append(Run.config_server_id.in_(server_config_ids))
+        if run_type in (None, "database") and db_config_ids:
+            type_filters.append(Run.config_database_id.in_(db_config_ids))
+        if not type_filters:
+            return []
+
+        query = select(Run).where(or_(*type_filters))
+
+        if status:
+            query = query.where(Run.status == status)
+        if name:
+            matching_server_ids = [
+                cfg_id for cfg_id, cfg_name in server_config_rows
+                if cfg_name and name.lower() in cfg_name.lower()
+            ]
+            matching_database_ids = [
+                cfg_id for cfg_id, _db_id, cfg_name in db_config_rows
+                if cfg_name and name.lower() in cfg_name.lower()
+            ]
+            name_filters = []
+            if matching_server_ids and run_type in (None, "server"):
+                name_filters.append(Run.config_server_id.in_(matching_server_ids))
+            if matching_database_ids and run_type in (None, "database"):
+                name_filters.append(Run.config_database_id.in_(matching_database_ids))
+            if not name_filters:
+                return []
+            query = query.where(or_(*name_filters))
+
+        started_from_dt = _parse_datetime(started_from)
+        started_to_dt = _parse_datetime(started_to)
+        if started_from_dt:
+            query = query.where(Run.inserted_at >= started_from_dt)
+        if started_to_dt:
+            query = query.where(Run.inserted_at <= started_to_dt)
+
+        duration_expr = _duration_seconds()
+        if min_duration_seconds is not None:
+            query = query.where(Run.finished_at.is_not(None)).where(duration_expr >= min_duration_seconds)
+        if max_duration_seconds is not None:
+            query = query.where(Run.finished_at.is_not(None)).where(duration_expr <= max_duration_seconds)
 
         runs_result = await conn.execute(
-            select(Run)
-            .where(Run.config_database_id.in_(db_config_ids))
-            .order_by(desc(Run.inserted_at))
-            .offset(offset)
-            .limit(limit)
+            query.order_by(desc(Run.inserted_at)).offset(offset).limit(limit)
         )
         runs = runs_result.scalars().all()
 

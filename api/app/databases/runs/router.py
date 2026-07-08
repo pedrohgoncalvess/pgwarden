@@ -53,6 +53,13 @@ async def get_database_run_history(
     database_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    run_type: str | None = Query(default=None, pattern="^(server|database)$"),
+    status: str | None = Query(default=None, min_length=1),
+    name: str | None = Query(default=None, min_length=1),
+    started_from: str | None = Query(default=None),
+    started_to: str | None = Query(default=None),
+    min_duration_seconds: float | None = Query(default=None, ge=0),
+    max_duration_seconds: float | None = Query(default=None, ge=0),
 ):
     async with DatabaseConnection() as conn:
         db_repo = DatabaseRepository(conn)
@@ -60,7 +67,18 @@ async def get_database_run_history(
         if not database:
             raise HTTPException(status_code=404, detail="Database not found")
 
-    history = await run_services.list_database_run_history(database_id, limit=limit, offset=offset)
+    history = await run_services.list_database_run_history(
+        database_id,
+        limit=limit,
+        offset=offset,
+        run_type=run_type,
+        status=status,
+        name=name,
+        started_from=started_from,
+        started_to=started_to,
+        min_duration_seconds=min_duration_seconds,
+        max_duration_seconds=max_duration_seconds,
+    )
     return history
 
 
