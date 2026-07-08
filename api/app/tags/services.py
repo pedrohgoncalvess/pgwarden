@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.databases.docs.services.embeddings import build_tag_embedding_text
+from app.tags.embeddings import build_tag_embedding_text
 from app.tags.models import TagAssignmentCreate, TagAssignmentDelete, TagCreate, TagUpdate
 from database.models.doc.column import ColumnDoc
 from database.models.doc.database import DatabaseDoc
@@ -32,7 +32,7 @@ from database.models.metadata.table import Table
 from database.operations.collector.server import ServerRepository
 from database.operations.metadata.tag import TagRepository
 from utils import decrypt_or_plain
-from utils.embeddings import generate_embedding
+from utils.embeddings import generate_embedding_cached
 
 
 async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
@@ -46,7 +46,7 @@ async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
         raise HTTPException(status_code=409, detail=f"Tag '{tag_in.name}' already exists for this server")
 
     embedding_text = build_tag_embedding_text(tag_in)
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
 
     new_tag = Tag(
         server_id=server.id,
@@ -98,7 +98,7 @@ async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
     if pending_name != tag.name or pending_description != tag.description or pending_type != tag.type:
         embedding_text = build_tag_embedding_text(_transient_tag(pending_name, pending_description, pending_type))
 
-    embedding = await generate_embedding(embedding_text)
+    embedding = await generate_embedding_cached(db, embedding_text)
     if embedding is not None:
         update_data["embedding"] = embedding
 

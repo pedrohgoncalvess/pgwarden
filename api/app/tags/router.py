@@ -27,7 +27,7 @@ router = APIRouter(
     "/",
     response_model=TagResponse,
     summary="Create a new tag",
-    description="Creates a new classification tag scoped to a specific server.",
+    description="Creates a new metadata tag scoped to a specific server.",
     status_code=status.HTTP_201_CREATED,
     responses={
         404: {"model": ErrorMessage, "description": "Server not found"},
@@ -43,7 +43,7 @@ async def create_tag(tag_in: TagCreate):
     "/",
     response_model=List[TagResponse],
     summary="List all tags",
-    description="Returns all classification tags.",
+    description="Returns all metadata tags.",
     responses={
         404: {"model": ErrorMessage, "description": "Server not found"},
         **COMMON_RESPONSES
