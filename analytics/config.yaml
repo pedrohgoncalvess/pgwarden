@@ -1,0 +1,10 @@
+analytics:
+  defaults:
+    interval: 1800
+    query_analysis: true
+    recommendation: true
+  databases:
+    # - name: app_db
+    #   interval: 600
+    #   query_analysis: true
+    #   recommendation: true
