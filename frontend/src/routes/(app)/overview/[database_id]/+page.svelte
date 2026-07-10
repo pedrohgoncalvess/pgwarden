@@ -48,7 +48,7 @@
 	let lockEventSource = $state<EventSource | null>(null);
 	let serverMetricsEventSource = $state<EventSource | null>(null);
 
-	// Lock tooltip
+	
 	let lockTooltip = $state<{ text: string; x: number; y: number } | null>(null);
 
 	function getLockExplanation(mode: string): string {
@@ -85,13 +85,13 @@
 		lockTooltip = null;
 	}
 
-	// Modal states
+	
 	let showServerModal = $state(false);
 	let showDbModal = $state(false);
 	let createdServerId = $state<string>('');
 	let servers = $state<ServerListItem[]>([]);
 
-	// Server form
+	
 	let srvName = $state('');
 	let srvHost = $state('');
 	let srvPort = $state('5432');
@@ -102,7 +102,7 @@
 	let testing = $state(false);
 	let creatingServer = $state(false);
 
-	// Database form
+	
 	let dbServerId = $state('');
 	let dbName = $state('');
 	let creatingDb = $state(false);
@@ -186,11 +186,11 @@
 				const data = JSON.parse((event as MessageEvent).data);
 				if (data.tps !== undefined) tps = data.tps;
 			} catch {
-				/* ignore */
+				
 			}
 		});
 		tpsEventSource.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 	}
 
@@ -210,7 +210,7 @@
 			sessions = JSON.parse((event as MessageEvent).data);
 		});
 		sessionEventSource.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 	}
 
@@ -228,7 +228,7 @@
 			applyNativeQuerySnapshot(JSON.parse((event as MessageEvent).data));
 		});
 		nativeQueryEventSource.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 	}
 
@@ -240,7 +240,7 @@
 			locks = JSON.parse((event as MessageEvent).data);
 		});
 		lockEventSource.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 	}
 
@@ -256,7 +256,7 @@
 			ramMetric = JSON.parse((event as MessageEvent).data);
 		});
 		serverMetricsEventSource.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 	}
 
@@ -314,7 +314,7 @@
 			showServerModal = false;
 			showDbModal = true;
 			resetServerForm();
-			// pre-load servers for db modal
+			
 			servers = await listServers();
 			dbServerId = createdServerId;
 		} catch (err: any) {
@@ -386,7 +386,7 @@
 	});
 </script>
 
-<!-- Server Modal -->
+
 {#if showServerModal}
 	<div class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
 		<div class="glass-panel w-full max-w-lg p-8 shadow-floating">
@@ -613,7 +613,7 @@
 	</div>
 {/if}
 
-<!-- Database Modal -->
+
 {#if showDbModal}
 	<div class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
 		<div class="glass-panel w-full max-w-md p-8 shadow-floating">
@@ -730,7 +730,7 @@
 	</div>
 {/if}
 
-<!-- TopAppBar -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -775,7 +775,7 @@
 	</div>
 </header>
 
-<!-- Canvas -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if loading}
 		<div class="flex items-center justify-center py-12">
@@ -795,7 +795,7 @@
 			</svg>
 		</div>
 	{:else if databases.length === 0}
-		<!-- Empty State -->
+		
 		<div class="flex flex-col items-center justify-center py-24">
 			<div
 				class="w-20 h-20 rounded-2xl bg-surface-container-high border border-outline-variant flex items-center justify-center mb-6"
@@ -824,9 +824,9 @@
 			</div>
 		{/if}
 
-		<!-- KPI Grid -->
+		
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-panel-gap mb-panel-gap">
-			<!-- Active Connections -->
+			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -853,7 +853,7 @@
 				</div>
 			</div>
 
-			<!-- CPU Usage -->
+			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -876,7 +876,7 @@
 				</div>
 			</div>
 
-			<!-- Memory -->
+			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -901,7 +901,7 @@
 				</div>
 			</div>
 
-			<!-- Transactions/sec -->
+			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -923,9 +923,9 @@
 			</div>
 		</div>
 
-		<!-- Bento Layout Content -->
+		
 		<div class="grid grid-cols-12 gap-panel-gap">
-			<!-- Active Queries (Left Col) -->
+			
 			<div
 				class="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-lg flex flex-col overflow-hidden h-[480px]"
 			>
@@ -1037,9 +1037,9 @@
 				</div>
 			</div>
 
-			<!-- Live Locks & Stats (Right Col) -->
+			
 			<div class="col-span-12 lg:col-span-4 h-[480px] grid grid-rows-2 gap-panel-gap">
-				<!-- Live Locks -->
+				
 				<div
 					class="bg-surface-container border border-outline-variant flex flex-col rounded-lg overflow-hidden"
 				>
@@ -1126,7 +1126,7 @@
 						</p>
 					</div>
 				</div>
-				<!-- Schema overview -->
+				
 				<div
 					class="bg-surface-container border border-outline-variant flex flex-col rounded-lg overflow-hidden"
 				>
@@ -1189,7 +1189,7 @@
 			</div>
 		</div>
 
-		<!-- Footer / Log Stream Area -->
+		
 		<div
 			class="mt-panel-gap bg-surface-container-lowest border border-outline-variant font-code-sm text-code-sm p-4 overflow-hidden rounded-lg"
 		>
@@ -1241,7 +1241,7 @@
 	</div>
 {/if}
 
-<!-- Floating Action Button (FAB) - Global Command -->
+
 <button
 	class="fixed bottom-6 right-6 w-14 h-14 bg-primary text-on-primary rounded-full shadow-floating flex items-center justify-center hover:scale-105 active:scale-95 transition-transform group z-50 cursor-pointer"
 >

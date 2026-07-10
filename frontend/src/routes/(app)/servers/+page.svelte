@@ -3,20 +3,20 @@
 	import { listServers, listDatabases, createSessionEventSource } from '$lib/api';
 	import type { ServerListItem, DatabaseListItem, SessionMetric } from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 
-	// Live sessions per database id (keyed by db public_id)
+	
 	let dbSessions = $state<Record<string, SessionMetric[] | null>>({});
 	let eventSources = $state<Record<string, EventSource>>({});
 
-	// Expanded state: which server panels are open
+	
 	let expanded = $state<Record<string, boolean>>({});
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function getDatabasesForServer(serverId: string): DatabaseListItem[] {
 		return databases.filter((db) => db.server_id === serverId);
 	}
@@ -73,22 +73,22 @@
 		return 'bg-outline/10 text-on-surface-variant';
 	}
 
-	// ── Stream Management ─────────────────────────────────────────────────────────
+	
 	function connectDbStream(dbId: string) {
 		if (eventSources[dbId]) {
 			eventSources[dbId].close();
 		}
-		dbSessions[dbId] = null; // loading sentinel
+		dbSessions[dbId] = null; 
 		const es = createSessionEventSource(dbId);
 		es.addEventListener('sessions', (event) => {
 			try {
 				dbSessions[dbId] = JSON.parse((event as MessageEvent).data);
 			} catch {
-				/* ignore */
+				
 			}
 		});
 		es.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 		eventSources[dbId] = es;
 	}
@@ -100,19 +100,19 @@
 		eventSources = {};
 	}
 
-	// ── Load ──────────────────────────────────────────────────────────────────────
+	
 	async function load() {
 		try {
 			loading = true;
 			error = '';
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 
-			// Expand first server by default
+			
 			if (servers.length > 0) {
 				expanded[servers[0].id] = true;
 			}
 
-			// Open SSE stream for every database
+			
 			for (const db of databases) {
 				connectDbStream(db.id);
 			}
@@ -132,12 +132,12 @@
 		expanded[serverId] = !expanded[serverId];
 	}
 
-	// ── Lifecycle ─────────────────────────────────────────────────────────────────
+	
 	onMount(() => load());
 	onDestroy(() => disconnectAllStreams());
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -162,7 +162,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -174,7 +174,7 @@
 	{/if}
 
 	{#if loading}
-		<!-- Skeleton -->
+		
 		<div class="space-y-4">
 			{#each [1, 2] as _}
 				<div class="server-card p-6">
@@ -192,7 +192,7 @@
 			{/each}
 		</div>
 	{:else if servers.length === 0}
-		<!-- Empty State -->
+		
 		<div class="flex flex-col items-center justify-center py-24">
 			<div
 				class="w-20 h-20 rounded-2xl bg-surface-container-high border border-outline-variant flex items-center justify-center mb-6"
@@ -207,7 +207,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Summary KPIs -->
+		
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
 			<div class="bg-surface-container border border-outline-variant p-4 rounded-lg">
 				<span class="text-on-surface-variant font-label-caps text-label-caps tracking-widest"
@@ -258,7 +258,7 @@
 			</div>
 		</div>
 
-		<!-- Server Cards -->
+		
 		<div class="space-y-4">
 			{#each servers as server (server.id)}
 				{@const serverDbs = getDatabasesForServer(server.id)}
@@ -267,13 +267,13 @@
 				{@const totalWaiting = serverDbs.reduce((a, db) => a + waitingCount(db.id), 0)}
 
 				<div class="server-card overflow-hidden">
-					<!-- Server Header -->
+					
 					<button
 						onclick={() => toggleExpand(server.id)}
 						class="w-full flex items-center justify-between px-6 py-5 cursor-pointer text-left hover:bg-white/[0.02] transition-colors"
 					>
 						<div class="flex items-center gap-4">
-							<!-- Status Icon -->
+							
 							<div
 								class="w-10 h-10 rounded-xl bg-surface-container-high border border-outline-variant/50 flex items-center justify-center flex-shrink-0"
 							>
@@ -314,7 +314,7 @@
 						</div>
 
 						<div class="flex items-center gap-4">
-							<!-- Session bubble -->
+							
 							{#if totalSessions > 0}
 								<div class="hidden sm:flex items-center gap-2">
 									<div
@@ -342,7 +342,7 @@
 						</div>
 					</button>
 
-					<!-- Expanded: Database panels -->
+					
 					{#if isOpen}
 						<div class="border-t border-outline-variant/30 px-6 pb-6 pt-4 space-y-4">
 							{#if serverDbs.length === 0}
@@ -357,7 +357,7 @@
 									{@const wCount = waitingCount(db.id)}
 
 									<div class="db-row overflow-hidden">
-										<!-- DB Header Row -->
+										
 										<div
 											class="flex items-center justify-between px-4 py-3 border-b border-outline-variant/20"
 										>
@@ -399,7 +399,7 @@
 											</div>
 										</div>
 
-										<!-- Sessions Table -->
+										
 										<div class="overflow-x-auto">
 											<table class="w-full text-left border-collapse">
 												<thead>

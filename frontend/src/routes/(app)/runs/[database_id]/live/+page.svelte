@@ -7,7 +7,7 @@
 	import { listDatabases, listServers, createRunEventSource, controlRun } from '$lib/api';
 	import type { DatabaseListItem, RunItem, RunAction, RunType, ServerListItem } from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -22,7 +22,7 @@
 		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
 	);
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function statusColor(status: string): string {
 		if (status === 'running') return 'text-primary';
 		if (status === 'paused') return 'text-tertiary';
@@ -116,11 +116,11 @@
 			try {
 				runs = JSON.parse((event as MessageEvent).data);
 			} catch {
-				/* ignore */
+				
 			}
 		});
 		es.onerror = () => {
-			/* browser auto-reconnects */
+			
 		};
 		eventSource = es;
 	}
@@ -169,7 +169,7 @@
 	});
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -189,7 +189,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -232,7 +232,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Database selector -->
+		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
 				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
@@ -268,7 +268,7 @@
 			</label>
 		</div>
 
-		<!-- Run table -->
+		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"

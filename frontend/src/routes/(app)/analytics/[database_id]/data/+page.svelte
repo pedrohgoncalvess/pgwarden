@@ -14,7 +14,7 @@
 		ServerListItem
 	} from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -53,7 +53,7 @@
 		'#84cc16'
 	];
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function toInputDate(iso: string): string {
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return '';
@@ -151,7 +151,7 @@
 			ticks.push({ value, label: formatBytes(value), y: padding.top + (1 - ratio) * usableHeight });
 		}
 
-		// Fallback if no powers of 10 fit (e.g., narrow range)
+		
 		if (ticks.length === 0) {
 			[0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
 				const value = maxBytesValue * (1 - tick);
@@ -192,7 +192,7 @@
 		}
 	}
 
-	// ── Data loading ─────────────────────────────────────────────────────────────
+	
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
@@ -276,7 +276,7 @@
 
 	onMount(() => load());
 
-	// ── Chart computation ────────────────────────────────────────────────────────
+	
 	let timestamps = $derived(
 		data
 			? allTimestamps(
@@ -416,7 +416,7 @@
 	});
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -437,7 +437,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -480,7 +480,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Controls -->
+		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
 				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
@@ -515,7 +515,7 @@
 
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
-				<!-- Presets -->
+				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -538,7 +538,7 @@
 					</div>
 				</div>
 
-				<!-- Display options -->
+				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -560,7 +560,7 @@
 					</div>
 				</div>
 
-				<!-- Custom dates -->
+				
 				{#if preset === 'custom'}
 					<div class="flex flex-col gap-2">
 						<span
@@ -592,7 +592,7 @@
 					</button>
 				{/if}
 
-				<!-- Table filter -->
+				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -665,7 +665,7 @@
 				</div>
 			</div>
 
-			<!-- Selected table chips -->
+			
 			{#if selectedTableIds.length > 0}
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					{#each selectedTableIds as tableId, i}
@@ -693,7 +693,7 @@
 			{/if}
 		</section>
 
-		<!-- Chart -->
+		
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -763,7 +763,7 @@
 						onmousemove={handleChartMouseMove}
 						onmouseleave={handleChartMouseLeave}
 					>
-						<!-- Grid lines -->
+						
 						{#each generateYTicks() as tick}
 							<line
 								x1={padding.left}
@@ -781,7 +781,7 @@
 							>
 						{/each}
 
-						<!-- X axis labels -->
+						
 						{#if timestamps.length > 0}
 							{#each [0, Math.floor((timestamps.length - 1) / 2), timestamps.length - 1] as idx}
 								{@const x = xScale(idx)}
@@ -795,7 +795,7 @@
 							{/each}
 						{/if}
 
-						<!-- Database line -->
+						
 						{#if showDatabase}
 							<path
 								d={pathForSeries(visibleDbValues)}
@@ -808,7 +808,7 @@
 							{/each}
 						{/if}
 
-						<!-- Table lines -->
+						
 						{#each visibleTableValues as tv}
 							<path d={pathForSeries(tv.values)} fill="none" stroke={tv.color} stroke-width="2" />
 							{#each circlePoints(tv.values) as pt}
@@ -816,7 +816,7 @@
 							{/each}
 						{/each}
 
-						<!-- Hover line -->
+						
 						{#if hoverIndex !== null}
 							{@const x = xScale(hoverIndex)}
 							<line
@@ -831,7 +831,7 @@
 						{/if}
 					</svg>
 
-					<!-- Tooltip -->
+					
 					{#if tooltip}
 						<div
 							class="mt-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs"

@@ -44,7 +44,7 @@
 	onMount(() => load());
 </script>
 
-<!-- ── Top Bar ──────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
 >
@@ -52,7 +52,7 @@
 	<h1 class="font-headline-md text-headline-md text-on-background m-0">Settings</h1>
 </header>
 
-<!-- ── Canvas ───────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if loading}
 		<div class="flex items-center justify-center py-24">

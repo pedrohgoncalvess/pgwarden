@@ -13,7 +13,7 @@
 		ServerListItem
 	} from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -58,7 +58,7 @@
 		'#84cc16'
 	];
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function toInputDate(iso: string): string {
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return '';
@@ -196,7 +196,7 @@
 		};
 	}
 
-	// ── Data loading ─────────────────────────────────────────────────────────────
+	
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
@@ -278,7 +278,7 @@
 
 	onMount(() => load());
 
-	// ── Derived state ────────────────────────────────────────────────────────────
+	
 	let kpis = $derived(computeKpis(data));
 
 	let paginatedItems = $derived.by(() => {
@@ -297,7 +297,7 @@
 		pageOffset = next;
 	}
 
-	// ── Chart helpers ────────────────────────────────────────────────────────────
+	
 	let timelineChartWidth = $state(0);
 	const timelineChartHeight = 260;
 	const padding = { top: 16, right: 48, bottom: 40, left: 56 };
@@ -352,7 +352,7 @@
 		timelineHoverIndex = null;
 	}
 
-	// ── Timeline chart ───────────────────────────────────────────────────────────
+	
 	let timelineExecutions = $derived.by(() => {
 		const currentData = data;
 		if (!currentData || currentData.timeline.length === 0) return [];
@@ -385,7 +385,7 @@
 		};
 	});
 
-	// ── Top queries bar chart ────────────────────────────────────────────────────
+	
 	let topQueries = $derived.by(() => {
 		if (!data) return [];
 		return data.items.slice(0, 5);
@@ -425,7 +425,7 @@
 		}));
 	});
 
-	// ── User distribution chart ──────────────────────────────────────────────────
+	
 	let userDistribution = $derived.by(() => {
 		if (!data) return [];
 		const dist = new Map<string, number>();
@@ -464,7 +464,7 @@
 	});
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -485,7 +485,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -528,7 +528,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Database selector -->
+		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
 				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
@@ -561,7 +561,7 @@
 			</label>
 		</div>
 
-		<!-- Filters -->
+		
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
 				<div class="flex flex-col gap-2">
@@ -701,7 +701,7 @@
 			</div>
 		</section>
 
-		<!-- KPI Cards -->
+		
 		<section class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 			<div class="rounded-lg border border-outline-variant bg-surface-container p-4">
 				<p
@@ -758,9 +758,9 @@
 			</div>
 		</section>
 
-		<!-- Charts -->
+		
 		<div class="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-			<!-- Timeline -->
+			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden"
 			>
@@ -811,7 +811,7 @@
 						>
 							{#if data && data.timeline.length > 0}
 								{@const maxExec = Math.max(...data.timeline.map((p) => p.execution_count), 1)}
-								<!-- Y axis ticks -->
+								
 								{#each [0, 0.25, 0.5, 0.75, 1] as tick}
 									{@const value = Math.round(maxExec * (1 - tick))}
 									{@const y = yScale(value, maxExec)}
@@ -831,7 +831,7 @@
 									>
 								{/each}
 
-								<!-- X axis labels -->
+								
 								{#each [0, Math.floor((data.timeline.length - 1) / 2), data.timeline.length - 1] as idx}
 									{@const x = xScale(idx, data.timeline.length)}
 									<text
@@ -843,13 +843,13 @@
 									>
 								{/each}
 
-								<!-- Line -->
+								
 								<path d={timelinePath} fill="none" stroke={colors[0]} stroke-width="2" />
 								{#each timelineExecutions as pt}
 									<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
 								{/each}
 
-								<!-- Hover line and point -->
+								
 								{#if timelineHoverIndex !== null && timelineTooltip}
 									<line
 										x1={timelineTooltip.x}
@@ -895,7 +895,7 @@
 				</div>
 			</section>
 
-			<!-- Top queries -->
+			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden"
 			>
@@ -1033,7 +1033,7 @@
 				</div>
 			</section>
 
-			<!-- User distribution -->
+			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden lg:col-span-2"
 			>
@@ -1122,7 +1122,7 @@
 			</section>
 		</div>
 
-		<!-- Query table -->
+		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -1325,7 +1325,7 @@
 				</table>
 			</div>
 
-			<!-- Pagination -->
+			
 			{#if data && data.items.length > pageLimit}
 				<div class="flex items-center justify-between border-t border-outline-variant px-4 py-3">
 					<button

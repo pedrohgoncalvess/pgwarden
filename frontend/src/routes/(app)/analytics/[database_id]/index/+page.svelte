@@ -13,7 +13,7 @@
 		ServerListItem
 	} from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -59,7 +59,7 @@
 		'#84cc16'
 	];
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function toInputDate(iso: string): string {
 		const d = new Date(iso);
 		if (Number.isNaN(d.getTime())) return '';
@@ -107,7 +107,7 @@
 		}
 	}
 
-	// ── Data loading ─────────────────────────────────────────────────────────────
+	
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
@@ -206,7 +206,7 @@
 		}
 	}
 
-	// ── Derived state ────────────────────────────────────────────────────────────
+	
 	let filteredIndexes = $derived.by(() => {
 		const currentData = data;
 		if (!currentData) return [];
@@ -239,7 +239,7 @@
 		);
 	});
 
-	// ── Chart helpers ────────────────────────────────────────────────────────────
+	
 	let timelineChartWidth = $state(0);
 	const timelineChartHeight = 260;
 	const padding = { top: 16, right: 48, bottom: 40, left: 56 };
@@ -321,7 +321,7 @@
 		return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 	});
 
-	// ── Index table helpers ──────────────────────────────────────────────────────
+	
 	let sortedItems = $derived.by(() => {
 		const currentData = data;
 		if (!currentData) return [];
@@ -352,7 +352,7 @@
 	}
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -373,7 +373,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -416,7 +416,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Database selector -->
+		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
 				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
@@ -449,10 +449,10 @@
 			</label>
 		</div>
 
-		<!-- Controls -->
+		
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
-				<!-- Presets -->
+				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -475,7 +475,7 @@
 					</div>
 				</div>
 
-				<!-- Custom dates -->
+				
 				{#if preset === 'custom'}
 					<div class="flex flex-col gap-2">
 						<span
@@ -507,7 +507,7 @@
 					</button>
 				{/if}
 
-				<!-- Table filter -->
+				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -581,7 +581,7 @@
 					{/if}
 				</div>
 
-				<!-- Index filter -->
+				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -663,7 +663,7 @@
 					{/if}
 				</div>
 
-				<!-- Search -->
+				
 				<div class="flex flex-col gap-2 min-w-[16rem]">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -689,7 +689,7 @@
 				</div>
 			</div>
 
-			<!-- Selected chips -->
+			
 			{#if selectedTableIds.length > 0 || selectedIndexIds.length > 0}
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					{#each selectedTableIds as tableId}
@@ -732,7 +732,7 @@
 			{/if}
 		</section>
 
-		<!-- KPIs -->
+		
 		{#if data}
 			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
 				<div class="rounded-lg border border-outline-variant bg-surface-container p-4">
@@ -786,7 +786,7 @@
 			</div>
 		{/if}
 
-		<!-- Timeline chart -->
+		
 		<section
 			class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden mb-6"
 		>
@@ -873,7 +873,7 @@
 						onmousemove={handleTimelineMouseMove}
 						onmouseleave={handleTimelineMouseLeave}
 					>
-						<!-- Grid lines -->
+						
 						{#each [0, 0.25, 0.5, 0.75, 1] as tick}
 							{@const y = padding.top + tick * (timelineChartHeight - padding.top - padding.bottom)}
 							<line
@@ -886,7 +886,7 @@
 							/>
 						{/each}
 
-						<!-- X axis labels -->
+						
 						{#if data.timeline.length > 0}
 							{#each [0, Math.floor((data.timeline.length - 1) / 2), data.timeline.length - 1] as idx}
 								{@const x = xScale(idx, data.timeline.length)}
@@ -900,7 +900,7 @@
 							{/each}
 						{/if}
 
-						<!-- Left axis: size -->
+						
 						{#if timelineSizePoints.length > 0}
 							{@const maxSize = Math.max(...data.timeline.map((p) => p.total_size_bytes), 1)}
 							<text
@@ -917,7 +917,7 @@
 							>
 						{/if}
 
-						<!-- Right axis: hit rate -->
+						
 						<text
 							x={timelineChartWidth - padding.right + 8}
 							y={padding.top + 4}
@@ -931,13 +931,13 @@
 							class="text-[10px] fill-amber-500">0%</text
 						>
 
-						<!-- Size line -->
+						
 						<path d={timelineSizePath} fill="none" stroke={colors[0]} stroke-width="2" />
 						{#each timelineSizePoints as pt}
 							<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
 						{/each}
 
-						<!-- Hit rate line -->
+						
 						<path
 							d={timelineHitRatePath}
 							fill="none"
@@ -949,7 +949,7 @@
 							<circle cx={pt.x} cy={pt.y} r="3" fill="#f59e0b" />
 						{/each}
 
-						<!-- Hover line -->
+						
 						{#if timelineHoverIndex !== null}
 							{@const x = xScale(timelineHoverIndex, data.timeline.length)}
 							<line
@@ -964,7 +964,7 @@
 						{/if}
 					</svg>
 
-					<!-- Tooltip -->
+					
 					{#if timelineHoverIndex !== null}
 						{@const point = data.timeline[timelineHoverIndex]}
 						<div
@@ -992,7 +992,7 @@
 			</div>
 		</section>
 
-		<!-- Index table -->
+		
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"

@@ -7,7 +7,7 @@
 	import { listDatabases, listServers, listRunHistory } from '$lib/api';
 	import type { DatabaseListItem, RunHistoryItem, RunType, ServerListItem } from '$lib/api';
 
-	// ── State ────────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -28,7 +28,7 @@
 		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
 	);
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
+	
 	function typeBadge(type: RunType | null): string {
 		if (type === 'server') return 'bg-secondary/10 text-secondary border-secondary/20';
 		if (type === 'database') return 'bg-primary/10 text-primary border-primary/20';
@@ -175,7 +175,7 @@
 	onMount(() => load());
 </script>
 
-<!-- ── Top Bar ─────────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -195,7 +195,7 @@
 	</button>
 </header>
 
-<!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
@@ -238,7 +238,7 @@
 			</p>
 		</div>
 	{:else}
-		<!-- Database selector -->
+		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
 				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
@@ -360,7 +360,7 @@
 			</div>
 		</section>
 
-		<!-- History table -->
+		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -485,7 +485,7 @@
 				</table>
 			</div>
 
-			<!-- Pagination -->
+			
 			<div class="flex items-center justify-between border-t border-outline-variant px-4 py-3">
 				<button
 					onclick={() => changePage(-1)}

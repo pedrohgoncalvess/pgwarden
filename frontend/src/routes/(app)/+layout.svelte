@@ -125,11 +125,11 @@
 	}
 </script>
 
-<!-- Body classes applied in the global wrapping level -->
+
 <div
 	class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container min-h-screen"
 >
-	<!-- Sidebar / NavigationDrawer -->
+	
 	<aside
 		class="h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant flex flex-col py-4 gap-stack-sm z-50"
 	>
@@ -143,7 +143,7 @@
 		</div>
 
 		<div class="flex-1 overflow-y-auto px-3 space-y-2 custom-scrollbar">
-			<!-- Main Nav -->
+			
 			<nav class="space-y-1">
 				<h2
 					class="px-3 text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest mb-2"
@@ -168,7 +168,7 @@
 				{/each}
 			</nav>
 
-			<!-- Analytics Nav -->
+			
 			<nav class="space-y-1">
 				<button
 					onclick={() => (expandedAnalytics = !expandedAnalytics)}
@@ -216,7 +216,7 @@
 				{/if}
 			</nav>
 
-			<!-- Runs Nav -->
+			
 			<nav class="space-y-1">
 				<button
 					onclick={() => (expandedRuns = !expandedRuns)}
@@ -310,7 +310,7 @@
 				{/if}
 			</nav>
 
-			<!-- Metadata Nav -->
+			
 			<nav class="space-y-1">
 				<button
 					onclick={() => (expandedMetadata = !expandedMetadata)}
@@ -358,7 +358,7 @@
 				{/if}
 			</nav>
 
-			<!-- Settings Nav -->
+			
 			<nav class="space-y-1">
 				<button
 					onclick={() => (expandedSettings = !expandedSettings)}
@@ -407,7 +407,7 @@
 			</nav>
 		</div>
 
-		<!-- User Profile & Logout -->
+		
 		<div
 			class="px-6 py-4 mt-auto border-t border-outline-variant flex items-center justify-between"
 		>
@@ -435,7 +435,7 @@
 		</div>
 	</aside>
 
-	<!-- Main Content Area -->
+	
 	<main class="ml-64 min-h-screen">
 		{@render children()}
 	</main>

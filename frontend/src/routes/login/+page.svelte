@@ -39,7 +39,7 @@
 	class="flex min-h-screen items-center justify-center p-container-padding bg-background relative overflow-hidden"
 >
 	<main class="w-full max-w-[420px] z-10">
-		<!-- Header / Logo Area -->
+		
 		<div class="flex flex-col items-center text-center space-y-4 mb-8">
 			<div
 				class="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center text-on-primary font-bold text-3xl shadow-lg shadow-primary/20"
@@ -56,10 +56,10 @@
 			</div>
 		</div>
 
-		<!-- Form Panel -->
+		
 		<section class="glass-panel p-8 shadow-floating">
 			<form onsubmit={handleLogin} class="space-y-6" id="loginForm">
-				<!-- Username -->
+				
 				<div class="flex flex-col gap-2">
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
@@ -82,7 +82,7 @@
 					</div>
 				</div>
 
-				<!-- Password -->
+				
 				<div class="flex flex-col gap-2">
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
@@ -114,7 +114,7 @@
 					</div>
 				{/if}
 
-				<!-- Action Button -->
+				
 				<div class="pt-4">
 					<button
 						disabled={loading}
@@ -152,7 +152,7 @@
 			</form>
 		</section>
 
-		<!-- Footer Info -->
+		
 		<footer
 			class="flex justify-between items-center mt-8 px-2 font-body-sm text-xs text-on-surface-variant/50"
 		>

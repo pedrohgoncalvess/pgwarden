@@ -5,7 +5,7 @@
 	import { listServers, listDatabases, deleteServer, deleteDatabase } from '$lib/api';
 	import type { ServerListItem, DatabaseListItem } from '$lib/api';
 
-	// ── Data ───────────────────────────────────────────────────────────────────
+	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let loading = $state(true);
@@ -33,7 +33,7 @@
 		}
 	}
 
-	// ── Helper ─────────────────────────────────────────────────────────────────
+	
 	function getStatusBadge(status: string) {
 		if (status === 'healthy')
 			return {
@@ -50,7 +50,7 @@
 		return { cls: 'bg-error/10 text-error border-error/20', dot: 'bg-error', label: 'Error' };
 	}
 
-	// ── Delete flow ────────────────────────────────────────────────────────────
+	
 	type DeleteTarget =
 		| { kind: 'server'; item: ServerListItem }
 		| { kind: 'database'; item: DatabaseListItem };
@@ -103,14 +103,14 @@
 	onMount(() => load());
 </script>
 
-<!-- ── Delete Confirmation Modal ────────────────────────────────────────── -->
+
 {#if deleteTarget}
 	{@const name = expectedName()}
 	{@const isServer = deleteTarget.kind === 'server'}
 
 	<div class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
 		<div class="settings-card w-full max-w-md p-8 shadow-floating">
-			<!-- Header -->
+			
 			<div class="flex items-start gap-4 mb-6">
 				<div
 					class="w-10 h-10 rounded-xl bg-error/10 border border-error/20 flex items-center justify-center flex-shrink-0 mt-0.5"
@@ -140,7 +140,7 @@
 				</div>
 			</div>
 
-			<!-- Confirm input -->
+			
 			<div class="mb-5">
 				<label
 					class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2"
@@ -167,7 +167,7 @@
 				</div>
 			{/if}
 
-			<!-- Actions -->
+			
 			<div class="flex gap-3">
 				<button
 					onclick={closeDeleteModal}
@@ -215,7 +215,7 @@
 	</div>
 {/if}
 
-<!-- ── Top Bar ──────────────────────────────────────────────────────────── -->
+
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
 >
@@ -233,7 +233,7 @@
 	{/if}
 </header>
 
-<!-- ── Canvas ───────────────────────────────────────────────────────────── -->
+
 <div class="pt-24 px-container-padding pb-12">
 	{#if loadError}
 		<div
@@ -245,7 +245,7 @@
 	{/if}
 
 	{#if loading}
-		<!-- Skeleton -->
+		
 		<div class="settings-card p-6 space-y-4">
 			{#each [1, 2] as _}
 				<div class="flex items-center justify-between">
@@ -268,7 +268,7 @@
 	{:else}
 		{@const badge = getStatusBadge(currentServer.status)}
 
-		<!-- ── Server ───────────────────────────────────────────────── -->
+		
 		<section class="mb-8">
 			<div class="flex items-center gap-2 mb-3">
 				<span class="material-symbols-outlined text-on-surface-variant text-[16px]">dns</span>
@@ -279,7 +279,7 @@
 
 			<div class="settings-card overflow-hidden">
 				<div class="row-item px-5 py-4 flex items-center justify-between gap-4">
-					<!-- Info -->
+					
 					<div class="flex items-center gap-4 min-w-0">
 						<div
 							class="w-9 h-9 rounded-lg bg-surface-container-high border border-outline-variant/50 flex items-center justify-center flex-shrink-0"
@@ -294,7 +294,7 @@
 						</div>
 					</div>
 
-					<!-- Right side -->
+					
 					<div class="flex items-center gap-3 flex-shrink-0">
 						<span
 							class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border {badge.cls}"
@@ -307,7 +307,7 @@
 			</div>
 		</section>
 
-		<!-- ── Databases ───────────────────────────────────────────── -->
+		
 		<section class="mb-8">
 			<div class="flex items-center gap-2 mb-3">
 				<span class="material-symbols-outlined text-on-surface-variant text-[16px]">database</span>
@@ -328,7 +328,7 @@
 				{:else}
 					{#each serverDatabases as db (db.id)}
 						<div class="row-item px-5 py-4 flex items-center justify-between gap-4">
-							<!-- Info -->
+							
 							<div class="flex items-center gap-4 min-w-0">
 								<div
 									class="w-9 h-9 rounded-lg bg-surface-container-high border border-outline-variant/50 flex items-center justify-center flex-shrink-0"
@@ -346,7 +346,7 @@
 								</div>
 							</div>
 
-							<!-- Right side -->
+							
 							<div class="flex items-center gap-3 flex-shrink-0">
 								{#if !db.status}
 									<span
@@ -369,10 +369,10 @@
 			</div>
 		</section>
 
-		<!-- ── Danger Zone ─────────────────────────────────────────── -->
+		
 		<section>
 			<div class="danger-zone overflow-hidden">
-				<!-- Header -->
+				
 				<div class="danger-zone-header px-5 py-4 flex items-center gap-3">
 					<span class="material-symbols-outlined text-error text-[18px]">dangerous</span>
 					<div>
@@ -383,9 +383,9 @@
 					</div>
 				</div>
 
-				<!-- Items -->
+				
 				<div class="divide-y divide-error/10">
-					<!-- Delete Server -->
+					
 					<div class="px-5 py-4">
 						<h4 class="text-xs font-bold uppercase tracking-wider text-error/80 mb-3">
 							Delete Server
@@ -415,7 +415,7 @@
 						</div>
 					</div>
 
-					<!-- Delete Database -->
+					
 					<div class="px-5 py-4">
 						<h4 class="text-xs font-bold uppercase tracking-wider text-error/80 mb-3">
 							Delete Database

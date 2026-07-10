@@ -7,7 +7,7 @@ async function forward(request: Request, url: URL) {
 	const targetUrl = `${backendUrl}${url.pathname.replace(/^\/api/, '')}${url.search}`;
 
 	const requestHeaders = new Headers(request.headers);
-	requestHeaders.delete('host'); // Let fetch set the correct host
+	requestHeaders.delete('host'); 
 
 	try {
 		const response = await fetch(targetUrl, {

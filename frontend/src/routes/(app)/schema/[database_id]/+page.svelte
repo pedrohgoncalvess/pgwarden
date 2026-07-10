@@ -928,7 +928,7 @@
 
 							{#each visibleTables as table (table.id)}
 								{@const position = positions[table.id] ?? { x: 0, y: 0 }}
-								<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+								
 								<article
 									class="schema-table {dragState?.tableId === table.id
 										? 'dragging'
@@ -1014,7 +1014,7 @@
 
 {#if sidebarOpen && selectedTable}
 	<div class="fixed inset-0 z-40 bg-black/20" onclick={closeSidebar} aria-hidden="true"></div>
-	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+	
 	<aside
 		class="fixed top-16 right-0 z-50 flex h-[calc(100%-4rem)] w-96 flex-col border-l border-outline-variant bg-surface-container-low shadow-2xl"
 		role="dialog"
