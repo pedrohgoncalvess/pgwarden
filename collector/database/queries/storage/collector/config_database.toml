@@ -11,6 +11,11 @@ FROM collector.config_database
 WHERE database_id = %(database_id)s
 """
 
+all = """
+SELECT id, database_id, name, interval, is_paused, next_run_at
+FROM collector.config_database
+"""
+
 [UPDATE]
 running = """
 UPDATE collector.config_database
@@ -45,5 +50,12 @@ WHERE id = %(id)s
 set_interval = """
 UPDATE collector.config_database
 SET interval = %(interval)s
+WHERE id = %(id)s
+"""
+
+set_settings = """
+UPDATE collector.config_database
+SET interval = %(interval)s,
+    is_paused = %(is_paused)s
 WHERE id = %(id)s
 """

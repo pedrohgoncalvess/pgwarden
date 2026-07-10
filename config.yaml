@@ -2,6 +2,7 @@ servers:
   - name: local
     host: pgwarden_db
     port: 5432
+    server_metrics_enabled: true # Enable collection of server metrics (CPU, RAM, I/O, Disk).
 
     username: postgres  # No superuser/admin privileges needed. Access to pg_stat_* views (pg_monitor role) is sufficient.
     password: postgres
@@ -20,3 +21,50 @@ servers:
     ignore_patterns:
       - "^_timescale.*"
       - "^pg_.*"
+
+    # Collector configuration ----------------------------------------------------
+    # Uncomment only the collectors you want to change. Collectors not mentioned
+    # here keep their built-in defaults.
+    collector:
+      # table_collector:
+      #   interval: 1800
+      #   enabled: true
+      # column_collector:
+      #   interval: 1800
+      #   enabled: true
+      # index_collector:
+      #   interval: 1800
+      #   enabled: true
+      # table_metric_collector:
+      #   interval: 1800
+      #   enabled: true
+      # column_metric_collector:
+      #   interval: 1800
+      #   enabled: true
+      # index_metric_collector:
+      #   interval: 1800
+      #   enabled: true
+      # database_stat_collector:
+      #   interval: 3
+      #   enabled: true
+      # lock_metric_collector:
+      #   interval: 3
+      #   enabled: true
+      # session_metric_collector:
+      #   interval: 3
+      #   enabled: true
+      # native_query_collector:
+      #   interval: 0.5
+      #   enabled: true
+      # cpu_collector:
+      #   interval: 20
+      #   enabled: true
+      # ram_collector:
+      #   interval: 20
+      #   enabled: true
+      # io_collector:
+      #   interval: 5
+      #   enabled: true
+      # disk_collector:
+      #   interval: 1800
+      #   enabled: true

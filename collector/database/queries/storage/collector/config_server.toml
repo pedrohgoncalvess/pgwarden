@@ -11,6 +11,11 @@ FROM collector.config_server
 WHERE server_id = %(server_id)s
 """
 
+all = """
+SELECT id, server_id, name, interval, is_paused, next_run_at
+FROM collector.config_server
+"""
+
 [UPDATE]
 running = """
 UPDATE collector.config_server
@@ -46,4 +51,17 @@ set_interval = """
 UPDATE collector.config_server
 SET interval = %(interval)s
 WHERE id = %(id)s
+"""
+
+set_settings = """
+UPDATE collector.config_server
+SET interval = %(interval)s,
+    is_paused = %(is_paused)s
+WHERE id = %(id)s
+"""
+
+[DELETE]
+by_server_id = """
+DELETE FROM collector.config_server
+WHERE server_id = %(server_id)s
 """
