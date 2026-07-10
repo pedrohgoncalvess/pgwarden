@@ -24,19 +24,16 @@ class MonitoredDatabase:
     def should_include(self, schema_name: str, table_name: str) -> bool:
         full_name = f"{schema_name}.{table_name}"
 
-        # 1. ignore_tables (highest priority)
         if self.ignore_tables:
             normalized_ignore = [(t if "." in t else f"public.{t}") for t in self.ignore_tables]
             if full_name in normalized_ignore:
                 return False
 
-        # 2. ignore_patterns
         if self.ignore_patterns:
             for pattern in self.ignore_patterns:
                 if re.search(pattern, full_name, re.IGNORECASE):
                     return False
 
-        # 3. include_tables (lowest priority / restrictive allow-list)
         if self.include_tables:
             normalized_include = [(t if "." in t else f"public.{t}") for t in self.include_tables]
             return full_name in normalized_include

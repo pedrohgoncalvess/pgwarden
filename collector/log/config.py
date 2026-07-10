@@ -1,25 +1,3 @@
-""" Asynchronous Relational Logger Module
-
-This module provides a structured logging system that writes logs in a relational format,
-similar to database records with consistent delimiters.
-The logs are stored in files organized by date, making them easy to parse and analyze.
-
-Features:
-- Asynchronous file operations using aiofiles
-- Date-based log file partitioning
-- Configurable log formats and separators
-- Environment-aware logging
-- Support for different log levels (INFO, ERROR)
-
-Usage:
-from log import logger
-
-# Log information
-await logger.info("ModuleName", "OperationType", "Detailed message")
-
-# Log errors
-await logger.error("ModuleName", "ErrorType", "Exception details")
-"""
 import functools
 import re
 import os
@@ -124,5 +102,4 @@ class StructuredLogger:  #TODO: Implement sync logging
             )
         )
 
-# Customize your log formats and files
 logger = StructuredLogger()
