@@ -11,7 +11,6 @@ from utils import encrypt
 
 @pytest_asyncio.fixture
 async def test_server(db_session):
-    """Creates a test server in the collector schema for database linking."""
     server = Server(
         name="Test Server",
         host="localhost",
@@ -27,7 +26,6 @@ async def test_server(db_session):
 
 @pytest.mark.asyncio
 async def test_create_database_success(auth_client: AsyncClient, test_server):
-    """Tests the successful registration of a new monitored database."""
     db_data = {
         "server_id": str(test_server.public_id),
         "db_name": "new_monitored_db"
@@ -42,7 +40,6 @@ async def test_create_database_success(auth_client: AsyncClient, test_server):
 
 @pytest.mark.asyncio
 async def test_create_database_server_not_found(auth_client: AsyncClient):
-    """Tests database registration failure when the parent server ID is invalid."""
     db_data = {
         "server_id": str(uuid.uuid4()),
         "db_name": "orphaned_db"
@@ -55,7 +52,6 @@ async def test_create_database_server_not_found(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_databases(auth_client: AsyncClient, db_session, test_server):
-    """Tests the retrieval of all registered databases for an authenticated user."""
     db = Database(
         server_id=test_server.id,
         db_name=encrypt("existing_db"),
@@ -73,6 +69,5 @@ async def test_list_databases(auth_client: AsyncClient, db_session, test_server)
 
 @pytest.mark.asyncio
 async def test_list_databases_unauthorized(client: AsyncClient):
-    """Tests that listing databases requires authentication."""
     response = await client.get("/v1/databases/")
     assert response.status_code == 401

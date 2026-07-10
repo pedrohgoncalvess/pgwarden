@@ -31,7 +31,7 @@ class SchemaIndexResponse(BaseModel):
     definition: str
     is_unique: bool
     is_primary: bool
-    columns: List[str]  # e.g., column names
+    columns: List[str]
 
     model_config = ConfigDict(from_attributes=True)
 

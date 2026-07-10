@@ -102,7 +102,6 @@ async def test_tag(db_session, test_server):
     return tag
 
 
-# --- DATABASE DOC TESTS ---
 @pytest.mark.asyncio
 async def test_put_database_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "This is a test database."}
@@ -123,20 +122,16 @@ async def test_get_database_doc_success(auth_client: AsyncClient, test_database)
 
 @pytest.mark.asyncio
 async def test_attach_and_detach_database_tag(auth_client: AsyncClient, test_database, test_tag):
-    # Setup doc first
     await auth_client.put(f"/v1/databases/{test_database.public_id}/docs", json={"description": "DB"})
     
-    # Attach tag
     payload = {"scope": "doc", "target_type": "database", "target_id": str(test_database.public_id), "database_id": str(test_database.public_id)}
     res_attach = await auth_client.post(f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_attach.status_code == 204
     
-    # Detach tag
     res_detach = await auth_client.request("DELETE", f"/v1/tags/{test_tag.public_id}/assignments", json=payload)
     assert res_detach.status_code == 204
 
 
-# --- SCHEMA DOC TESTS ---
 @pytest.mark.asyncio
 async def test_put_schema_doc_success(auth_client: AsyncClient, test_database):
     payload = {"description": "Public schema"}
@@ -167,7 +162,6 @@ async def test_attach_and_detach_schema_tag(auth_client: AsyncClient, test_datab
     assert res_detach.status_code == 204
 
 
-# --- TABLE DOC TESTS ---
 @pytest.mark.asyncio
 async def test_put_table_doc_success(auth_client: AsyncClient, test_database, test_table):
     payload = {"description": "Users table"}
@@ -198,7 +192,6 @@ async def test_attach_and_detach_table_tag(auth_client: AsyncClient, test_databa
     assert res_detach.status_code == 204
 
 
-# --- COLUMN DOC TESTS ---
 @pytest.mark.asyncio
 async def test_put_column_doc_success(auth_client: AsyncClient, test_database, test_column):
     payload = {"description": "Email column"}
@@ -229,7 +222,6 @@ async def test_attach_and_detach_column_tag(auth_client: AsyncClient, test_datab
     assert res_detach.status_code == 204
 
 
-# --- INDEX DOC TESTS ---
 @pytest.mark.asyncio
 async def test_put_index_doc_success(auth_client: AsyncClient, test_database, test_index):
     payload = {"description": "Index for user emails"}

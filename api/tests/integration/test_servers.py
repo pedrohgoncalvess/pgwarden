@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, patch
 
 @pytest.mark.asyncio
 async def test_create_server_success(auth_client: AsyncClient):
-    """Tests the successful registration of a new PostgreSQL server."""
     server_data = {
         "name": "Production DB",
         "host": "localhost",
@@ -31,7 +30,6 @@ async def test_create_server_success(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_servers(auth_client: AsyncClient, db_session):
-    """Tests the retrieval of all registered servers for an authenticated user."""
     from database.models.collector.server import Server
     
     server = Server(
@@ -54,7 +52,6 @@ async def test_list_servers(auth_client: AsyncClient, db_session):
 
 @pytest.mark.asyncio
 async def test_test_connection_success(auth_client: AsyncClient):
-    """Tests the connection test endpoint with mocked successful response."""
     connection_data = {
         "name": "Test Server",
         "host": "localhost",
@@ -78,7 +75,6 @@ async def test_test_connection_success(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_test_connection_invalid_port(auth_client: AsyncClient):
-    """Tests the connection test endpoint with an invalid port format."""
     connection_data = {
         "name": "Test Server",
         "host": "localhost",
@@ -97,21 +93,18 @@ async def test_test_connection_invalid_port(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_server_unauthorized(client: AsyncClient):
-    """Tests that server registration requires authentication."""
     response = await client.post("/v1/servers/", json={})
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_get_run_history_not_found(auth_client: AsyncClient):
-    """Tests that run history returns 404 for a non-existent server."""
     response = await auth_client.get("/v1/servers/non-existent-id/runs/history")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_get_run_history_success(auth_client: AsyncClient, db_session):
-    """Tests retrieving run history for a server's collectors."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
     from database.models.collector.run import Run
@@ -146,7 +139,6 @@ async def test_get_run_history_success(auth_client: AsyncClient, db_session):
 
 @pytest.mark.asyncio
 async def test_patch_run_pause_resume(auth_client: AsyncClient, db_session):
-    """Tests pausing and resuming a server collector run."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
 
@@ -186,7 +178,6 @@ async def test_patch_run_pause_resume(auth_client: AsyncClient, db_session):
 
 @pytest.mark.asyncio
 async def test_patch_run_delete(auth_client: AsyncClient, db_session):
-    """Tests deleting a server collector run."""
     from database.models.collector.server import Server
     from database.models.collector.config_server import ConfigServer
 
@@ -218,6 +209,5 @@ async def test_patch_run_delete(auth_client: AsyncClient, db_session):
 
 @pytest.mark.asyncio
 async def test_stream_runs_not_found(auth_client: AsyncClient):
-    """Tests that the runs SSE stream returns 404 for a non-existent server."""
     response = await auth_client.get("/v1/servers/non-existent-id/runs/stream")
     assert response.status_code == 404

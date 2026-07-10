@@ -16,7 +16,6 @@ from utils import encrypt
 
 @pytest_asyncio.fixture
 async def full_schema_setup(db_session):
-    """Creates a complete database schema hierarchy for testing the schema retrieval endpoint."""
     server = Server(
         name="Schema Test Server",
         host="localhost",
@@ -89,7 +88,6 @@ async def full_schema_setup(db_session):
 
 @pytest.mark.asyncio
 async def test_get_schema_success(auth_client: AsyncClient, full_schema_setup):
-    """Tests successful retrieval of the full database schema metadata."""
     db = full_schema_setup
     
     response = await auth_client.get(f"/v1/databases/{db.public_id}/schemas")
@@ -108,7 +106,6 @@ async def test_get_schema_success(auth_client: AsyncClient, full_schema_setup):
 
 @pytest.mark.asyncio
 async def test_get_schema_not_found(auth_client: AsyncClient):
-    """Tests schema retrieval failure when the database ID does not exist."""
     random_id = uuid.uuid4()
     response = await auth_client.get(f"/v1/databases/{random_id}/schemas")
     
@@ -117,7 +114,6 @@ async def test_get_schema_not_found(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_schema_unauthorized(client: AsyncClient):
-    """Tests that retrieving schema metadata requires authentication."""
     random_id = uuid.uuid4()
     response = await client.get(f"/v1/databases/{random_id}/schemas")
     assert response.status_code == 401
@@ -139,7 +135,6 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
 
     now = datetime.now(timezone.utc)
 
-    # Simulate a table alteration.
     table_history = TableHistory(
         table_id=table.id,
         table_oid=table.oid,
@@ -151,7 +146,6 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
     )
     db_session.add(table_history)
 
-    # Simulate a column alteration.
     column_history = ColumnHistory(
         column_id=column.id,
         table_id=table.id,
@@ -169,7 +163,6 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
     )
     db_session.add(column_history)
 
-    # Simulate an index alteration.
     index_history = IndexHistory(
         index_id=index.id,
         table_id=table.id,
@@ -184,7 +177,6 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
     )
     db_session.add(index_history)
 
-    # Simulate a removed column.
     removed_column = ColumnModel(
         table_id=table.id,
         name="email",
@@ -204,8 +196,7 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
     data = response.json()
     assert data["limit"] == 100
     assert data["offset"] == 0
-    # Initial table/column/index insertions are intentionally excluded.
-    assert data["total"] >= 4  # 3 altered + 1 removed column
+    assert data["total"] >= 4
 
     actions = {item["action"] for item in data["items"]}
     assert "added" not in actions
@@ -225,7 +216,6 @@ async def test_get_schema_history_success(auth_client: AsyncClient, db_session, 
 
 @pytest.mark.asyncio
 async def test_get_schema_history_not_found(auth_client: AsyncClient):
-    """Tests schema history retrieval failure when the database ID does not exist."""
     random_id = uuid.uuid4()
     response = await auth_client.get(f"/v1/databases/{random_id}/schemas/history")
 
@@ -235,7 +225,6 @@ async def test_get_schema_history_not_found(auth_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_schema_history_unauthorized(client: AsyncClient):
-    """Tests that retrieving schema history requires authentication."""
     random_id = uuid.uuid4()
     response = await client.get(f"/v1/databases/{random_id}/schemas/history")
     assert response.status_code == 401

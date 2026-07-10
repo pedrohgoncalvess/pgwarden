@@ -12,7 +12,6 @@ class DocBase(BaseModel):
 class DocWithTagsBase(DocBase):
     tags: List[TagResponse] = Field(default_factory=list)
 
-# Database
 class DatabaseDocPut(DocBase):
     pass
 
@@ -21,7 +20,6 @@ class DatabaseDocResponse(DocWithTagsBase, DatabaseDocPut):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-# Schema
 class SchemaDocPut(DocBase):
     pass
 
@@ -30,7 +28,6 @@ class SchemaDocResponse(DocWithTagsBase, SchemaDocPut):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-# Table
 class TableDocPut(DocBase):
     pass
 
@@ -39,7 +36,6 @@ class TableDocResponse(DocWithTagsBase, TableDocPut):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-# Column
 class ColumnDocPut(DocBase):
     is_pii: bool = Field(False, description="Whether this column contains Personally Identifiable Information")
     sample_values: Optional[str] = Field(None, description="Example values for this column")
@@ -49,7 +45,6 @@ class ColumnDocResponse(DocWithTagsBase, ColumnDocPut):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-# Index
 class IndexDocPut(DocBase):
     pass
 

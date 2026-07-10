@@ -3,7 +3,6 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient, test_user):
-    """Tests successful login using credentials created in the fixture."""
     login_data = {
         "email": "test@example.com",
         "password": "password123"
@@ -20,7 +19,6 @@ async def test_login_success(client: AsyncClient, test_user):
 
 @pytest.mark.asyncio
 async def test_login_preflight_allows_vite_dev_origin(client: AsyncClient):
-    """Tests that the Vite dev server can preflight login requests."""
     response = await client.options(
         "/v1/auth",
         headers={
@@ -35,7 +33,6 @@ async def test_login_preflight_allows_vite_dev_origin(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_invalid_credentials(client: AsyncClient, test_user):
-    """Tests login failure when providing an incorrect password."""
     login_data = {
         "email": "test@example.com",
         "password": "wrongpassword"
@@ -48,7 +45,6 @@ async def test_login_invalid_credentials(client: AsyncClient, test_user):
 
 @pytest.mark.asyncio
 async def test_refresh_token_not_found(client: AsyncClient):
-    """Tests the refresh endpoint with a token that does not exist in the database."""
     refresh_data = {
         "refresh_token": "00000000-0000-0000-0000-000000000000"
     }

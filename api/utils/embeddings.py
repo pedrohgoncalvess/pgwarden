@@ -1,15 +1,3 @@
-"""
-Embedding provider utilities.
-
-This module uses BGE-M3 embeddings (1024 dims). The generation priority is:
-
-1. OpenRouter (https://openrouter.ai/api/v1/embeddings) when OPENROUTER_API_KEY
-   is present. This avoids downloading any local model.
-2. Local sentence-transformers model ``BAAI/bge-m3`` when no OpenRouter key is
-   configured.
-
-There is no other provider switching; the model and dimension are hardcoded.
-"""
 
 from __future__ import annotations
 
@@ -87,13 +75,6 @@ async def _generate_local_embedding(text: str) -> list[float] | None:
 
 
 async def generate_embedding(text: str) -> list[float] | None:
-    """Generate a dense embedding for ``text`` using BGE-M3.
-
-    OpenRouter is used when ``OPENROUTER_API_KEY`` is set; otherwise the local
-    sentence-transformers model is loaded and used.
-
-    Returns ``None`` when the text is empty or the configured generator fails.
-    """
     if not text or not text.strip():
         return None
 
@@ -109,7 +90,6 @@ def normalize_embedding_term(text: str) -> str:
 
 
 async def generate_embedding_cached(db: AsyncSession, text: str) -> list[float] | None:
-    """Return an embedding for ``text`` using base.embedding_cache when possible."""
     term = normalize_embedding_term(text)
     if not term:
         return None

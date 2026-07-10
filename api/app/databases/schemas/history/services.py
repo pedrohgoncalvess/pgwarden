@@ -158,7 +158,6 @@ async def get_database_schema_history(
 
         events: list[SchemaHistoryItem] = []
 
-        # Table lifecycle events: skip the initial insertion; keep removals.
         for t in tables:
             if t.deleted_at is not None:
                 events.append(SchemaHistoryItem(
@@ -190,8 +189,6 @@ async def get_database_schema_history(
                 details=details,
             ))
 
-        # Column lifecycle events: skip columns created together with the table;
-        # keep removals and later additions.
         for c in columns:
             table = table_by_id.get(c.table_id)
             if c.deleted_at is None:
@@ -247,8 +244,6 @@ async def get_database_schema_history(
                 details=details,
             ))
 
-        # Index lifecycle events: skip indexes created together with the table;
-        # keep removals and later additions.
         for i in indexes:
             table = table_by_id.get(i.table_id)
             if i.deleted_at is None:

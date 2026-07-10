@@ -1,9 +1,3 @@
-""" Asynchronous Relational Logger Module
-
-This module provides a structured logging system that writes logs in a relational format,
-similar to database records with consistent delimiters.
-The logs are stored in files organized by date, making them easy to parse and analyze.
-"""
 import re
 import os
 from datetime import datetime
@@ -62,5 +56,4 @@ class RelationalLogger:
             )
         )
 
-# Customize your log formats and files
 logger = RelationalLogger()

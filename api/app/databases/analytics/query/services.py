@@ -29,7 +29,6 @@ PRESET_RANGES = {
     "1m": timedelta(days=30),
 }
 
-# Pre-compiled regex patterns for query normalization.
 _BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", flags=re.DOTALL)
 _LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _DOUBLE_QUOTE_RE = re.compile(r'"([^"]+)"')
@@ -210,7 +209,6 @@ async def get_query_analytics(
     search_terms = _normalize_search_terms(search)
     exclude_terms = [term.strip().lower() for term in (exclude or []) if term.strip()]
 
-    # Stream rows in keyset-based batches to avoid OFFSET and large memory spikes.
     BATCH_SIZE = 50_000
     MAX_TOTAL_ROWS = 500_000
 
@@ -281,7 +279,6 @@ async def get_query_analytics(
         if len(rows) < BATCH_SIZE:
             break
 
-    # Aggregate by query signature.
     signatures: dict[str, dict] = defaultdict(
         lambda: {
             "query_preview": "",

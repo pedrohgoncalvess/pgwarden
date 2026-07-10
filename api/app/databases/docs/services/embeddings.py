@@ -1,11 +1,3 @@
-"""
-Helpers for building the text that is sent to the embedding provider.
-
-Each documentation object is represented by a short natural-language summary
-that mixes metadata (name, type, columns, etc.) with the user-written
-documentation. This summary is what gets vectorized and stored in the
-``embedding`` column of the corresponding ``doc.*`` table.
-"""
 
 from __future__ import annotations
 

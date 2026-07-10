@@ -66,8 +66,6 @@ async def test_query_analytics_aggregates(
     now = datetime.now(timezone.utc)
     base = now - timedelta(hours=1)
 
-    # Two executions of the same logical query, one by user_a and one by user_b.
-    # The first execution has two snapshots (should count as one execution).
     rows = [
         NativeQueryMetric(
             collected_at=base + timedelta(minutes=1),
@@ -108,7 +106,6 @@ async def test_query_analytics_aggregates(
             query_hash="hash1",
             query_duration_ms=200.0,
         ),
-        # A completely different query.
         NativeQueryMetric(
             collected_at=base + timedelta(minutes=4),
             database_id=database.id,
@@ -139,7 +136,6 @@ async def test_query_analytics_aggregates(
     assert select_item["execution_count"] == 2
     assert select_item["unique_users"] == 2
     assert select_item["unique_applications"] == 2
-    # Avg of per-execution averages: (125.0 + 200.0) / 2
     assert select_item["avg_duration_ms"] == pytest.approx(162.5, rel=1e-3)
     assert select_item["total_duration_ms"] == pytest.approx(325.0, rel=1e-3)
     assert select_item["max_duration_ms"] == pytest.approx(200.0, rel=1e-3)

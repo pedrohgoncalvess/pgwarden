@@ -86,7 +86,6 @@ async def get_analytics_data(
 
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
-    # Tables for filter + mapping
     tables_result = await db.execute(
         select(Table.id, Table.schema_name, Table.name)
         .where(
@@ -100,7 +99,6 @@ async def get_analytics_data(
         for row in tables_result.all()
     ]
 
-    # Database size history
     db_size_result = await db.execute(
         select(DatabaseStat.collected_at, DatabaseStat.db_size_bytes)
         .where(
@@ -118,7 +116,6 @@ async def get_analytics_data(
         for row in db_size_result.all()
     ]
 
-    # Table size history
     filters = [
         TableMetric.table_id.in_([t.id for t in tables]),
         TableMetric.collected_at >= start_dt,
@@ -192,7 +189,6 @@ async def get_index_analytics(
 
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
-    # Tables for filter + mapping
     tables_result = await db.execute(
         select(Table.id, Table.schema_name, Table.name)
         .where(
@@ -207,7 +203,6 @@ async def get_index_analytics(
     ]
     table_id_set = {t.id for t in tables}
 
-    # Indexes for filter + mapping
     index_query = (
         select(
             Index.id,
@@ -253,7 +248,6 @@ async def get_index_analytics(
         requested_index_ids = set(index_ids)
         index_id_set = index_id_set & requested_index_ids
 
-    # Index metrics history
     metric_filters = [
         IndexMetric.index_id.in_(list(index_id_set)),
         IndexMetric.collected_at >= start_dt,
@@ -276,7 +270,6 @@ async def get_index_analytics(
     )
     metric_rows = metric_result.all()
 
-    # Build history per index
     history_by_index: dict[int, List[IndexMetricPoint]] = {idx_id: [] for idx_id in index_id_set}
     timeline_by_time: dict[datetime, dict[str, int]] = {}
     for row in metric_rows:
@@ -311,7 +304,6 @@ async def get_index_analytics(
         for ts, agg in sorted(timeline_by_time.items())
     ]
 
-    # Build index items
     index_info_by_id = {row[0]: row for row in index_rows}
     items: List[IndexAnalyticsItem] = []
     for idx_id in index_id_set:
@@ -358,7 +350,6 @@ async def get_index_analytics(
             or term in item.schema_name.lower()
         ]
 
-    # KPIs
     total_size = sum(item.latest_size_bytes for item in items)
     hit_rates_for_kpi = [item.hit_rate for item in items if item.hit_rate is not None]
     avg_hit_rate_kpi = _safe_avg(hit_rates_for_kpi)

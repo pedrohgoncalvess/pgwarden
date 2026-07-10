@@ -1,4 +1,3 @@
-"""Helpers for building tag embedding text."""
 
 from database.models.doc.tag import Tag
 

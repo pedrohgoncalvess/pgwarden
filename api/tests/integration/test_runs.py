@@ -12,7 +12,6 @@ from utils import encrypt
 
 @pytest_asyncio.fixture
 async def test_server_with_run(db_session):
-    """Creates a test server, database and an active database config run."""
     server = Server(
         name="Test Server",
         host="localhost",

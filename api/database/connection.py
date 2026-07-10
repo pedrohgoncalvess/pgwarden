@@ -1,20 +1,3 @@
-"""
-Asynchronous PostgreSQL Database Connection Module with SQLAlchemy
-
-This module provides an async connection wrapper for PostgreSQL databases using SQLAlchemy
-with asyncpg driver. It handles connection management, automatic resource cleanup, and
-supports both context manager and manual connection patterns.
-
-The module automatically configures the event loop policy for Windows compatibility
-and retrieves database credentials from environment variables.
-
-Environment Variables Required:
-    DB_HOST: PostgreSQL server hostname or IP address
-    DB_PORT: PostgreSQL server port (typically 5432)
-    DB_USER: Database username
-    DB_PASSWORD: Database user password
-    DB_NAME: Database name to connect to
-"""
 import asyncio
 import sys
 from typing import Optional

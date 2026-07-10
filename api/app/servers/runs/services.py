@@ -15,7 +15,6 @@ from database.models.metadata.database import Database
 
 
 def _serialize_run_snapshot(item: dict) -> dict:
-    """Serialize a run snapshot for SSE payloads."""
     next_run = item.get("next_run_at")
     if isinstance(next_run, datetime):
         next_run = next_run.isoformat()

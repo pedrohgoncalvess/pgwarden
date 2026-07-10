@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from database.models.base_model import Base
 
 
-class ColumnModel(Base): # Renamed from Column to avoid conflict with sqlalchemy.Column
+class ColumnModel(Base):
     __tablename__ = "column"
     __table_args__ = {"schema": "metadata"}
 

@@ -12,7 +12,7 @@ class Database(Base):
     __table_args__ = {"schema": "metadata"}
 
     id           = Column(BigInteger, primary_key=True, autoincrement=True)
-    oid          = Column(BigInteger, nullable=True) # OID is usually 4 bytes, BigInteger is safe
+    oid          = Column(BigInteger, nullable=True)
     public_id    = Column(UUID(as_uuid=True), nullable=False, server_default=func.uuid_generate_v4(), unique=True)
     server_id    = Column(BigInteger, ForeignKey("collector.server.id", ondelete="CASCADE"), nullable=False)
     db_name      = Column(Text, nullable=False)

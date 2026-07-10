@@ -109,7 +109,6 @@ async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
 
 
 def _transient_tag(name: str, description: str | None, type: str) -> Tag:
-    """Return an unsaved Tag instance used only to build an embedding text."""
     return Tag(name=name, description=description, type=type)
 
 
