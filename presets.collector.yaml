@@ -1,0 +1,138 @@
+presets:
+  # collector:
+  #   table_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   column_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   index_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   table_metric_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   column_metric_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   index_metric_collector:
+  #     interval: 1800
+  #     enabled: true
+  #   database_stat_collector:
+  #     interval: 3
+  #     enabled: true
+  #   lock_metric_collector:
+  #     interval: 3
+  #     enabled: true
+  #   session_metric_collector:
+  #     interval: 3
+  #     enabled: true
+  #   native_query_collector:
+  #     interval: 0.5
+  #     enabled: true
+  #   cpu_collector:
+  #     interval: 20
+  #     enabled: true
+  #   ram_collector:
+  #     interval: 20
+  #     enabled: true
+  #   io_collector:
+  #     interval: 5
+  #     enabled: true
+  #   disk_collector:
+  #     interval: 1800
+  #     enabled: true
+
+  ## Preset: conservative — less frequent collection, lower overhead.
+  # collector:
+    # # preset: conservative
+    # description: "Less frequent collection, lower overhead on the monitored server."
+    # table_collector:
+      # interval: 3600
+      # enabled: true
+    # column_collector:
+      # interval: 3600
+      # enabled: true
+    # index_collector:
+      # interval: 3600
+      # enabled: true
+    # table_metric_collector:
+      # interval: 3600
+      # enabled: true
+    # column_metric_collector:
+      # interval: 3600
+      # enabled: true
+    # index_metric_collector:
+      # interval: 3600
+      # enabled: true
+    # database_stat_collector:
+      # interval: 60
+      # enabled: true
+    # lock_metric_collector:
+      # interval: 10
+      # enabled: true
+    # session_metric_collector:
+      # interval: 10
+      # enabled: true
+    # native_query_collector:
+      # interval: 5
+      # enabled: true
+    # cpu_collector:
+      # interval: 60
+      # enabled: true
+    # ram_collector:
+      # interval: 60
+      # enabled: true
+    # io_collector:
+      # interval: 30
+      # enabled: true
+    # disk_collector:
+      # interval: 3600
+      # enabled: true
+
+  ## Preset: aggressive — more frequent collection, higher overhead but fresher data.
+  # collector:
+    # # preset: aggressive
+    # description: "More frequent collection, higher overhead but fresher data."
+    # table_collector:
+      # interval: 300
+      # enabled: true
+    # column_collector:
+      # interval: 300
+      # enabled: true
+    # index_collector:
+      # interval: 300
+      # enabled: true
+    # table_metric_collector:
+      # interval: 300
+      # enabled: true
+    # column_metric_collector:
+      # interval: 300
+      # enabled: true
+    # index_metric_collector:
+      # interval: 300
+      # enabled: true
+    # database_stat_collector:
+      # interval: 1
+      # enabled: true
+    # lock_metric_collector:
+      # interval: 1
+      # enabled: true
+    # session_metric_collector:
+      # interval: 1
+      # enabled: true
+    # native_query_collector:
+      # interval: 0.1
+      # enabled: true
+    # cpu_collector:
+      # interval: 5
+      # enabled: true
+    # ram_collector:
+      # interval: 5
+      # enabled: true
+    # io_collector:
+      # interval: 1
+      # enabled: true
+    # disk_collector:
+      # interval: 300
+      # enabled: true
