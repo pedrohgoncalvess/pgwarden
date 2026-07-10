@@ -5,10 +5,6 @@ import pytest
 
 
 def test_ensure_every_migration_has_rollback():
-    """
-    Ensures that every .sql file in the migrations directory has a corresponding .rollback.sql file.
-    Failure to provide a rollback will break this test.
-    """
     migrations_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql")
     all_files = glob.glob(os.path.join(migrations_path, "*.sql"))
     
@@ -23,10 +19,6 @@ def test_ensure_every_migration_has_rollback():
     assert not missing_rollbacks, f"The following migrations are missing rollback files: {missing_rollbacks}"
 
 def test_apply_and_rollback_all_migrations(setup_migration_db, backend, migrations):
-    """
-    Executes a full cycle of applying all migrations and then rolling them back.
-    This ensures that both the schema creation and destruction SQL are syntactically correct.
-    """
     with backend.lock():
         backend.apply_migrations(backend.to_apply(migrations))
         

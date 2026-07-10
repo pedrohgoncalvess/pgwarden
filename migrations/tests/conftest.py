@@ -14,12 +14,10 @@ DB_NAME = "pgwarden_migration_test"
 
 @pytest.fixture(scope="session")
 def db_url():
-    """Returns the connection URL for the migration test database."""
     return f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 @pytest.fixture(scope="session")
 def admin_conn():
-    """Provides a connection to the 'postgres' database to manage the test database."""
     conn = psycopg.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -32,7 +30,6 @@ def admin_conn():
 
 @pytest.fixture(scope="session")
 def setup_migration_db(admin_conn):
-    """Creates the migration test database if it does not exist."""
     try:
         with admin_conn.cursor() as cur:
             cur.execute(f"SELECT 1 FROM pg_database WHERE datname = %s", (DB_NAME,))
@@ -44,12 +41,10 @@ def setup_migration_db(admin_conn):
 
 @pytest.fixture
 def backend(db_url):
-    """Provides a Yoyo backend for the test database."""
     backend = get_backend(db_url)
     yield backend
 
 @pytest.fixture
 def migrations():
-    """Reads all migrations from the sql directory."""
     migrations_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql")
     return read_migrations(migrations_path)

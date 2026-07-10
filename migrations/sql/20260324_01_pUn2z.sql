@@ -503,7 +503,7 @@ CREATE TABLE "metric"."lock" (
 
     CONSTRAINT lock_metric_pk PRIMARY KEY (collected_at, database_id, holder_pid, type, mode, table_id),
     CONSTRAINT lock_metric_database_fk FOREIGN KEY (database_id) REFERENCES "metadata"."database"(id) ON DELETE CASCADE,
-    CONSTRAINT lock_metric_table_fk FOREIGN KEY (table_id) REFERENCES "metadata"."table"(id) ON DELETE CASCADE -- FK NOVA
+    CONSTRAINT lock_metric_table_fk FOREIGN KEY (table_id) REFERENCES "metadata"."table"(id) ON DELETE CASCADE
 );
 
 COMMENT ON TABLE "metric"."lock" IS 'Timeseries data for database locks, identifying holders and waiters.';
