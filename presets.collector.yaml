@@ -1,4 +1,5 @@
 presets:
+  ## Preset - default
   # collector:
   #   table_collector:
   #     interval: 1800
