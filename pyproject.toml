@@ -7,4 +7,5 @@ dependencies = []
 [tool.uv.workspace]
 members = [
     "analytics",
+    "notifier",
 ]
