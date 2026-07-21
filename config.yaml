@@ -29,42 +29,93 @@ servers:
       # table_collector:
       #   interval: 1800
       #   enabled: true
-      # column_collector:
-      #   interval: 1800
-      #   enabled: true
-      # index_collector:
-      #   interval: 1800
-      #   enabled: true
-      # table_metric_collector:
-      #   interval: 1800
-      #   enabled: true
-      # column_metric_collector:
-      #   interval: 1800
-      #   enabled: true
-      # index_metric_collector:
-      #   interval: 1800
-      #   enabled: true
-      # database_stat_collector:
-      #   interval: 3
-      #   enabled: true
-      # lock_metric_collector:
-      #   interval: 3
-      #   enabled: true
-      # session_metric_collector:
-      #   interval: 3
-      #   enabled: true
-      # native_query_collector:
-      #   interval: 0.5
-      #   enabled: true
-      # cpu_collector:
-      #   interval: 20
-      #   enabled: true
-      # ram_collector:
-      #   interval: 20
-      #   enabled: true
-      # io_collector:
-      #   interval: 5
-      #   enabled: true
-      # disk_collector:
-      #   interval: 1800
-      #   enabled: true
+      ## See presets.collector.yaml for default values and alternative collection presets.
+
+# Notifier configuration -------------------------------------------------------
+# Channels and rules are synced to the database at startup (notifier.channel,
+# notifier.rule and the rule_server/rule_database/rule_table/rule_index scope
+# tables) and re-read from the database on every cycle, so changes made via the
+# API/frontend apply without restart. Credentials are stored encrypted and
+# support ${ENV_VAR} / ${ENV_VAR:-default} interpolation.
+notifier:
+  channels:
+    slack:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_SLACK_WEBHOOK_URL}
+    discord:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_DISCORD_WEBHOOK_URL}
+    teams:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_TEAMS_WEBHOOK_URL}
+    email:
+      enabled: false
+      credentials:
+        host: ${NOTIFIER_SMTP_HOST}
+        port: ${NOTIFIER_SMTP_PORT:-587}
+        username: ${NOTIFIER_SMTP_USERNAME}
+        password: ${NOTIFIER_SMTP_PASSWORD}
+        from: ${NOTIFIER_SMTP_FROM}
+        to: ${NOTIFIER_SMTP_TO}
+
+  # Monitoring rules. Each rule has its own interval/cooldown/window and a list
+  # of typed targets per scope (server, database, table, index).
+  # Targets accept an explicit name list (servers/databases/tables/indexes) or
+  # filters; a name list takes precedence and ignores the filters. Omitting both
+  # applies the target to ALL entities of that scope.
+  # If no rule exists in the database, a "default" rule with built-in
+  # thresholds for every type is seeded automatically at startup.
+  rules:
+    - name: default
+      interval: 60       # Seconds between evaluations of this rule.
+      cooldown: 1800     # Minimum seconds between repeated alerts for the same target+entity+severity.
+      window_minutes: 5  # Data window considered in each evaluation.
+      enabled: true
+      server:
+        - type: cpu_percent      # cpu_percent | ram_percent | disk_percent
+          warning: 85
+          critical: 95
+          # servers:           # Restrict to specific servers. Omit for all.
+          #   - local
+      database:
+        - type: cache_hit_ratio  # growth_percent | cache_hit_ratio | deadlocks | tup_updated | tup_deleted
+                                 # long_query_ms | waiting_sessions | blocked_locks
+                                 # table_created | table_dropped | index_created | index_dropped
+          warning: 0.95
+          critical: 0.90
+          direction: below
+          # databases:         # Restrict to specific databases. Omit for all.
+          #   - postgres
+          #   - app_db
+      table:
+        - type: growth_percent   # growth_percent | dead_tuples | dead_tuple_ratio | column_added
+          warning: 20
+          critical: 50
+          # tables:                        # Explicit list (mapping or db.schema.table string).
+          #   - database: postgres
+          #     schema: public
+          #     table: users
+          #   - app_db.audit.events
+          # --- or filters (ignored when tables is set) ---
+          # database: postgres             # Restrict to one database.
+          # schemas:           # Restrict to these schemas. Omit for all schemas.
+          #   - public
+          #   - audit
+          # table_regex: "^fact_"          # Only tables matching the regex.
+      index:
+        - type: hit_rate         # hit_rate
+          warning: 0.90
+          critical: 0.80
+          direction: below
+          # indexes:                       # Explicit list (mapping or database.index string).
+          #   - database: postgres
+          #     index: users_email_idx
+          # --- or filters (ignored when indexes is set) ---
+          # database: postgres
+          # tables:            # All indexes of these tables.
+          #   - users
+          #   - orders
+          # index_regex: "_pkey$"          # Only indexes matching the regex.
