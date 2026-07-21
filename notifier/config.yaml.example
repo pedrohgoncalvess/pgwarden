@@ -1,0 +1,137 @@
+notifier:
+  channels:
+    slack:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_SLACK_WEBHOOK_URL}
+    discord:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_DISCORD_WEBHOOK_URL}
+    teams:
+      enabled: false
+      credentials:
+        webhook_url: ${NOTIFIER_TEAMS_WEBHOOK_URL}
+    email:
+      enabled: false
+      credentials:
+        host: ${NOTIFIER_SMTP_HOST}
+        port: ${NOTIFIER_SMTP_PORT:-587}
+        username: ${NOTIFIER_SMTP_USERNAME}
+        password: ${NOTIFIER_SMTP_PASSWORD}
+        from: ${NOTIFIER_SMTP_FROM}
+        to: ${NOTIFIER_SMTP_TO}
+
+  rules:
+    - name: default
+      interval: 60
+      cooldown: 1800
+      window_minutes: 5
+      enabled: true
+      server:
+        - type: cpu_percent
+          warning: 85
+          critical: 95
+        - type: ram_percent
+          warning: 90
+          critical: 95
+        - type: disk_percent
+          warning: 90
+          critical: 97
+      database:
+        - type: growth_percent
+          warning: 10
+          critical: 25
+        - type: cache_hit_ratio
+          warning: 0.95
+          critical: 0.90
+          direction: below
+        - type: deadlocks
+          warning: 1
+          critical: 5
+        - type: tup_updated
+          warning: 100000
+          critical: 1000000
+        - type: tup_deleted
+          warning: 100000
+          critical: 1000000
+        - type: long_query_ms
+          warning: 30000
+          critical: 120000
+        - type: waiting_sessions
+          warning: 5
+          critical: 20
+        - type: blocked_locks
+          warning: 1
+          critical: 5
+        - type: table_created
+          warning: 1
+          critical: 10
+        - type: table_dropped
+          warning: 1
+          critical: 5
+        - type: index_created
+          warning: 1
+          critical: 10
+        - type: index_dropped
+          warning: 1
+          critical: 5
+      table:
+        - type: growth_percent
+          warning: 20
+          critical: 50
+        - type: dead_tuples
+          warning: 10000
+          critical: 100000
+        - type: dead_tuple_ratio
+          warning: 0.2
+          critical: 0.5
+        - type: column_added
+          warning: 1
+          critical: 5
+      index:
+        - type: hit_rate
+          warning: 0.90
+          critical: 0.80
+          direction: below
+
+    - name: exemplo-regra-especifica
+      interval: 300
+      cooldown: 3600
+      window_minutes: 60
+      enabled: false
+      database:
+        - type: cache_hit_ratio
+          databases:
+            - postgres
+            - app_db
+          warning: 0.95
+          critical: 0.90
+          direction: below
+      table:
+        - type: growth_percent
+          tables:
+            - database: postgres
+              schema: public
+              table: users
+            - app_db.audit.events
+          warning: 10
+          critical: 30
+        - type: dead_tuple_ratio
+          database: app_db
+          schemas:
+            - public
+            - audit
+          table_regex: "^fact_"
+          warning: 0.1
+          critical: 0.4
+      index:
+        - type: hit_rate
+          database: app_db
+          tables:
+            - users
+            - orders
+          index_regex: "_pkey$"
+          warning: 0.90
+          critical: 0.80
+          direction: below
