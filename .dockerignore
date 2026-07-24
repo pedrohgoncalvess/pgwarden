@@ -1,0 +1,14 @@
+.git
+.venv
+.uv-cache
+**/.venv
+**/.venv.*
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+frontend/.svelte-kit
+frontend/build
+test-results
+.env
+.env.*
+!.env.*.example
