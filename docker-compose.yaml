@@ -105,6 +105,34 @@ services:
     networks:
       - pgwarden_network
 
+  notifier:
+    build:
+      context: .
+      dockerfile: notifier/Dockerfile
+    container_name: pgwarden_notifier
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    # To use a dedicated env file for the notifier service, create .env.notifier
+    # env_file:
+    #  - .env.notifier
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - pgwarden_network
+
   frontend:
     build:
       context: ./frontend
