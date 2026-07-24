@@ -20,4 +20,5 @@ from database.models.notifier import (
     RuleDatabase,
     RuleTable,
     RuleIndex,
+    NotifierChannel,
 )
