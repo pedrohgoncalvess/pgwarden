@@ -8,6 +8,7 @@
 set -e
 
 TEST_DB_PORT="5437"
+NOTIFIER_VENV="$(pwd)/.venv.test"
 
 export DB_HOST="localhost"
 export DB_PORT="$TEST_DB_PORT"
@@ -30,7 +31,7 @@ cleanup() {
   echo ""
   echo -e "${YELLOW}Cleaning up...${NC}"
   docker compose -f docker-compose.test.yaml down 2>/dev/null || true
-  rm -rf migrations/.venv.test api/.venv.test
+  rm -rf migrations/.venv.test api/.venv.test "$NOTIFIER_VENV"
   echo -e "${GREEN}Done.${NC}"
 }
 trap cleanup EXIT
@@ -40,20 +41,21 @@ echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  PGWarden Test Suite${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
-echo -e "${YELLOW}[1/5] Starting test database on port $TEST_DB_PORT...${NC}"
+echo -e "${YELLOW}[1/6] Starting test database on port $TEST_DB_PORT...${NC}"
 docker compose -f docker-compose.test.yaml up -d --wait
 echo -e "${GREEN}Database is ready.${NC}"
 echo ""
 
 mkdir -p test-results
 
-echo -e "${YELLOW}[2/5] Creating isolated test environments...${NC}"
+echo -e "${YELLOW}[2/6] Creating isolated test environments...${NC}"
 UV_PROJECT_ENVIRONMENT=.venv.test uv sync --directory migrations --quiet
 UV_PROJECT_ENVIRONMENT=.venv.test uv sync --directory api --quiet
+UV_PROJECT_ENVIRONMENT="$NOTIFIER_VENV" uv sync --directory notifier --quiet
 echo -e "${GREEN}Environments ready.${NC}"
 echo ""
 
-echo -e "${YELLOW}[3/5] Running migration tests...${NC}"
+echo -e "${YELLOW}[3/6] Running migration tests...${NC}"
 cd migrations
 UV_PROJECT_ENVIRONMENT=.venv.test uv run pytest tests/ \
   --html=../test-results/migration-report.html \
@@ -68,7 +70,7 @@ else
 fi
 echo ""
 
-echo -e "${YELLOW}[4/5] Running API tests...${NC}"
+echo -e "${YELLOW}[4/6] Running API tests...${NC}"
 cd api
 PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test uv run pytest tests/ \
   --html=../test-results/api-report.html \
@@ -83,7 +85,22 @@ else
 fi
 echo ""
 
-echo -e "${YELLOW}[5/5] Stopping test database...${NC}"
+echo -e "${YELLOW}[5/6] Running notifier tests...${NC}"
+cd notifier
+UV_PROJECT_ENVIRONMENT="$NOTIFIER_VENV" uv run pytest tests/ \
+  --html=../test-results/notifier-report.html \
+  --self-contained-html -v
+NOTIFIER_EXIT=$?
+cd ..
+
+if [ $NOTIFIER_EXIT -eq 0 ]; then
+  echo -e "${GREEN}Notifier tests PASSED.${NC}"
+else
+  echo -e "${RED}Notifier tests FAILED.${NC}"
+fi
+echo ""
+
+echo -e "${YELLOW}[6/6] Stopping test database...${NC}"
 echo ""
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  Results${NC}"
@@ -101,11 +118,17 @@ else
   echo -e "  API:        ${RED}FAILED${NC}"
 fi
 
+if [ $NOTIFIER_EXIT -eq 0 ]; then
+  echo -e "  Notifier:   ${GREEN}PASSED${NC}"
+else
+  echo -e "  Notifier:   ${RED}FAILED${NC}"
+fi
+
 echo ""
 echo -e "  Reports: ${GRAY}test-results/${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-if [ $MIGRATION_EXIT -ne 0 ] || [ $API_EXIT -ne 0 ]; then
+if [ $MIGRATION_EXIT -ne 0 ] || [ $API_EXIT -ne 0 ] || [ $NOTIFIER_EXIT -ne 0 ]; then
   exit 1
 fi
