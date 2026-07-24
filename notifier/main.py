@@ -17,12 +17,15 @@ async def run():
     config = load_notifier_config()
     connection = DatabaseConnection()
 
-    async with connection.connect() as session:
-        await sync_config(session, config)
-    logger.info("Notifier iniciado — %d regra(s) sincronizada(s)", len(config.rules))
+    try:
+        async with connection.connect() as session:
+            await sync_config(session, config)
+        logger.info("Notifier iniciado — %d regra(s) sincronizada(s)", len(config.rules))
 
-    evaluator = Evaluator()
-    await evaluator.run_forever(connection.connect)
+        evaluator = Evaluator()
+        await evaluator.run_forever(connection.connect)
+    finally:
+        await connection.close()
 
 
 def main():
