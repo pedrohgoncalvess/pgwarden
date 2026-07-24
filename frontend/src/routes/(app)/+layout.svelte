@@ -35,7 +35,6 @@
 
 	const settingsItems = [
 		{ name: 'Connections', href: '/settings/connections', icon: 'lan', needsDb: false },
-		{ name: 'Alerts', href: '/settings/alerts', icon: 'notifications', needsDb: false },
 		{ name: 'Account', href: '/settings/account', icon: 'manage_accounts', needsDb: false }
 	];
 
@@ -214,6 +213,27 @@
 						{/each}
 					</div>
 				{/if}
+			</nav>
+
+			
+			<nav class="space-y-1">
+				<a
+					href="/alerts"
+					class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {isActive(
+						'/alerts',
+						$page.url.pathname
+					)
+						? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg'
+						: 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
+				>
+					<span
+						class="material-symbols-outlined mr-3"
+						style={isActive('/alerts', $page.url.pathname)
+							? "font-variation-settings: 'FILL' 1;"
+							: ''}>notifications</span
+					>
+					<span class="font-body-md text-body-md">Alerts</span>
+				</a>
 			</nav>
 
 			
