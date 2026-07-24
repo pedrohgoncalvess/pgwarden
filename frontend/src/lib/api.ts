@@ -1216,6 +1216,107 @@ export async function searchMetadata(options: {
 	return res.json();
 }
 
+export type NotifierThreshold = {
+	id: number;
+	rule_id: number;
+	scope: 'server' | 'database' | 'table' | 'index';
+	type: string;
+	entity_id: number | null;
+	warning: number;
+	critical: number;
+	direction: 'above' | 'below';
+};
+
+export type NotifierRule = {
+	id: number;
+	name: string;
+	interval_seconds: number;
+	cooldown_seconds: number;
+	window_minutes: number;
+	enabled: boolean;
+	created_at: string | null;
+	updated_at: string | null;
+	thresholds: NotifierThreshold[];
+};
+
+export type NotifierRulePatch = {
+	interval_seconds?: number;
+	cooldown_seconds?: number;
+	window_minutes?: number;
+	enabled?: boolean;
+};
+
+export type NotifierThresholdPatch = {
+	warning?: number;
+	critical?: number;
+	direction?: 'above' | 'below';
+};
+
+export async function listNotifierRules(): Promise<NotifierRule[]> {
+	const res = await fetch('/api/v1/notifier/rules', {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list notifier rules: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function patchNotifierRule(
+	ruleId: number,
+	patch: NotifierRulePatch
+): Promise<NotifierRule> {
+	const res = await fetch(`/api/v1/notifier/rules/${ruleId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update notifier rule: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function patchNotifierThreshold(
+	ruleId: number,
+	scope: NotifierThreshold['scope'],
+	thresholdId: number,
+	patch: NotifierThresholdPatch
+): Promise<NotifierThreshold> {
+	const res = await fetch(
+		`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`,
+		{
+			method: 'PATCH',
+			headers: authHeaders(),
+			body: JSON.stringify(patch)
+		}
+	);
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update notifier threshold: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function deleteNotifierThreshold(
+	ruleId: number,
+	scope: NotifierThreshold['scope'],
+	thresholdId: number
+): Promise<void> {
+	const res = await fetch(
+		`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`,
+		{
+			method: 'DELETE',
+			headers: authHeaders()
+		}
+	);
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to delete notifier threshold: ${res.status}`);
+	}
+}
+
 export {
 	type DatabaseListItem,
 	type DatabaseStats,
