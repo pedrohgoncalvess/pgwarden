@@ -25,6 +25,7 @@ from app.servers.metrics.router import router as srv_metrics_router
 from app.tags.router import router as tags_router
 from app.databases.docs.router import router as docs_router
 from app.metadata.search.router import router as metadata_search_router
+from app.notifier.router import router as notifier_router
 from app.databases.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
 from database.models.base import User
@@ -132,6 +133,10 @@ tags_metadata = [
         "name": "metadata search",
         "description": "Hybrid search over metadata objects, documentation and tags.",
     },
+    {
+        "name": "notifier",
+        "description": "Manage alert rules and their scoped thresholds.",
+    },
 ]
 
 app = FastAPI(
@@ -185,3 +190,4 @@ app.include_router(srv_metrics_router, prefix="/v1")
 app.include_router(tags_router, prefix="/v1")
 app.include_router(docs_router, prefix="/v1")
 app.include_router(metadata_search_router, prefix="/v1")
+app.include_router(notifier_router, prefix="/v1")
