@@ -6,11 +6,18 @@ from database.models.metadata import (
     IndexColumn, TableHistory, ColumnHistory, IndexHistory
 )
 from database.models.metric import (
-    TableMetric, IndexMetric, ColumnMetric, 
+    TableMetric, IndexMetric, ColumnMetric,
     SessionMetric, LockMetric, NativeQueryMetric
 )
 from database.models.doc import (
     DatabaseDoc, SchemaDoc, TableDoc, ColumnDoc, IndexDoc, Tag,
     DatabaseDocTag, SchemaDocTag, TableDocTag, ColumnDocTag, IndexDocTag,
     DatabaseTag, TableTag, ColumnTag, IndexTag, QueryTag
+)
+from database.models.notifier import (
+    NotifierRule,
+    RuleServer,
+    RuleDatabase,
+    RuleTable,
+    RuleIndex,
 )
