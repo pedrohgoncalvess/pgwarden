@@ -1222,6 +1222,7 @@ export type NotifierThreshold = {
 	scope: 'server' | 'database' | 'table' | 'index';
 	type: string;
 	entity_id: number | null;
+	entity_public_id: string | null;
 	warning: number;
 	critical: number;
 	direction: 'above' | 'below';
@@ -1246,10 +1247,39 @@ export type NotifierRulePatch = {
 	enabled?: boolean;
 };
 
+export type NotifierRuleCreate = {
+	name: string;
+	interval_seconds?: number;
+	cooldown_seconds?: number;
+	window_minutes?: number;
+	enabled?: boolean;
+};
+
 export type NotifierThresholdPatch = {
 	warning?: number;
 	critical?: number;
 	direction?: 'above' | 'below';
+};
+
+export type NotifierThresholdCreate = {
+	scope: NotifierThreshold['scope'];
+	type: string;
+	entity_public_id?: string | null;
+	warning: number;
+	critical: number;
+	direction?: 'above' | 'below';
+};
+
+export type NotifierChannel = {
+	id: number;
+	name: string;
+	enabled: boolean;
+	has_credentials: boolean;
+};
+
+export type NotifierChannelPatch = {
+	enabled?: boolean;
+	credentials?: Record<string, string | number>;
 };
 
 export async function listNotifierRules(): Promise<NotifierRule[]> {
@@ -1258,6 +1288,29 @@ export async function listNotifierRules(): Promise<NotifierRule[]> {
 	});
 	if (!res.ok) {
 		throw new Error(`Failed to list notifier rules: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function listNotifierRuleTypes(): Promise<Record<string, string[]>> {
+	const res = await fetch('/api/v1/notifier/rule-types', {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list notifier rule types: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function createNotifierRule(data: NotifierRuleCreate): Promise<NotifierRule> {
+	const res = await fetch('/api/v1/notifier/rules', {
+		method: 'POST',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to create notifier rule: ${res.status}`);
 	}
 	return res.json();
 }
@@ -1274,6 +1327,22 @@ export async function patchNotifierRule(
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail || `Failed to update notifier rule: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function createNotifierThreshold(
+	ruleId: number,
+	data: NotifierThresholdCreate
+): Promise<NotifierThreshold> {
+	const res = await fetch(`/api/v1/notifier/rules/${ruleId}/thresholds`, {
+		method: 'POST',
+		headers: authHeaders(),
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to create notifier threshold: ${res.status}`);
 	}
 	return res.json();
 }
@@ -1315,6 +1384,32 @@ export async function deleteNotifierThreshold(
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail || `Failed to delete notifier threshold: ${res.status}`);
 	}
+}
+
+export async function listNotifierChannels(): Promise<NotifierChannel[]> {
+	const res = await fetch('/api/v1/notifier/channels', {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to list notifier channels: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function patchNotifierChannel(
+	channelId: number,
+	patch: NotifierChannelPatch
+): Promise<NotifierChannel> {
+	const res = await fetch(`/api/v1/notifier/channels/${channelId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to update notifier channel: ${res.status}`);
+	}
+	return res.json();
 }
 
 export {
