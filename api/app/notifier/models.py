@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -10,6 +11,7 @@ class ThresholdResponse(BaseModel):
     scope: str
     type: str
     entity_id: Optional[int] = None
+    entity_public_id: Optional[UUID] = None
     warning: float
     critical: float
     direction: str
@@ -27,6 +29,22 @@ class ThresholdPatch(BaseModel):
     def _validate_direction(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return value
+        if value not in {"above", "below"}:
+            raise ValueError("direction must be 'above' or 'below'")
+        return value
+
+
+class ThresholdCreate(BaseModel):
+    scope: str
+    type: str
+    entity_public_id: Optional[UUID] = None
+    warning: float
+    critical: float
+    direction: str = "above"
+
+    @field_validator("direction")
+    @classmethod
+    def _validate_direction(cls, value: str) -> str:
         if value not in {"above", "below"}:
             raise ValueError("direction must be 'above' or 'below'")
         return value
@@ -51,3 +69,25 @@ class RulePatch(BaseModel):
     cooldown_seconds: Optional[float] = None
     window_minutes: Optional[float] = None
     enabled: Optional[bool] = None
+
+
+class RuleCreate(BaseModel):
+    name: str
+    interval_seconds: float = 60
+    cooldown_seconds: float = 1800
+    window_minutes: float = 5
+    enabled: bool = True
+
+
+class ChannelResponse(BaseModel):
+    id: int
+    name: str
+    enabled: bool
+    has_credentials: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChannelPatch(BaseModel):
+    enabled: Optional[bool] = None
+    credentials: Optional[Dict[str, Any]] = None
