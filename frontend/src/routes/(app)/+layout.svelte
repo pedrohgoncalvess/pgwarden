@@ -38,7 +38,16 @@
 		{ name: 'Account', href: '/settings/account', icon: 'manage_accounts', needsDb: false }
 	];
 
+	const alertsItems = [
+		{ name: 'Server', href: '/alerts/server', icon: 'dns' },
+		{ name: 'Database', href: '/alerts/database', icon: 'database' },
+		{ name: 'Table', href: '/alerts/table', icon: 'table' },
+		{ name: 'Index', href: '/alerts/index', icon: 'speed' },
+		{ name: 'Configuration', href: '/alerts/configuration', icon: 'settings' }
+	];
+
 	let expandedAnalytics = $state($page.url.pathname.startsWith('/analytics'));
+	let expandedAlerts = $state($page.url.pathname.startsWith('/alerts'));
 	let expandedRuns = $state($page.url.pathname.startsWith('/runs'));
 	let expandedRunsSettings = $state(
 		/^\/runs\/[^/]+\/settings\/(server|database)/.test($page.url.pathname)
@@ -84,6 +93,7 @@
 		}
 
 		if (isActive('/analytics', currentPath)) expandedAnalytics = true;
+		if (isActive('/alerts', currentPath)) expandedAlerts = true;
 		if (isActive('/runs', currentPath)) expandedRuns = true;
 		if (/^\/runs\/[^/]+\/settings\/(server|database)/.test(currentPath)) expandedRunsSettings = true;
 		if (isActive('/metadata', currentPath)) expandedMetadata = true;
@@ -169,23 +179,49 @@
 
 			
 			<nav class="space-y-1">
-				<a
-					href="/alerts"
-					class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {isActive(
-						'/alerts',
-						$page.url.pathname
-					)
-						? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg'
-						: 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
+				<button
+					onclick={() => (expandedAlerts = !expandedAlerts)}
+					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
 				>
+					<div class="flex items-center">
+						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
+							>notifications</span
+						>
+						<span class="font-body-md text-body-md">Alerts</span>
+					</div>
 					<span
-						class="material-symbols-outlined mr-3"
-						style={isActive('/alerts', $page.url.pathname)
-							? "font-variation-settings: 'FILL' 1;"
-							: ''}>notifications</span
+						class="material-symbols-outlined text-[18px] transition-transform duration-200"
+						style="transform: rotate({expandedAlerts ? 180 : 0}deg)">expand_more</span
 					>
-					<span class="font-body-md text-body-md">Alerts</span>
-				</a>
+				</button>
+				{#if expandedAlerts}
+					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
+						{#each alertsItems as item}
+							{@const active = isActive(item.href, $page.url.pathname)}
+							{#if active}
+								<a
+									href={$page.url.pathname}
+									aria-current="page"
+									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+								>
+									<span
+										class="material-symbols-outlined mr-3"
+										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+									>
+									<span class="font-body-md text-body-md">{item.name}</span>
+								</a>
+							{:else}
+								<a
+									href={item.href}
+									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+								>
+									<span class="material-symbols-outlined mr-3">{item.icon}</span>
+									<span class="font-body-md text-body-md">{item.name}</span>
+								</a>
+							{/if}
+						{/each}
+					</div>
+				{/if}
 			</nav>
 
 			
