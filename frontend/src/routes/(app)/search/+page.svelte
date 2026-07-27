@@ -478,6 +478,7 @@
 						</button>
 					{/each}
 				</div>
+			</div>
 		{:else if searched && !loading && filteredResults.length === 0}
 			<div class="rounded-lg border border-outline-variant bg-surface-container px-6 py-16 text-center">
 				<span class="material-symbols-outlined mb-3 text-[40px] text-on-surface-variant">search_off</span>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PGWarden Sidebar Re-creation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#4fdbc8",
+                        "on-tertiary-container": "#6c2106",
+                        "inverse-surface": "#dde4e1",
+                        "chart-1": "#0d9488",
+                        "error-container": "#93000a",
+                        "on-tertiary": "#5e1800",
+                        "on-secondary-fixed": "#001a42",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed-variant": "#005048",
+                        "secondary-fixed-dim": "#adc6ff",
+                        "on-secondary-fixed-variant": "#004395",
+                        "primary-fixed-dim": "#4fdbc8",
+                        "on-error-container": "#ffdad6",
+                        "surface-bg": "#0f172a",
+                        "surface-container-high": "#252b2a",
+                        "surface-container-highest": "#2f3634",
+                        "status-danger": "#ef4444",
+                        "surface": "#0e1513",
+                        "surface-bright": "#343b39",
+                        "on-secondary-container": "#e6ecff",
+                        "outline-variant": "#3c4947",
+                        "on-primary-fixed": "#00201c",
+                        "chart-2": "#8b5cf6",
+                        "chart-4": "#eab308",
+                        "chart-3": "#ec4899",
+                        "on-tertiary-fixed": "#3a0b00",
+                        "tertiary-container": "#f38764",
+                        "primary-container": "#14b8a6",
+                        "tertiary-fixed": "#ffdbd0",
+                        "surface-panel": "#1e293b",
+                        "on-error": "#690005",
+                        "on-background": "#dde4e1",
+                        "tertiary": "#ffb59e",
+                        "secondary": "#adc6ff",
+                        "status-healthy": "#10b981",
+                        "surface-tint": "#4fdbc8",
+                        "primary-fixed": "#71f8e4",
+                        "tertiary-fixed-dim": "#ffb59e",
+                        "background": "#0e1513",
+                        "secondary-container": "#0566d9",
+                        "surface-container-lowest": "#090f0e",
+                        "surface-border": "#334155",
+                        "surface-container": "#1a211f",
+                        "on-surface": "#dde4e1",
+                        "secondary-fixed": "#d8e2ff",
+                        "status-info": "#3b82f6",
+                        "inverse-primary": "#006b5f",
+                        "on-surface-variant": "#bbcac6",
+                        "on-tertiary-fixed-variant": "#7c2d11",
+                        "surface-variant": "#2f3634",
+                        "inverse-on-surface": "#2b3230",
+                        "on-primary": "#003731",
+                        "on-primary-container": "#00423b",
+                        "outline": "#859490",
+                        "status-warning": "#f59e0b",
+                        "surface-dim": "#0e1513",
+                        "on-secondary": "#002e6a",
+                        "surface-container-low": "#161d1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-padding": "1.25rem",
+                        "margin": "1.5rem",
+                        "gutter": "1rem",
+                        "compact-gap": "0.5rem"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "body-md": ["Inter"],
+                        "kpi-metric": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "data-mono": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "kpi-metric": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+                        "data-mono": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #0f172a; color: #dde4e1; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .sidebar-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; border-radius: 0.25rem; transition: background-color 0.2s, color 0.2s; cursor: pointer; }
+        .sidebar-item:hover { background-color: #1e293b; color: #4fdbc8; }
+        .sidebar-item.active { background-color: #1e293b; color: #4fdbc8; }
+        .sidebar-nested { padding-left: 2.5rem; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+<!-- Sidebar Re-creation -->
+<aside class="w-64 bg-surface-bg border-r border-surface-border flex flex-col h-full overflow-y-auto">
+<!-- Branding -->
+<div class="p-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center font-bold text-on-primary-container">W</div>
+<span class="font-headline-md text-primary font-bold tracking-tight">pgwarden</span>
+</div>
+<div class="px-4 py-2 font-label-caps text-on-surface-variant uppercase tracking-wider text-xs">MENU</div>
+<!-- Navigation Group -->
+<nav class="flex-1 px-2 space-y-1">
+<div class="sidebar-item font-body-sm text-on-surface">
+<span class="material-symbols-outlined text-lg">search</span>
+<span>Search</span>
+</div>
+<div class="sidebar-item font-body-sm text-on-surface">
+<span class="material-symbols-outlined text-lg">grid_view</span>
+<span>Overview</span>
+</div>
+<div class="sidebar-item font-body-sm text-on-surface">
+<span class="material-symbols-outlined text-lg">schema</span>
+<span>Schema</span>
+</div>
+<div class="sidebar-item font-body-sm text-on-surface">
+<span class="material-symbols-outlined text-lg">dns</span>
+<span>Servers</span>
+</div>
+<!-- Alerts Group (Expanded) -->
+<div class="mt-2">
+<div class="sidebar-item font-body-sm text-on-surface justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-lg">notifications</span>
+<span>Alerts</span>
+</div>
+<span class="material-symbols-outlined text-sm">expand_less</span>
+</div>
+<div class="space-y-1 mt-1">
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">dns</span>
+<span>Server</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">database</span>
+<span>Database</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">table</span>
+<span>Table</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">data_object</span>
+<span>Index</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm active">
+<span class="material-symbols-outlined text-base">settings</span>
+<span>Configuration</span>
+</div>
+</div>
+</div>
+<!-- Analytics Group -->
+<div class="mt-2">
+<div class="sidebar-item font-body-sm text-on-surface justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-lg">analytics</span>
+<span>Analytics</span>
+</div>
+<span class="material-symbols-outlined text-sm">expand_less</span>
+</div>
+<div class="space-y-1 mt-1">
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">bar_chart</span>
+<span>Data</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">search</span>
+<span>Query</span>
+</div>
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">data_object</span>
+<span>Index</span>
+</div>
+</div>
+</div>
+<!-- Runs Group -->
+<div class="mt-2">
+<div class="sidebar-item font-body-sm text-on-surface justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-lg">play_arrow</span>
+<span>Runs</span>
+</div>
+<span class="material-symbols-outlined text-sm">expand_less</span>
+</div>
+<div class="space-y-1 mt-1">
+<div class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-base">bolt</span>
+<span>Live</span>
+</div>
+</div>
+</div>
+</nav>
+<!-- Footer Profile -->
+<div class="border-t border-surface-border p-4 mt-auto">
+<div class="flex items-center justify-between cursor-pointer hover:bg-surface-panel p-2 -mx-2 rounded transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs">
+                        DBA
+                    </div>
+<div class="flex flex-col">
+<span class="font-body-sm text-on-surface font-semibold">admin</span>
+<span class="text-[10px] text-on-surface-variant">Session Active</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">logout</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area (Placeholder for Context) -->
+<main class="flex-1 bg-surface-bg p-8">
+<h1 class="font-headline-lg text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined">notifications</span>
+            Alerts <span class="text-on-surface-variant font-normal text-xl">/ CONFIGURATION</span>
+</h1>
+<div class="bg-surface-panel border border-surface-border rounded-lg p-6 max-w-4xl">
+<h2 class="font-headline-md text-on-surface mb-2 flex items-center gap-2"><span class="material-symbols-outlined">settings</span> Notification channels</h2>
+<p class="font-body-sm text-on-surface-variant mb-6">Configure webhook endpoints for various alerting platforms.</p>
+<div class="space-y-4">
+<!-- Slack Channel -->
+<div class="border border-surface-border rounded p-4 bg-surface-bg">
+<div class="flex items-center gap-2 mb-4">
+<span class="font-bold text-xl">#</span>
+<div>
+<div class="font-bold text-on-surface">Slack</div>
+<div class="font-body-sm text-on-surface-variant text-xs">Send alerts to a Slack channel via incoming webhook.</div>
+</div>
+</div>
+<div>
+<label class="block font-label-caps text-on-surface-variant mb-1">Webhook URL</label>
+<input class="w-full bg-surface-bg border-surface-border rounded px-3 py-2 text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none font-data-mono text-sm" readonly="" type="password" value="********"/>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
