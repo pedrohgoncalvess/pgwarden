@@ -1,5 +1,7 @@
+import asyncio
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -55,23 +57,39 @@ async def fetch_channels(session: AsyncSession) -> list[ChannelRow]:
     return channels
 
 
-async def fetch_rules(session: AsyncSession) -> list[RuleRow]:
-    rules: dict[int, RuleRow] = {}
-
-    for scope, (table, entity_column) in _SCOPE_QUERIES.items():
-        result = await session.execute(
-            text(
-                f"""
-                SELECT r.id AS rule_id, r.name, r.interval_seconds, r.cooldown_seconds, r.window_minutes,
-                       s.id AS scope_id, s.type, s.{entity_column} AS entity_id,
-                       s.warning, s.critical, s.direction
-                FROM notifier.rule r
-                JOIN {table} s ON s.rule_id = r.id
-                WHERE r.enabled
-                """
-            )
+async def _fetch_scope(
+    session: AsyncSession, scope: str, table: str, entity_column: str,
+) -> list[tuple[str, dict]]:
+    """Fetch targets for a single scope, returning (scope, row_dict) pairs."""
+    result = await session.execute(
+        text(
+            f"""
+            SELECT r.id AS rule_id, r.name, r.interval_seconds, r.cooldown_seconds, r.window_minutes,
+                   s.id AS scope_id, s.type, s.{entity_column} AS entity_id,
+                   s.warning, s.critical, s.direction
+            FROM notifier.rule r
+            JOIN {table} s ON s.rule_id = r.id
+            WHERE r.enabled
+            """
         )
-        for row in result.mappings():
+    )
+    return [(scope, dict(row)) for row in result.mappings()]
+
+
+async def fetch_rules(session: AsyncSession) -> list[RuleRow]:
+    """Return all enabled rules with their scope targets.
+
+    The four scope queries run concurrently via ``asyncio.gather``.
+    """
+    tasks = [
+        _fetch_scope(session, scope, table, entity_column)
+        for scope, (table, entity_column) in _SCOPE_QUERIES.items()
+    ]
+    scope_results = await asyncio.gather(*tasks)
+
+    rules: dict[int, RuleRow] = {}
+    for scope_rows in scope_results:
+        for scope, row in scope_rows:
             rule = rules.setdefault(
                 row["rule_id"],
                 RuleRow(
@@ -95,3 +113,30 @@ async def fetch_rules(session: AsyncSession) -> list[RuleRow]:
             )
 
     return list(rules.values())
+
+
+async def fetch_last_notification_time(
+    session: AsyncSession,
+    entity: str,
+    severity: str,
+    metric_type: str,
+) -> datetime | None:
+    """Return the ``created_at`` of the most recent notification matching
+    the given entity, severity, and metric type.
+
+    Used to persist cooldown state across restarts.
+    """
+    result = await session.execute(
+        text(
+            """
+            SELECT MAX(n.created_at) AS last_sent
+            FROM notifier.notification n
+            WHERE n.params ->> 'entity' = :entity
+              AND n.params ->> 'severity' = :severity
+              AND n.params ->> 'type' = :type
+            """
+        ),
+        {"entity": entity, "severity": severity, "type": metric_type},
+    )
+    row = result.first()
+    return row[0] if row and row[0] else None

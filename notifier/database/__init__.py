@@ -4,7 +4,16 @@ from notifier.database.queries import (
     RuleRow,
     ScopeRow,
     fetch_channels,
+    fetch_last_notification_time,
     fetch_rules,
 )
 
-__all__ = ["ChannelRow", "DatabaseConnection", "RuleRow", "ScopeRow", "fetch_channels", "fetch_rules"]
+__all__ = [
+    "ChannelRow",
+    "DatabaseConnection",
+    "RuleRow",
+    "ScopeRow",
+    "fetch_channels",
+    "fetch_last_notification_time",
+    "fetch_rules",
+]

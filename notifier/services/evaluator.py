@@ -3,12 +3,13 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from notifier.channels import Alert, Channel, build_channels
 from notifier.config.load import Threshold
-from notifier.database import fetch_channels, fetch_rules
+from notifier.database import fetch_channels, fetch_last_notification_time, fetch_rules
 from notifier.database.queries import RuleRow
 from notifier.services.notifications import insert_notification
 from notifier.services.rules import RULE_TYPES
@@ -18,46 +19,81 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_TICK_SECONDS = 5.0
 _MAX_TICK_SECONDS = 60.0
+_RETRY_ATTEMPTS = 3
+_RETRY_BASE_DELAY = 1.0
 
 
 class Evaluator:
-    def __init__(self):
-        self._last_sent: dict[tuple[int, str, str], datetime] = {}
+    def __init__(self, *, shutdown_event: asyncio.Event | None = None):
+        self._last_sent: dict[tuple[str, str, str], datetime] = {}
         self._next_run: dict[int, float] = {}
+        self._shutdown = shutdown_event or asyncio.Event()
+        self._http_client: httpx.AsyncClient | None = None
 
     async def run_forever(self, connect) -> None:
-        while True:
-            delay = _DEFAULT_TICK_SECONDS
-            try:
-                async with connect() as session:
-                    rules = await fetch_rules(session)
-                    channels = build_channels(await fetch_channels(session))
+        self._http_client = httpx.AsyncClient(timeout=10)
+        try:
+            while not self._shutdown.is_set():
+                delay = _DEFAULT_TICK_SECONDS
+                try:
+                    async with connect() as session:
+                        now = time.monotonic()
+                        has_due = any(
+                            now >= self._next_run.get(rid, 0.0)
+                            for rid in self._next_run
+                        ) or not self._next_run
 
-                    now = time.monotonic()
-                    due_rules = [rule for rule in rules if now >= self._next_run.get(rule.rule_id, 0.0)]
-                    for rule in due_rules:
-                        alerts = await self._evaluate_rule(session, rule)
-                        for alert in alerts:
-                            try:
-                                await insert_notification(session, alert)
-                            except Exception:
-                                logger.exception("Falha ao registrar notificação %s", alert.rule)
-                        await self._dispatch(alerts, channels)
-                        self._next_run[rule.rule_id] = now + rule.interval
+                        # Only fetch rules/channels when at least one rule
+                        # is due (or on the very first tick).
+                        if has_due:
+                            rules = await fetch_rules(session)
+                            channels = build_channels(
+                                await fetch_channels(session),
+                                client=self._http_client,
+                            )
 
-                    if due_rules:
-                        await session.commit()
+                            due_rules = [
+                                rule for rule in rules
+                                if now >= self._next_run.get(rule.rule_id, 0.0)
+                            ]
+                            for rule in due_rules:
+                                alerts = await self._evaluate_rule(session, rule)
+                                delivered = await self._dispatch(alerts, channels)
+                                for alert in delivered:
+                                    try:
+                                        await insert_notification(session, alert)
+                                    except Exception:
+                                        logger.exception(
+                                            "Falha ao registrar notificação %s", alert.rule,
+                                        )
+                                self._next_run[rule.rule_id] = now + rule.interval
 
-                    live_ids = {rule.rule_id for rule in rules}
-                    self._next_run = {k: v for k, v in self._next_run.items() if k in live_ids}
+                            if due_rules:
+                                await session.commit()
 
-                    upcoming = [run_at - now for run_at in self._next_run.values()]
-                    if upcoming:
-                        delay = min(upcoming)
-            except Exception:
-                logger.exception("Falha no ciclo de avaliação do notifier")
+                            live_ids = {rule.rule_id for rule in rules}
+                            self._next_run = {
+                                k: v for k, v in self._next_run.items() if k in live_ids
+                            }
 
-            await asyncio.sleep(min(max(delay, 1.0), _MAX_TICK_SECONDS))
+                        upcoming = [run_at - now for run_at in self._next_run.values()]
+                        if upcoming:
+                            delay = min(upcoming)
+                except Exception:
+                    logger.exception("Falha no ciclo de avaliação do notifier")
+
+                # Sleep in small increments so we can respond to shutdown quickly.
+                sleep_time = min(max(delay, 1.0), _MAX_TICK_SECONDS)
+                try:
+                    await asyncio.wait_for(
+                        self._shutdown.wait(), timeout=sleep_time,
+                    )
+                    break  # shutdown was set
+                except asyncio.TimeoutError:
+                    pass  # normal tick
+        finally:
+            await self._http_client.aclose()
+            self._http_client = None
 
     async def _evaluate_rule(self, session: AsyncSession, rule: RuleRow) -> list[Alert]:
         alerts: list[Alert] = []
@@ -87,7 +123,9 @@ class Evaluator:
                 if severity is None:
                     continue
 
-                if self._in_cooldown(target.scope_id, entity, severity, rule.cooldown):
+                if await self._in_cooldown(
+                    session, entity, severity, target.type, rule.cooldown,
+                ):
                     continue
 
                 alerts.append(
@@ -104,29 +142,114 @@ class Evaluator:
                         window_minutes=rule.window_minutes,
                     )
                 )
-                self._mark_sent(target.scope_id, entity, severity)
+                self._mark_sent(entity, severity, target.type)
 
         return alerts
 
-    async def _dispatch(self, alerts: list[Alert], channels: list[Channel]) -> None:
+    async def _dispatch(self, alerts: list[Alert], channels: list[Channel]) -> list[Alert]:
+        """Send alerts to all channels concurrently.
+
+        Returns the list of alerts for which at least one channel
+        succeeded — only these should be persisted as notifications.
+        """
+        if not alerts or not channels:
+            return []
+
+        delivered: list[Alert] = []
+
         for alert in alerts:
-            for channel in channels:
-                try:
-                    await channel.send(alert)
-                except Exception:
+            # Dispatch to all channels concurrently with retry.
+            tasks = [
+                self._send_with_retry(channel, alert)
+                for channel in channels
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            any_success = False
+            for channel, result in zip(channels, results):
+                if isinstance(result, Exception):
                     logger.exception(
-                        "Falha ao enviar alerta %s para o canal %s", alert.rule, channel.name
+                        "Falha ao enviar alerta %s para o canal %s: %s",
+                        alert.rule, channel.name, result,
                     )
-            logger.info(
-                "Alerta [%s] %s em %s: %s",
-                alert.severity, alert.rule, alert.entity, alert.message,
+                else:
+                    any_success = True
+
+            if any_success:
+                delivered.append(alert)
+                logger.info(
+                    "Alerta [%s] %s em %s: %s",
+                    alert.severity, alert.rule, alert.entity, alert.message,
+                )
+            else:
+                logger.error(
+                    "Alerta PERDIDO — todos os canais falharam: [%s] %s em %s",
+                    alert.severity, alert.rule, alert.entity,
+                )
+                # Undo the in-memory cooldown so the alert can retry
+                # on the next cycle.
+                self._undo_sent(alert)
+
+        return delivered
+
+    async def _send_with_retry(self, channel: Channel, alert: Alert) -> None:
+        """Send an alert to a single channel with exponential backoff."""
+        last_exc: Exception | None = None
+        for attempt in range(_RETRY_ATTEMPTS):
+            try:
+                await channel.send(alert)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if attempt < _RETRY_ATTEMPTS - 1:
+                    delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Canal %s falhou (tentativa %d/%d), retry em %.1fs: %s",
+                        channel.name, attempt + 1, _RETRY_ATTEMPTS, delay, exc,
+                    )
+                    await asyncio.sleep(delay)
+        raise last_exc  # type: ignore[misc]
+
+    async def _in_cooldown(
+        self,
+        session: AsyncSession,
+        entity: str,
+        severity: str,
+        metric_type: str,
+        cooldown: float,
+    ) -> bool:
+        cd_key = (entity, severity, metric_type)
+
+        # Check in-memory cache first (fast path).
+        last = self._last_sent.get(cd_key)
+        if last is not None:
+            if datetime.now(timezone.utc) - last < timedelta(seconds=cooldown):
+                return True
+
+        # Fall back to the database for persistent cooldown across restarts.
+        try:
+            db_last = await fetch_last_notification_time(
+                session, entity, severity, metric_type,
             )
+            if db_last is not None:
+                # Ensure timezone-aware comparison.
+                if db_last.tzinfo is None:
+                    db_last = db_last.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - db_last < timedelta(seconds=cooldown):
+                    # Populate in-memory cache so subsequent checks are fast.
+                    self._last_sent[cd_key] = db_last
+                    return True
+        except Exception:
+            logger.debug("Failed to check persistent cooldown, relying on in-memory only")
 
-    def _in_cooldown(self, scope_id: int, entity: str, severity: str, cooldown: float) -> bool:
-        last = self._last_sent.get((scope_id, entity, severity))
-        if last is None:
-            return False
-        return datetime.now(timezone.utc) - last < timedelta(seconds=cooldown)
+        return False
 
-    def _mark_sent(self, scope_id: int, entity: str, severity: str) -> None:
-        self._last_sent[(scope_id, entity, severity)] = datetime.now(timezone.utc)
+    def _mark_sent(self, entity: str, severity: str, metric_type: str) -> None:
+        self._last_sent[(entity, severity, metric_type)] = datetime.now(timezone.utc)
+
+    def _undo_sent(self, alert: Alert) -> None:
+        """Remove the in-memory cooldown entry for a failed alert so it
+        can be retried on the next evaluation cycle."""
+        cd_key = (alert.entity, alert.severity, alert.rule)
+        self._last_sent.pop(cd_key, None)
+

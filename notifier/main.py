@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import signal
+import sys
 
 from notifier.config import load_notifier_config, sync_config
 from notifier.database import DatabaseConnection
@@ -16,16 +18,37 @@ logger = logging.getLogger(__name__)
 async def run():
     config = load_notifier_config()
     connection = DatabaseConnection()
+    shutdown_event = asyncio.Event()
+
+    # Register signal handlers for graceful shutdown.
+    loop = asyncio.get_running_loop()
+
+    def _signal_handler():
+        logger.info("Shutdown signal received — stopping notifier gracefully")
+        shutdown_event.set()
+
+    if sys.platform != "win32":
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, _signal_handler)
+    else:
+        # Windows doesn't support add_signal_handler; use signal.signal
+        # as a best-effort fallback.
+        def _win_handler(signum, frame):
+            _signal_handler()
+
+        signal.signal(signal.SIGTERM, _win_handler)
+        signal.signal(signal.SIGINT, _win_handler)
 
     try:
         async with connection.connect() as session:
             await sync_config(session, config)
         logger.info("Notifier iniciado — %d regra(s) sincronizada(s)", len(config.rules))
 
-        evaluator = Evaluator()
+        evaluator = Evaluator(shutdown_event=shutdown_event)
         await evaluator.run_forever(connection.connect)
     finally:
         await connection.close()
+        logger.info("Notifier encerrado")
 
 
 def main():

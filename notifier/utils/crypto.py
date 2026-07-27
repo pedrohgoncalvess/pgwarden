@@ -1,6 +1,11 @@
+import logging
+
 from cryptography.fernet import Fernet, InvalidToken
 
 from notifier.utils.env_var import get_env_var
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_key() -> bytes:
@@ -24,4 +29,8 @@ def decrypt_or_plain(value: any) -> str:
     try:
         return decrypt(value)
     except InvalidToken:
+        logger.warning(
+            "Failed to decrypt value — ENCRYPTION_KEY may be wrong or the "
+            "value was stored unencrypted. Returning raw value as fallback."
+        )
         return str(value)

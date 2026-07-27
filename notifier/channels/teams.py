@@ -6,8 +6,9 @@ from notifier.channels.base import Alert, SEVERITY_COLOR
 class TeamsChannel:
     name = "teams"
 
-    def __init__(self, webhook_url: str):
+    def __init__(self, webhook_url: str, *, client: httpx.AsyncClient | None = None):
         self._webhook_url = webhook_url
+        self._client = client
 
     async def send(self, alert: Alert) -> None:
         payload = {
@@ -27,6 +28,10 @@ class TeamsChannel:
                 }
             ],
         }
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(self._webhook_url, json=payload)
+        if self._client is not None:
+            response = await self._client.post(self._webhook_url, json=payload)
             response.raise_for_status()
+        else:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(self._webhook_url, json=payload)
+                response.raise_for_status()

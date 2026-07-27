@@ -1,4 +1,7 @@
 import logging
+from typing import Any
+
+import httpx
 
 from notifier.channels.base import Alert, Channel
 from notifier.channels.discord import DiscordChannel
@@ -11,7 +14,20 @@ from notifier.database.queries import ChannelRow
 logger = logging.getLogger(__name__)
 
 
-def build_channels(rows: list[ChannelRow]) -> list[Channel]:
+def build_channels(
+    rows: list[ChannelRow],
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> list[Channel]:
+    """Instantiate a channel object for each DB row.
+
+    Parameters
+    ----------
+    client:
+        Optional shared ``httpx.AsyncClient`` reused across all
+        webhook-based channels to avoid creating a new TCP connection
+        pool per alert.
+    """
     channels: list[Channel] = []
     for row in rows:
         builder = _BUILDERS.get(row.name)
@@ -19,7 +35,7 @@ def build_channels(rows: list[ChannelRow]) -> list[Channel]:
             logger.warning("Canal desconhecido ignorado: %s", row.name)
             continue
         try:
-            channels.append(builder(row.credentials))
+            channels.append(builder(row.credentials, client=client))
         except ValueError as error:
             logger.warning("Canal %s ignorado: %s", row.name, error)
     return channels
@@ -32,19 +48,19 @@ def _required(credentials: dict, key: str) -> str:
     return value
 
 
-def _build_slack(credentials: dict) -> Channel:
-    return SlackChannel(_required(credentials, "webhook_url"))
+def _build_slack(credentials: dict, *, client: httpx.AsyncClient | None = None) -> Channel:
+    return SlackChannel(_required(credentials, "webhook_url"), client=client)
 
 
-def _build_discord(credentials: dict) -> Channel:
-    return DiscordChannel(_required(credentials, "webhook_url"))
+def _build_discord(credentials: dict, *, client: httpx.AsyncClient | None = None) -> Channel:
+    return DiscordChannel(_required(credentials, "webhook_url"), client=client)
 
 
-def _build_teams(credentials: dict) -> Channel:
-    return TeamsChannel(_required(credentials, "webhook_url"))
+def _build_teams(credentials: dict, *, client: httpx.AsyncClient | None = None) -> Channel:
+    return TeamsChannel(_required(credentials, "webhook_url"), client=client)
 
 
-def _build_email(credentials: dict) -> Channel:
+def _build_email(credentials: dict, *, client: httpx.AsyncClient | None = None) -> Channel:
     recipients = credentials.get("to") or []
     if isinstance(recipients, str):
         recipients = [addr.strip() for addr in recipients.split(",") if addr.strip()]
@@ -58,7 +74,7 @@ def _build_email(credentials: dict) -> Channel:
     )
 
 
-_BUILDERS = {
+_BUILDERS: dict[str, Any] = {
     "slack": _build_slack,
     "discord": _build_discord,
     "teams": _build_teams,
