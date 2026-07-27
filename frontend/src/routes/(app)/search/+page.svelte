@@ -397,8 +397,6 @@
 			{/if}
 		</div>
 
-		</div>
-
 		<div class="flex flex-wrap items-center gap-3">
 			<button
 				type="button"

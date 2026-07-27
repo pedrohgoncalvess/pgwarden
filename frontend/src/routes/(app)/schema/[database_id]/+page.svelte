@@ -929,7 +929,7 @@
 							{#each visibleTables as table (table.id)}
 								{@const position = positions[table.id] ?? { x: 0, y: 0 }}
 								
-								<article
+								<div
 									class="schema-table {dragState?.tableId === table.id
 										? 'dragging'
 										: ''} {selectedSchema && table.schema_name === selectedSchema
@@ -1002,7 +1002,7 @@
 											<span>{table.indexes.length} indexes</span>
 										</div>
 									{/if}
-								</article>
+								</div>
 							{/each}
 						</div>
 					</div>
@@ -1015,7 +1015,7 @@
 {#if sidebarOpen && selectedTable}
 	<div class="fixed inset-0 z-40 bg-black/20" onclick={closeSidebar} aria-hidden="true"></div>
 	
-	<aside
+	<div
 		class="fixed top-16 right-0 z-50 flex h-[calc(100%-4rem)] w-96 flex-col border-l border-outline-variant bg-surface-container-low shadow-2xl"
 		role="dialog"
 		aria-modal="true"
@@ -1110,7 +1110,7 @@
 				</ul>
 			{/if}
 		</div>
-	</aside>
+	</div>
 {/if}
 
 {#if tooltip}
