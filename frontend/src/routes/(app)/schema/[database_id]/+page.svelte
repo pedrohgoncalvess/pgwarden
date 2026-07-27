@@ -1148,7 +1148,7 @@
 		cursor: grab;
 		height: calc(100vh - 190px);
 		min-height: 560px;
-		overflow: auto;
+		overflow: hidden;
 		background:
 			linear-gradient(var(--color-outline-variant) 1px, transparent 1px),
 			linear-gradient(90deg, var(--color-outline-variant) 1px, transparent 1px),
