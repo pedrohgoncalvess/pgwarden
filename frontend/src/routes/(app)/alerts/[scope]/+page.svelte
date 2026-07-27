@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import {
@@ -338,11 +337,12 @@
 		return entityLabels[threshold.entity_public_id] ?? `entity #${threshold.entity_id}`;
 	}
 
-	onMount(() => {
+	$effect(() => {
 		if (!validScopes.includes(scope)) {
 			goto('/alerts/server', { replaceState: true });
 			return;
 		}
+		showCreate = false;
 		load();
 	});
 </script>
