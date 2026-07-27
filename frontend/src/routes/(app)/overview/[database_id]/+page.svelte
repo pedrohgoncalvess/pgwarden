@@ -88,8 +88,12 @@
 	
 	let showServerModal = $state(false);
 	let showDbModal = $state(false);
+	let overviewHelpOpen = $state(false);
 	let createdServerId = $state<string>('');
 	let servers = $state<ServerListItem[]>([]);
+	const serverName = $derived(
+		selectedDb ? servers.find((s) => s.id === selectedDb!.server_id)?.name ?? '' : ''
+	);
 
 	
 	let srvName = $state('');
@@ -145,7 +149,7 @@
 		try {
 			loading = true;
 			error = '';
-			databases = await listDatabases();
+			[databases, servers] = await Promise.all([listDatabases(), listServers()]);
 
 			if (databases.length === 0) {
 				clearDatabaseContext();
@@ -739,19 +743,36 @@
 		<div class="flex items-center gap-3">
 			<h1 class="font-headline-md text-headline-md text-on-background m-0">
 				{#if selectedDb}
-					Database: {selectedDb.name}
+					Overview: {serverName}-{selectedDb.name}
 				{:else}
 					Database Cluster
 				{/if}
 			</h1>
-			{#if selectedDb}
-				<span
-					class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20"
+			<div class="relative">
+				<button
+					onclick={() => (overviewHelpOpen = !overviewHelpOpen)}
+					onmouseenter={() => (overviewHelpOpen = true)}
+					onmouseleave={() => (overviewHelpOpen = false)}
+					class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-outline-variant text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+					aria-label="Overview page explanation"
 				>
-					<span class="w-1.5 h-1.5 rounded-full bg-primary mr-1.5 status-pulse"></span>
-					HEALTHY
-				</span>
-			{/if}
+					<span class="material-symbols-outlined text-[14px]">help</span>
+				</button>
+				{#if overviewHelpOpen}
+					<div
+						class="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs text-on-surface shadow-lg"
+					>
+						<p class="mb-1 font-bold">What is this page?</p>
+						<p class="mb-2 text-on-surface-variant">
+							The Overview dashboard provides real-time monitoring of your PostgreSQL cluster. It displays key performance indicators like TPS (Transactions Per Second), active sessions, locking activity, and active queries.
+						</p>
+						<p class="font-bold">Tips</p>
+						<p class="text-on-surface-variant">
+							Hover over lock types in the Activity grid for detailed explanations of what each lock mode means.
+						</p>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 	<div class="flex items-center gap-6">
@@ -762,6 +783,14 @@
 				<span class="text-[10px] font-label-caps text-on-surface-variant">UPTIME</span>
 				<span class="font-code-sm text-primary">{uptime.uptime_formatted}</span>
 			</div>
+		{/if}
+		{#if selectedDb}
+			<span
+				class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-status-healthy/10 text-status-healthy border border-status-healthy/20"
+			>
+				<span class="w-1.5 h-1.5 rounded-full bg-status-healthy mr-1.5 status-pulse"></span>
+				HEALTHY
+			</span>
 		{/if}
 		{#if databases.length > 0}
 			<button
