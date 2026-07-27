@@ -49,6 +49,23 @@
 	--color-secondary-container: #3c4a5e;
 	--color-on-primary-fixed: #00201c;
 
+	/* Surfaces (slate-based, for sidebar/panel backgrounds) */
+	--color-surface-bg: #0f172a;
+	--color-surface-panel: #1e293b;
+	--color-surface-border: #334155;
+
+	/* Status (semantic) */
+	--color-status-danger: #ef4444;
+	--color-status-healthy: #10b981;
+	--color-status-warning: #f59e0b;
+	--color-status-info: #3b82f6;
+
+	/* Chart (categorical) */
+	--color-chart-1: #0d9488;
+	--color-chart-2: #8b5cf6;
+	--color-chart-3: #ec4899;
+	--color-chart-4: #eab308;
+
 	--radius-DEFAULT: 0.125rem;
 	--radius-lg: 0.25rem;
 	--radius-xl: 0.5rem;
@@ -61,6 +78,8 @@
 	--spacing-stack-sm: 8px;
 	--spacing-stack-xs: 4px;
 	--spacing-base: 4px;
+	--spacing-panel-padding: 20px;
+	--spacing-compact-gap: 8px;
 
 	--font-headline-lg: 'Inter', sans-serif;
 	--font-headline-md: 'Inter', sans-serif;
@@ -70,6 +89,8 @@
 	--font-body-md: 'Inter', sans-serif;
 	--font-body-sm: 'Inter', sans-serif;
 	--font-code-sm: 'JetBrains Mono', monospace;
+	--font-kpi-metric: 'JetBrains Mono', monospace;
+	--font-data-mono: 'JetBrains Mono', monospace;
 
 	--text-headline-lg: 24px;
 	--text-headline-lg--line-height: 32px;
@@ -97,6 +118,12 @@
 
 	--text-code-sm: 11px;
 	--text-code-sm--line-height: 16px;
+
+	--text-kpi-metric: 24px;
+	--text-kpi-metric--line-height: 32px;
+
+	--text-data-mono: 14px;
+	--text-data-mono--line-height: 20px;
 }
 
 body {
@@ -111,6 +138,33 @@ body {
 		'wght' 400,
 		'GRAD' 0,
 		'opsz' 24;
+}
+
+/* Sidebar navigation items (prototype: sidebar.html) */
+.sidebar-item {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.5rem 1rem;
+	border-radius: 0.25rem;
+	transition:
+		background-color 0.2s,
+		color 0.2s;
+	cursor: pointer;
+}
+
+.sidebar-item:hover {
+	background-color: var(--color-surface-panel);
+	color: var(--color-primary);
+}
+
+.sidebar-item.active {
+	background-color: var(--color-surface-panel);
+	color: var(--color-primary);
+}
+
+.sidebar-nested {
+	padding-left: 2.5rem;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
