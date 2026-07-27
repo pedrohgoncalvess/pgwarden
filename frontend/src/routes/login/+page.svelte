@@ -39,13 +39,12 @@
 	class="flex min-h-screen items-center justify-center p-container-padding bg-background relative overflow-hidden"
 >
 	<main class="w-full max-w-[420px] z-10">
-		
 		<div class="flex flex-col items-center text-center space-y-4 mb-8">
-			<div
-				class="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center text-on-primary font-bold text-3xl shadow-lg shadow-primary/20"
-			>
-				W
-			</div>
+			<img
+				src="/branding/logo.jpg"
+				alt="pgwarden logo"
+				class="w-16 h-16 rounded-2xl object-cover shadow-lg shadow-primary/20"
+			/>
 			<div>
 				<h1 class="font-headline-lg text-3xl font-bold text-on-surface tracking-tight m-0 mb-2">
 					pgwarden
@@ -56,10 +55,8 @@
 			</div>
 		</div>
 
-		
 		<section class="glass-panel p-8 shadow-floating">
 			<form onsubmit={handleLogin} class="space-y-6" id="loginForm">
-				
 				<div class="flex flex-col gap-2">
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
@@ -82,7 +79,6 @@
 					</div>
 				</div>
 
-				
 				<div class="flex flex-col gap-2">
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
@@ -114,7 +110,6 @@
 					</div>
 				{/if}
 
-				
 				<div class="pt-4">
 					<button
 						disabled={loading}
@@ -142,26 +137,12 @@
 									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 								></path>
 							</svg>
-							<span>Authenticating...</span>
-						{:else}
-							<span class="material-symbols-outlined font-light text-[22px]">login</span>
-							<span>Connect securely</span>
 						{/if}
+						<span>Connect</span>
 					</button>
 				</div>
 			</form>
 		</section>
-
-		
-		<footer
-			class="flex justify-between items-center mt-8 px-2 font-body-sm text-xs text-on-surface-variant/50"
-		>
-			<div class="flex items-center gap-1.5">
-				<span class="material-symbols-outlined text-[14px]">shield</span>
-				<span>AES-256 Encrypted</span>
-			</div>
-			<div>v2.4.0-stable</div>
-		</footer>
 	</main>
 </div>
 
