@@ -92,8 +92,11 @@ async def search_metadata(
     db_exact, db_fuzzy = _text_score("db.db_name", num_tokens=num_tokens)
     schema_exact, schema_fuzzy = _text_score("schema_meta.schema_name", num_tokens=num_tokens)
     table_exact, table_fuzzy = _text_score("tbl.name", num_tokens=num_tokens)
-    column_exact, column_fuzzy = _text_score("col.name", "col.data_type", num_tokens=num_tokens)
-    index_exact, index_fuzzy = _text_score("idx.name", "idx.type", num_tokens=num_tokens)
+    column_type_expr = "CASE WHEN col.fk_table_id IS NOT NULL THEN 'foreign key ' || col.data_type ELSE col.data_type END"
+    index_type_expr = "CASE WHEN idx.is_primary THEN 'primary key ' || idx.type ELSE idx.type END"
+
+    column_exact, column_fuzzy = _text_score("col.name", column_type_expr, num_tokens=num_tokens)
+    index_exact, index_fuzzy = _text_score("idx.name", index_type_expr, num_tokens=num_tokens)
     tag_exact, tag_fuzzy = _text_score("tag.name", "tag.type", num_tokens=num_tokens)
 
     sql = text(
@@ -189,7 +192,7 @@ async def search_metadata(
                 tbl.public_id::text AS table_id,
                 tbl.name AS table_name,
                 col.name AS name,
-                tbl.schema_name || '.' || tbl.name || ' · ' || col.data_type AS subtitle,
+                tbl.schema_name || '.' || tbl.name || ' · ' || {column_type_expr} AS subtitle,
                 column_doc.description AS description,
                 {column_exact} AS exact_score,
                 {column_fuzzy} AS fuzzy_score,
@@ -215,7 +218,7 @@ async def search_metadata(
                 tbl.public_id::text AS table_id,
                 tbl.name AS table_name,
                 idx.name AS name,
-                tbl.schema_name || '.' || tbl.name || ' · ' || idx.type AS subtitle,
+                tbl.schema_name || '.' || tbl.name || ' · ' || {index_type_expr} AS subtitle,
                 index_doc.description AS description,
                 {index_exact} AS exact_score,
                 {index_fuzzy} AS fuzzy_score,
