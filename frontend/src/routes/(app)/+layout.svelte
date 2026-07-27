@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import NotificationPanel from '$lib/components/NotificationPanel.svelte';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
 
@@ -25,7 +26,13 @@
 
 	const runSettingsItems = [
 		{ name: 'Server', href: '/runs', suffix: '/settings/server', idType: 'server', icon: 'dns' },
-		{ name: 'Database', href: '/runs', suffix: '/settings/database', idType: 'database', icon: 'database' }
+		{
+			name: 'Database',
+			href: '/runs',
+			suffix: '/settings/database',
+			idType: 'database',
+			icon: 'database'
+		}
 	];
 
 	const metadataItems = [
@@ -54,6 +61,8 @@
 	);
 	let expandedMetadata = $state($page.url.pathname.startsWith('/metadata'));
 	let expandedSettings = $state($page.url.pathname.startsWith('/settings'));
+	let notificationsOpen = $state(false);
+	let notificationCount = $state(0);
 
 	function resolveHref(href: string, needsDb: boolean, dbId: string | null): string {
 		if (!needsDb) return href;
@@ -95,7 +104,8 @@
 		if (isActive('/analytics', currentPath)) expandedAnalytics = true;
 		if (isActive('/alerts', currentPath)) expandedAlerts = true;
 		if (isActive('/runs', currentPath)) expandedRuns = true;
-		if (/^\/runs\/[^/]+\/settings\/(server|database)/.test(currentPath)) expandedRunsSettings = true;
+		if (/^\/runs\/[^/]+\/settings\/(server|database)/.test(currentPath))
+			expandedRunsSettings = true;
 		if (isActive('/metadata', currentPath)) expandedMetadata = true;
 		if (isActive('/settings', currentPath)) expandedSettings = true;
 	});
@@ -143,6 +153,10 @@
 			localStorage.setItem('sidebar_collapsed', String(collapsed));
 		}
 	}
+
+	function toggleNotifications() {
+		notificationsOpen = !notificationsOpen;
+	}
 </script>
 
 <div
@@ -160,19 +174,45 @@
 			aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 			class="absolute top-6 -right-3 z-50 w-6 h-6 rounded-full bg-surface-container-high border border-surface-border flex items-center justify-center text-on-surface-variant hover:bg-primary hover:text-on-primary hover:border-primary transition-colors duration-200 shrink-0"
 		>
-			<span class="material-symbols-outlined text-[16px] leading-none">{collapsed
-					? 'chevron_right'
-					: 'chevron_left'}</span>
+			<span class="material-symbols-outlined text-[16px] leading-none"
+				>{collapsed ? 'chevron_right' : 'chevron_left'}</span
+			>
 		</button>
 
 		<!-- Branding -->
-		<div class="p-4 flex items-center {collapsed ? 'justify-center' : 'gap-3'}">
-			<div
-				class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container font-bold shrink-0"
-			>W</div>
+		<div class="p-4 flex items-center {collapsed ? 'flex-col gap-2' : 'gap-3'}">
+			<img
+				src="/branding/logo.jpg"
+				alt="pgwarden logo"
+				class="w-8 h-8 rounded object-cover shrink-0"
+			/>
 			{#if !collapsed}
-				<span class="font-headline-md text-primary font-bold tracking-tight">pgwarden</span>
+				<span class="font-headline-md min-w-0 flex-1 text-primary font-bold tracking-tight"
+					>pgwarden</span
+				>
 			{/if}
+			<button
+				type="button"
+				onclick={toggleNotifications}
+				class="group relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all hover:-translate-y-px hover:bg-surface-panel hover:text-primary {notificationsOpen
+					? 'border-primary bg-primary/10 text-primary'
+					: 'border-transparent text-on-surface-variant'}"
+				aria-label="Toggle notifications"
+				aria-expanded={notificationsOpen}
+				title="Notifications"
+			>
+				<span
+					class="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-12"
+					style={notificationsOpen ? "font-variation-settings: 'FILL' 1;" : ''}>notifications</span
+				>
+				{#if notificationCount > 0}
+					<span
+						class="absolute -right-1.5 -top-1.5 flex min-w-4 h-4 items-center justify-center rounded-full bg-status-danger px-1 text-[9px] font-bold leading-none text-white ring-2 ring-background"
+					>
+						{notificationCount > 99 ? '99+' : notificationCount}
+					</span>
+				{/if}
+			</button>
 		</div>
 
 		{#if !collapsed}
@@ -191,9 +231,9 @@
 				<a
 					{href}
 					title={collapsed ? item.name : undefined}
-					class="sidebar-item font-body-sm text-on-surface {collapsed ? 'justify-center' : ''} {active
-						? 'active'
-						: ''}"
+					class="sidebar-item font-body-sm text-on-surface {collapsed
+						? 'justify-center'
+						: ''} {active ? 'active' : ''}"
 				>
 					<span
 						class="material-symbols-outlined text-lg"
@@ -214,9 +254,9 @@
 							<span class="material-symbols-outlined text-lg">notifications</span>
 							<span>Alerts</span>
 						</div>
-						<span class="material-symbols-outlined text-sm">{expandedAlerts
-								? 'expand_less'
-								: 'expand_more'}</span>
+						<span class="material-symbols-outlined text-sm"
+							>{expandedAlerts ? 'expand_less' : 'expand_more'}</span
+						>
 					</button>
 					{#if expandedAlerts}
 						<div class="space-y-1 mt-1">
@@ -249,14 +289,18 @@
 							<span class="material-symbols-outlined text-lg">analytics</span>
 							<span>Analytics</span>
 						</div>
-						<span class="material-symbols-outlined text-sm">{expandedAnalytics
-								? 'expand_less'
-								: 'expand_more'}</span>
+						<span class="material-symbols-outlined text-sm"
+							>{expandedAnalytics ? 'expand_less' : 'expand_more'}</span
+						>
 					</button>
 					{#if expandedAnalytics}
 						<div class="space-y-1 mt-1">
 							{#each analyticsItems as item}
-								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const href = resolveHref(
+									item.href,
+									item.needsDb,
+									$page.params.database_id ?? null
+								)}
 								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
 									href={active ? $page.url.pathname : href}
@@ -286,14 +330,18 @@
 							<span class="material-symbols-outlined text-lg">play_arrow</span>
 							<span>Runs</span>
 						</div>
-						<span class="material-symbols-outlined text-sm">{expandedRuns
-								? 'expand_less'
-								: 'expand_more'}</span>
+						<span class="material-symbols-outlined text-sm"
+							>{expandedRuns ? 'expand_less' : 'expand_more'}</span
+						>
 					</button>
 					{#if expandedRuns}
 						<div class="space-y-1 mt-1">
 							{#each runItems as item}
-								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const href = resolveHref(
+									item.href,
+									item.needsDb,
+									$page.params.database_id ?? null
+								)}
 								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
 									href={active ? $page.url.pathname : href}
@@ -319,9 +367,9 @@
 										<span class="material-symbols-outlined text-base">settings</span>
 										<span>Settings</span>
 									</div>
-									<span class="material-symbols-outlined text-sm">{expandedRunsSettings
-											? 'expand_less'
-											: 'expand_more'}</span>
+									<span class="material-symbols-outlined text-sm"
+										>{expandedRunsSettings ? 'expand_less' : 'expand_more'}</span
+									>
 								</button>
 								{#if expandedRunsSettings}
 									<div class="space-y-1 mt-1">
@@ -337,7 +385,8 @@
 											>
 												<span
 													class="material-symbols-outlined text-base"
-													style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
+													style={active ? "font-variation-settings: 'FILL' 1;" : ''}
+													>{item.icon}</span
 												>
 												<span>{item.name}</span>
 											</a>
@@ -358,9 +407,9 @@
 							<span class="material-symbols-outlined text-lg">folder_managed</span>
 							<span>Metadata</span>
 						</div>
-						<span class="material-symbols-outlined text-sm">{expandedMetadata
-								? 'expand_less'
-								: 'expand_more'}</span>
+						<span class="material-symbols-outlined text-sm"
+							>{expandedMetadata ? 'expand_less' : 'expand_more'}</span
+						>
 					</button>
 					{#if expandedMetadata}
 						<div class="space-y-1 mt-1">
@@ -395,14 +444,18 @@
 							<span class="material-symbols-outlined text-lg">settings</span>
 							<span>Settings</span>
 						</div>
-						<span class="material-symbols-outlined text-sm">{expandedSettings
-								? 'expand_less'
-								: 'expand_more'}</span>
+						<span class="material-symbols-outlined text-sm"
+							>{expandedSettings ? 'expand_less' : 'expand_more'}</span
+						>
 					</button>
 					{#if expandedSettings}
 						<div class="space-y-1 mt-1">
 							{#each settingsItems as item}
-								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const href = resolveHref(
+									item.href,
+									item.needsDb,
+									$page.params.database_id ?? null
+								)}
 								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
 									href={active ? $page.url.pathname : href}
@@ -426,9 +479,17 @@
 
 		<!-- Footer Profile -->
 		<div class="border-t border-surface-border p-4 mt-auto">
-			<div class="flex items-center {collapsed ? 'justify-center' : 'justify-between'} cursor-pointer hover:bg-surface-panel p-2 -mx-2 rounded transition-colors">
+			<div
+				class="flex items-center {collapsed
+					? 'justify-center'
+					: 'justify-between'} cursor-pointer hover:bg-surface-panel p-2 -mx-2 rounded transition-colors"
+			>
 				<div class="flex items-center {collapsed ? '' : 'gap-3'}">
-					<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shrink-0">DBA</div>
+					<div
+						class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shrink-0"
+					>
+						DBA
+					</div>
 					{#if !collapsed}
 						<div class="flex flex-col">
 							<span class="font-body-sm text-on-surface font-semibold">admin</span>
@@ -438,7 +499,10 @@
 				</div>
 				{#if !collapsed}
 					<button
-						onclick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}
+						onclick={() => {
+							localStorage.removeItem('token');
+							window.location.href = '/login';
+						}}
 						class="text-on-surface-variant hover:text-error transition-colors"
 						title="Logout"
 					>
@@ -449,7 +513,23 @@
 		</div>
 	</aside>
 
-	<main class="min-h-screen transition-[margin] duration-300 ease-in-out {collapsed ? 'ml-16' : 'ml-64'}">
+	<NotificationPanel
+		open={notificationsOpen}
+		{collapsed}
+		onClose={() => (notificationsOpen = false)}
+		onCountChange={(count) => (notificationCount = count)}
+	/>
+
+	<main
+		class="min-h-screen transition-[margin] duration-300 ease-in-out"
+		style:margin-left={collapsed
+			? notificationsOpen
+				? '28rem'
+				: '4rem'
+			: notificationsOpen
+				? '40rem'
+				: '16rem'}
+	>
 		{@render children()}
 	</main>
 </div>
