@@ -7,15 +7,15 @@
 
 	const navItems = [
 		{ name: 'Search', href: '/search', icon: 'search', needsDb: false },
-		{ name: 'Overview', href: '/overview', icon: 'dashboard', needsDb: true },
-		{ name: 'Schema', href: '/schema', icon: 'account_tree', needsDb: true },
+		{ name: 'Overview', href: '/overview', icon: 'grid_view', needsDb: true },
+		{ name: 'Schema', href: '/schema', icon: 'schema', needsDb: true },
 		{ name: 'Servers', href: '/servers', icon: 'dns', needsDb: false }
 	];
 
 	const analyticsItems = [
 		{ name: 'Data', href: '/analytics/data', icon: 'bar_chart', needsDb: true },
 		{ name: 'Query', href: '/analytics/query', icon: 'search', needsDb: true },
-		{ name: 'Index', href: '/analytics/index', icon: 'speed', needsDb: true }
+		{ name: 'Index', href: '/analytics/index', icon: 'data_object', needsDb: true }
 	];
 
 	const runItems = [
@@ -42,7 +42,7 @@
 		{ name: 'Server', href: '/alerts/server', icon: 'dns' },
 		{ name: 'Database', href: '/alerts/database', icon: 'database' },
 		{ name: 'Table', href: '/alerts/table', icon: 'table' },
-		{ name: 'Index', href: '/alerts/index', icon: 'speed' },
+		{ name: 'Index', href: '/alerts/index', icon: 'data_object' },
 		{ name: 'Configuration', href: '/alerts/configuration', icon: 'settings' }
 	];
 
@@ -132,367 +132,324 @@
 		const pattern = new RegExp(`^${item.href}/[^/]+${item.suffix}(/.*)?$`);
 		return pattern.test(currentPath);
 	}
-</script>
 
+	let collapsed = $state(
+		typeof localStorage !== 'undefined' && localStorage.getItem('sidebar_collapsed') === 'true'
+	);
+
+	function toggleSidebar() {
+		collapsed = !collapsed;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('sidebar_collapsed', String(collapsed));
+		}
+	}
+</script>
 
 <div
 	class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container min-h-screen"
 >
-	
 	<aside
-		class="h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant flex flex-col py-4 gap-stack-sm z-50"
+		class="h-screen fixed left-0 top-0 bg-background border-r border-surface-border flex flex-col z-40 transition-[width] duration-300 ease-in-out {collapsed
+			? 'w-16'
+			: 'w-64'}"
 	>
-		<div class="px-6 mb-6 flex items-center gap-3">
+		<!-- Collapse / expand toggle button (floats on the right edge) -->
+		<button
+			onclick={toggleSidebar}
+			title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+			aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+			class="absolute top-6 -right-3 z-50 w-6 h-6 rounded-full bg-surface-container-high border border-surface-border flex items-center justify-center text-on-surface-variant hover:bg-primary hover:text-on-primary hover:border-primary transition-colors duration-200 shrink-0"
+		>
+			<span class="material-symbols-outlined text-[16px] leading-none">{collapsed
+					? 'chevron_right'
+					: 'chevron_left'}</span>
+		</button>
+
+		<!-- Branding -->
+		<div class="p-4 flex items-center {collapsed ? 'justify-center' : 'gap-3'}">
 			<div
-				class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold"
-			>
-				W
-			</div>
-			<span class="font-headline-md text-headline-md font-bold text-primary">pgwarden</span>
+				class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container font-bold shrink-0"
+			>W</div>
+			{#if !collapsed}
+				<span class="font-headline-md text-primary font-bold tracking-tight">pgwarden</span>
+			{/if}
 		</div>
 
-		<div class="flex-1 overflow-y-auto px-3 space-y-2 custom-scrollbar">
-			
-			<nav class="space-y-1">
-				<h2
-					class="px-3 text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest mb-2"
-				>
-					Menu
-				</h2>
-				{#each navItems as item}
-					{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-					{@const active = isActive(item.href, $page.url.pathname)}
-					<a
-						{href}
-						class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group {active
-							? 'bg-secondary-container text-on-secondary-container font-bold rounded-lg'
-							: 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg'}"
-					>
-						<span
-							class="material-symbols-outlined mr-3"
-							style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
-						>
-						<span class="font-body-md text-body-md">{item.name}</span>
-					</a>
-				{/each}
-			</nav>
+		{#if !collapsed}
+			<div
+				class="px-4 py-2 font-label-caps text-on-surface-variant uppercase tracking-wider text-xs"
+			>
+				Menu
+			</div>
+		{/if}
 
-			
-			<nav class="space-y-1">
-				<button
-					onclick={() => (expandedAlerts = !expandedAlerts)}
-					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
+		<nav class="flex-1 px-2 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+			<!-- Top-level nav items (always visible, icon-only when collapsed) -->
+			{#each navItems as item}
+				{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+				{@const active = isActive(item.href, $page.url.pathname)}
+				<a
+					{href}
+					title={collapsed ? item.name : undefined}
+					class="sidebar-item font-body-sm text-on-surface {collapsed ? 'justify-center' : ''} {active
+						? 'active'
+						: ''}"
 				>
-					<div class="flex items-center">
-						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
-							>notifications</span
-						>
-						<span class="font-body-md text-body-md">Alerts</span>
-					</div>
 					<span
-						class="material-symbols-outlined text-[18px] transition-transform duration-200"
-						style="transform: rotate({expandedAlerts ? 180 : 0}deg)">expand_more</span
+						class="material-symbols-outlined text-lg"
+						style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 					>
-				</button>
-				{#if expandedAlerts}
-					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-						{#each alertsItems as item}
-							{@const active = isActive(item.href, $page.url.pathname)}
-							{#if active}
+					{#if !collapsed}<span>{item.name}</span>{/if}
+				</a>
+			{/each}
+
+			{#if !collapsed}
+				<!-- Alerts group -->
+				<div class="mt-2">
+					<button
+						onclick={() => (expandedAlerts = !expandedAlerts)}
+						class="sidebar-item font-body-sm text-on-surface justify-between w-full"
+					>
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-lg">notifications</span>
+							<span>Alerts</span>
+						</div>
+						<span class="material-symbols-outlined text-sm">{expandedAlerts
+								? 'expand_less'
+								: 'expand_more'}</span>
+					</button>
+					{#if expandedAlerts}
+						<div class="space-y-1 mt-1">
+							{#each alertsItems as item}
+								{@const active = isActive(item.href, $page.url.pathname)}
 								<a
-									href={$page.url.pathname}
-									aria-current="page"
-									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+									href={active ? $page.url.pathname : item.href}
+									aria-current={active ? 'page' : undefined}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+										? 'active'
+										: ''}"
 								>
 									<span
-										class="material-symbols-outlined mr-3"
-										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+										class="material-symbols-outlined text-base"
+										style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 									>
-									<span class="font-body-md text-body-md">{item.name}</span>
+									<span>{item.name}</span>
 								</a>
-							{:else}
-								<a
-									href={item.href}
-									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-								>
-									<span class="material-symbols-outlined mr-3">{item.icon}</span>
-									<span class="font-body-md text-body-md">{item.name}</span>
-								</a>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</nav>
-
-			
-			<nav class="space-y-1">
-				<button
-					onclick={() => (expandedAnalytics = !expandedAnalytics)}
-					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-				>
-					<div class="flex items-center">
-						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
-							>analytics</span
-						>
-						<span class="font-body-md text-body-md">Analytics</span>
-					</div>
-					<span
-						class="material-symbols-outlined text-[18px] transition-transform duration-200"
-						style="transform: rotate({expandedAnalytics ? 180 : 0}deg)">expand_more</span
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<!-- Analytics group -->
+				<div class="mt-2">
+					<button
+						onclick={() => (expandedAnalytics = !expandedAnalytics)}
+						class="sidebar-item font-body-sm text-on-surface justify-between w-full"
 					>
-				</button>
-				{#if expandedAnalytics}
-					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-						{#each analyticsItems as item}
-							{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-							{@const active = isSubmenuActive(item.href, $page.url.pathname)}
-							{#if active}
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-lg">analytics</span>
+							<span>Analytics</span>
+						</div>
+						<span class="material-symbols-outlined text-sm">{expandedAnalytics
+								? 'expand_less'
+								: 'expand_more'}</span>
+					</button>
+					{#if expandedAnalytics}
+						<div class="space-y-1 mt-1">
+							{#each analyticsItems as item}
+								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
-									href={$page.url.pathname}
-									aria-current="page"
-									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+									href={active ? $page.url.pathname : href}
+									aria-current={active ? 'page' : undefined}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+										? 'active'
+										: ''}"
 								>
 									<span
-										class="material-symbols-outlined mr-3"
-										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+										class="material-symbols-outlined text-base"
+										style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 									>
-									<span class="font-body-md text-body-md">{item.name}</span>
+									<span>{item.name}</span>
 								</a>
-							{:else}
-								<a
-									{href}
-									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-								>
-									<span class="material-symbols-outlined mr-3">{item.icon}</span>
-									<span class="font-body-md text-body-md">{item.name}</span>
-								</a>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</nav>
+							{/each}
+						</div>
+					{/if}
+				</div>
 
-			
-			<nav class="space-y-1">
-				<button
-					onclick={() => (expandedRuns = !expandedRuns)}
-					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-				>
-					<div class="flex items-center">
-						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
-							>precision_manufacturing</span
-						>
-						<span class="font-body-md text-body-md">Runs</span>
-					</div>
-					<span
-						class="material-symbols-outlined text-[18px] transition-transform duration-200"
-						style="transform: rotate({expandedRuns ? 180 : 0}deg)">expand_more</span
+				<!-- Runs group -->
+				<div class="mt-2">
+					<button
+						onclick={() => (expandedRuns = !expandedRuns)}
+						class="sidebar-item font-body-sm text-on-surface justify-between w-full"
 					>
-				</button>
-				{#if expandedRuns}
-					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-						{#each runItems as item}
-							{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-							{@const active = isSubmenuActive(item.href, $page.url.pathname)}
-							{#if active}
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-lg">play_arrow</span>
+							<span>Runs</span>
+						</div>
+						<span class="material-symbols-outlined text-sm">{expandedRuns
+								? 'expand_less'
+								: 'expand_more'}</span>
+					</button>
+					{#if expandedRuns}
+						<div class="space-y-1 mt-1">
+							{#each runItems as item}
+								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
-									href={$page.url.pathname}
-									aria-current="page"
-									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+									href={active ? $page.url.pathname : href}
+									aria-current={active ? 'page' : undefined}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+										? 'active'
+										: ''}"
 								>
 									<span
-										class="material-symbols-outlined mr-3"
-										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+										class="material-symbols-outlined text-base"
+										style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 									>
-									<span class="font-body-md text-body-md">{item.name}</span>
+									<span>{item.name}</span>
 								</a>
-							{:else}
-								<a
-									{href}
-									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-								>
-									<span class="material-symbols-outlined mr-3">{item.icon}</span>
-									<span class="font-body-md text-body-md">{item.name}</span>
-								</a>
-							{/if}
-						{/each}
+							{/each}
 
-						<div class="space-y-1">
-							<button
-								onclick={() => (expandedRunsSettings = !expandedRunsSettings)}
-								class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-							>
-								<div class="flex items-center">
-									<span class="material-symbols-outlined mr-3">settings</span>
-									<span class="font-body-md text-body-md">Settings</span>
-								</div>
-								<span
-									class="material-symbols-outlined text-[18px] transition-transform duration-200"
-									style="transform: rotate({expandedRunsSettings ? 180 : 0}deg)"
-									>expand_more</span
+							<div class="space-y-1">
+								<button
+									onclick={() => (expandedRunsSettings = !expandedRunsSettings)}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant justify-between w-full"
 								>
-							</button>
-							{#if expandedRunsSettings}
-								<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-									{#each runSettingsItems as item}
-										{@const href = resolveRunSettingsHref(item)}
-										{@const active = isRunSettingsActive(item, $page.url.pathname)}
-										{#if active}
+									<div class="flex items-center gap-3">
+										<span class="material-symbols-outlined text-base">settings</span>
+										<span>Settings</span>
+									</div>
+									<span class="material-symbols-outlined text-sm">{expandedRunsSettings
+											? 'expand_less'
+											: 'expand_more'}</span>
+								</button>
+								{#if expandedRunsSettings}
+									<div class="space-y-1 mt-1">
+										{#each runSettingsItems as item}
+											{@const href = resolveRunSettingsHref(item)}
+											{@const active = isRunSettingsActive(item, $page.url.pathname)}
 											<a
-												href={$page.url.pathname}
-												aria-current="page"
-												class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+												href={active ? $page.url.pathname : href}
+												aria-current={active ? 'page' : undefined}
+												class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+													? 'active'
+													: ''}"
 											>
 												<span
-													class="material-symbols-outlined mr-3"
-													style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+													class="material-symbols-outlined text-base"
+													style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 												>
-												<span class="font-body-md text-body-md">{item.name}</span>
+												<span>{item.name}</span>
 											</a>
-										{:else}
-											<a
-												{href}
-												class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-											>
-												<span class="material-symbols-outlined mr-3">{item.icon}</span>
-												<span class="font-body-md text-body-md">{item.name}</span>
-											</a>
-										{/if}
-									{/each}
-								</div>
-							{/if}
+										{/each}
+									</div>
+								{/if}
+							</div>
 						</div>
-					</div>
-				{/if}
-			</nav>
-
-			
-			<nav class="space-y-1">
-				<button
-					onclick={() => (expandedMetadata = !expandedMetadata)}
-					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-				>
-					<div class="flex items-center">
-						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
-							>folder_managed</span
-						>
-						<span class="font-body-md text-body-md">Metadata</span>
-					</div>
-					<span
-						class="material-symbols-outlined text-[18px] transition-transform duration-200"
-						style="transform: rotate({expandedMetadata ? 180 : 0}deg)">expand_more</span
+					{/if}
+				</div>
+				<!-- Metadata group -->
+				<div class="mt-2">
+					<button
+						onclick={() => (expandedMetadata = !expandedMetadata)}
+						class="sidebar-item font-body-sm text-on-surface justify-between w-full"
 					>
-				</button>
-				{#if expandedMetadata}
-					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-						{#each metadataItems as item}
-							{@const href = resolveMetadataHref(item.href)}
-							{@const active = isSubmenuActive(item.href, $page.url.pathname)}
-							{#if active}
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-lg">folder_managed</span>
+							<span>Metadata</span>
+						</div>
+						<span class="material-symbols-outlined text-sm">{expandedMetadata
+								? 'expand_less'
+								: 'expand_more'}</span>
+					</button>
+					{#if expandedMetadata}
+						<div class="space-y-1 mt-1">
+							{#each metadataItems as item}
+								{@const href = resolveMetadataHref(item.href)}
+								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
-									href={$page.url.pathname}
-									aria-current="page"
-									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+									href={active ? $page.url.pathname : href}
+									aria-current={active ? 'page' : undefined}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+										? 'active'
+										: ''}"
 								>
 									<span
-										class="material-symbols-outlined mr-3"
-										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+										class="material-symbols-outlined text-base"
+										style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 									>
-									<span class="font-body-md text-body-md">{item.name}</span>
+									<span>{item.name}</span>
 								</a>
-							{:else}
-								<a
-									{href}
-									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-								>
-									<span class="material-symbols-outlined mr-3">{item.icon}</span>
-									<span class="font-body-md text-body-md">{item.name}</span>
-								</a>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</nav>
+							{/each}
+						</div>
+					{/if}
+				</div>
 
-			
-			<nav class="space-y-1">
-				<button
-					onclick={() => (expandedSettings = !expandedSettings)}
-					class="w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-				>
-					<div class="flex items-center">
-						<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 0;"
-							>settings</span
-						>
-						<span class="font-body-md text-body-md">Settings</span>
-					</div>
-					<span
-						class="material-symbols-outlined text-[18px] transition-transform duration-200"
-						style="transform: rotate({expandedSettings ? 180 : 0}deg)">expand_more</span
+				<!-- Settings group -->
+				<div class="mt-2">
+					<button
+						onclick={() => (expandedSettings = !expandedSettings)}
+						class="sidebar-item font-body-sm text-on-surface justify-between w-full"
 					>
-				</button>
-				{#if expandedSettings}
-					<div class="ml-4 pl-4 border-l border-outline-variant/50 space-y-1">
-						{#each settingsItems as item}
-							{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
-							{@const active = isSubmenuActive(item.href, $page.url.pathname)}
-							{#if active}
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-lg">settings</span>
+							<span>Settings</span>
+						</div>
+						<span class="material-symbols-outlined text-sm">{expandedSettings
+								? 'expand_less'
+								: 'expand_more'}</span>
+					</button>
+					{#if expandedSettings}
+						<div class="space-y-1 mt-1">
+							{#each settingsItems as item}
+								{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
+								{@const active = isSubmenuActive(item.href, $page.url.pathname)}
 								<a
-									href={$page.url.pathname}
-									aria-current="page"
-									class="flex items-center px-3 py-2 transition-colors cursor-default pointer-events-none group bg-secondary-container text-on-secondary-container font-bold rounded-lg"
+									href={active ? $page.url.pathname : href}
+									aria-current={active ? 'page' : undefined}
+									class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+										? 'active'
+										: ''}"
 								>
 									<span
-										class="material-symbols-outlined mr-3"
-										style="font-variation-settings: 'FILL' 1;">{item.icon}</span
+										class="material-symbols-outlined text-base"
+										style={active ? "font-variation-settings: 'FILL' 1;" : ''}>{item.icon}</span
 									>
-									<span class="font-body-md text-body-md">{item.name}</span>
+									<span>{item.name}</span>
 								</a>
-							{:else}
-								<a
-									{href}
-									class="flex items-center px-3 py-2 transition-colors cursor-pointer active:scale-95 group text-on-surface-variant hover:bg-surface-variant hover:text-on-surface rounded-lg"
-								>
-									<span class="material-symbols-outlined mr-3">{item.icon}</span>
-									<span class="font-body-md text-body-md">{item.name}</span>
-								</a>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</nav>
-		</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</nav>
 
-		
-		<div
-			class="px-6 py-4 mt-auto border-t border-outline-variant flex items-center justify-between"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs"
-				>
-					DBA
+		<!-- Footer Profile -->
+		<div class="border-t border-surface-border p-4 mt-auto">
+			<div class="flex items-center {collapsed ? 'justify-center' : 'justify-between'} cursor-pointer hover:bg-surface-panel p-2 -mx-2 rounded transition-colors">
+				<div class="flex items-center {collapsed ? '' : 'gap-3'}">
+					<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shrink-0">DBA</div>
+					{#if !collapsed}
+						<div class="flex flex-col">
+							<span class="font-body-sm text-on-surface font-semibold">admin</span>
+							<span class="text-[10px] text-on-surface-variant">Session Active</span>
+						</div>
+					{/if}
 				</div>
-				<div class="overflow-hidden">
-					<p class="font-body-sm text-body-sm font-bold truncate text-on-surface">admin</p>
-					<p class="text-[10px] text-on-surface-variant truncate">Session Active</p>
-				</div>
+				{#if !collapsed}
+					<button
+						onclick={() => { localStorage.removeItem('token'); window.location.href = '/login'; }}
+						class="text-on-surface-variant hover:text-error transition-colors"
+						title="Logout"
+					>
+						<span class="material-symbols-outlined text-[20px]">logout</span>
+					</button>
+				{/if}
 			</div>
-			<button
-				onclick={() => {
-					localStorage.removeItem('token');
-					window.location.href = '/login';
-				}}
-				class="text-on-surface-variant hover:text-error transition-colors"
-				title="Logout"
-			>
-				<span class="material-symbols-outlined text-[20px]">logout</span>
-			</button>
 		</div>
 	</aside>
 
-	
-	<main class="ml-64 min-h-screen">
+	<main class="min-h-screen transition-[margin] duration-300 ease-in-out {collapsed ? 'ml-16' : 'ml-64'}">
 		{@render children()}
 	</main>
 </div>
