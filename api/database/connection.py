@@ -1,10 +1,10 @@
 import asyncio
 import sys
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from log import logger
 from utils import get_env_var
 
 
@@ -13,58 +13,63 @@ if sys.platform == "win32":
 
 
 class DatabaseConnection:
-    def __init__(self):
-        self._host = get_env_var("DB_HOST")
-        self._port = get_env_var("DB_PORT")
-        self._user = get_env_var("DB_USER")
-        self._password = get_env_var("DB_PASSWORD")
-        self._db_name = get_env_var("DB_NAME")
+    """Standard async PostgreSQL (SQLAlchemy + asyncpg) connection.
 
+    Two equivalent usage patterns:
+
+        async with DatabaseConnection() as session:            # __aenter__/__aexit__
+            ...
+
+        async with DatabaseConnection().connect() as session:  # async context manager
+            ...
+    """
+
+    def __init__(self) -> None:
+        host = get_env_var("DB_HOST")
+        port = get_env_var("DB_PORT")
+        user = get_env_var("DB_USER")
+        password = get_env_var("DB_PASSWORD")
+        db_name = get_env_var("DB_NAME")
         self._database_url = (
-            f"postgresql+asyncpg://{self._user}:{self._password}@"
-            f"{self._host}:{self._port}/{self._db_name}"
+            f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}"
         )
-
         self._engine = None
         self._session_maker = None
-        self._session: Optional[AsyncSession] = None
+        self._ctx = None
 
-    async def connect(self) -> AsyncSession:
+    def _ensure_engine(self) -> None:
+        if not self._engine:
+            self._engine = create_async_engine(
+                self._database_url,
+                echo=False,
+                future=True,
+            )
+            self._session_maker = async_sessionmaker(
+                bind=self._engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+
+    @asynccontextmanager
+    async def connect(self) -> AsyncIterator[AsyncSession]:
+        """Yield a fresh session that is automatically closed on exit."""
+        self._ensure_engine()
+        session = self._session_maker()
         try:
-            if not self._engine:
-                self._engine = create_async_engine(
-                    self._database_url,
-                    echo=False,
-                    future=True
-                )
+            yield session
+        finally:
+            await session.close()
 
-                self._session_maker = async_sessionmaker(
-                    bind=self._engine,
-                    class_=AsyncSession,
-                    expire_on_commit=False
-                )
-
-            self._session = self._session_maker()
-            await logger.info("Database", "Connection", f"New session created")
-            return self._session
-
-        except Exception as error:
-            await logger.error("Database", f"Error while connecting: {error}")
-            raise
-
-    async def close(self):
-        if self._session:
-            await logger.info("Database", "Connection", "Closing session")
-            await self._session.close()
-            self._session = None
-
+    async def close(self) -> None:
+        """Dispose the engine and release all pooled connections."""
         if self._engine:
             await self._engine.dispose()
             self._engine = None
             self._session_maker = None
 
     async def __aenter__(self) -> AsyncSession:
-        return await self.connect()
+        self._ctx = self.connect()
+        return await self._ctx.__aenter__()
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self._ctx.__aexit__(exc_type, exc_val, exc_tb)
