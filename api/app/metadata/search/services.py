@@ -23,13 +23,20 @@ def _vector_score(column: str, has_embedding: bool) -> str:
     return f"CASE WHEN {column} IS NULL THEN 0.0 ELSE 1.0 / (1.0 + ({column} <-> CAST(:query_embedding AS vector))) END"
 
 
-def _text_score(name_expression: str, type_expression: str | None = None) -> tuple[str, str]:
+def _text_score(name_expression: str, type_expression: str | None = None, num_tokens: int = 1) -> tuple[str, str]:
     exact_terms = [
         f"CASE WHEN lower({name_expression}) = :query_lower THEN 1.0 ELSE 0.0 END",
         f"CASE WHEN lower({name_expression}) LIKE :query_like THEN 0.75 ELSE 0.0 END",
     ]
     if type_expression:
         exact_terms.append(f"CASE WHEN lower({type_expression}) = :query_lower THEN 0.9 ELSE 0.0 END")
+        exact_terms.append(f"CASE WHEN lower({type_expression}) LIKE :query_like THEN 0.75 ELSE 0.0 END")
+
+    if num_tokens > 1:
+        search_target = f"lower(coalesce({name_expression}, '') || ' ' || coalesce({type_expression}, ''))" if type_expression else f"lower({name_expression})"
+        token_matches = [f"{search_target} LIKE :query_token_{i}" for i in range(num_tokens)]
+        token_condition = " AND ".join(token_matches)
+        exact_terms.append(f"CASE WHEN {token_condition} THEN 0.8 ELSE 0.0 END")
 
     exact_score = f"GREATEST({', '.join(exact_terms)})"
     fuzzy_score = (
@@ -71,6 +78,9 @@ async def search_metadata(
     semantic: bool = True,
 ) -> MetadataSearchResponse:
     term = " ".join(query.strip().split())
+    tokens = term.split()
+    num_tokens = len(tokens)
+
     if semantic:
         embedding = await generate_embedding_cached(db, term)
         embedding_literal = _vector_literal(embedding)
@@ -79,12 +89,12 @@ async def search_metadata(
         embedding_literal = None
         has_embedding = False
 
-    db_exact, db_fuzzy = _text_score("db.db_name")
-    schema_exact, schema_fuzzy = _text_score("schema_meta.schema_name")
-    table_exact, table_fuzzy = _text_score("tbl.name")
-    column_exact, column_fuzzy = _text_score("col.name", "col.data_type")
-    index_exact, index_fuzzy = _text_score("idx.name", "idx.type")
-    tag_exact, tag_fuzzy = _text_score("tag.name", "tag.type")
+    db_exact, db_fuzzy = _text_score("db.db_name", num_tokens=num_tokens)
+    schema_exact, schema_fuzzy = _text_score("schema_meta.schema_name", num_tokens=num_tokens)
+    table_exact, table_fuzzy = _text_score("tbl.name", num_tokens=num_tokens)
+    column_exact, column_fuzzy = _text_score("col.name", "col.data_type", num_tokens=num_tokens)
+    index_exact, index_fuzzy = _text_score("idx.name", "idx.type", num_tokens=num_tokens)
+    tag_exact, tag_fuzzy = _text_score("tag.name", "tag.type", num_tokens=num_tokens)
 
     sql = text(
         f"""
@@ -269,6 +279,8 @@ async def search_metadata(
         "server_id": server_id,
         "limit": limit,
     }
+    for i, token in enumerate(tokens):
+        params[f"query_token_{i}"] = f"%{token.lower()}%"
     rows = (await db.execute(sql, params)).mappings().all()
 
     boosted_types = _extract_boosted_types(query)
