@@ -35,6 +35,7 @@ async def build_params(session: AsyncSession, alert: Alert) -> dict[str, Any]:
 
     return {
         "path": path_for(alert.scope, alert.entity_id, database_id),
+        "source": "alerts",
         "scope": alert.scope,
         "type": alert.rule,
         "rule": alert.rule_name,
