@@ -95,3 +95,39 @@ def test_params_are_json_serializable():
         "value": 0.75,
     }
     assert json.loads(json.dumps(params)) == params
+
+
+# ---------------------------------------------------------------------------
+# insert_notification
+# ---------------------------------------------------------------------------
+
+async def test_insert_notification_builds_and_persists():
+    """insert_notification builds params, formats the message, and issues the INSERT."""
+    import json
+
+    from notifier.services.notifications import insert_notification
+
+    alert = make_alert("index", 99, window=10.0)
+
+    captured = {}
+
+    class Result:
+        def first(self):
+            return (12,)
+
+    class _Session:
+        async def execute(self, query, params=None):
+            captured["query"] = str(query)
+            captured["params"] = params
+            return Result()
+
+    await insert_notification(_Session(), alert)
+
+    assert "INSERT INTO notifier.notification" in captured["query"]
+    payload = captured["params"]
+    assert "[CRITICAL] hit_rate" in payload["message"]
+    parsed = json.loads(payload["params"])
+    assert parsed["path"] == "/analytics/12/index"
+    assert parsed["entity"] == "users_email_idx"
+    assert parsed["value"] == 0.75
+
