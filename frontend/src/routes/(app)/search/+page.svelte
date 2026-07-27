@@ -23,22 +23,30 @@
 	let quickTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
 	let semanticTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
 	let searchRequestId = 0;
+	let searchHelpOpen = $state(false);
+
+	let filterModalOpen = $state(false);
+	let selectedTypes = $state<string[]>([]);
+	const availableTypes = ['database', 'schema', 'table', 'column', 'index', 'tag'];
 
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let assignments = $state<TagAssignment[]>([]);
 	let assignmentsLoading = $state(false);
-	let serverFilter = $state($page.url.searchParams.get('server_id') ?? '');
-	let databaseFilter = $state($page.url.searchParams.get('database_id') ?? '');
-	const filteredDatabases = $derived(
-		serverFilter ? databases.filter((database) => database.server_id === serverFilter) : databases
+	let selectedServer = $state('');
+	let selectedDbId = $state('');
+	const serverDatabases = $derived(
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
-	const activeServer = $derived(servers.find((server) => server.id === serverFilter) ?? null);
-	const activeDatabase = $derived(databases.find((database) => database.id === databaseFilter) ?? null);
-	const hasFilters = $derived(Boolean(serverFilter || databaseFilter));
+	const filteredResults = $derived(
+		selectedTypes.length > 0 ? results.filter((r) => selectedTypes.includes(r.type)) : results
+	);
+
 	const visibleResultCounts = $derived.by(() => {
 		const counts = new Map<MetadataSearchResult['type'], number>();
-		for (const result of results) {
+		for (const result of filteredResults) {
 			counts.set(result.type, (counts.get(result.type) ?? 0) + 1);
 		}
 		return Array.from(counts.entries()).map(([type, count]) => ({ type, count }));
@@ -47,9 +55,13 @@
 	onMount(async () => {
 		try {
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
-			if (!serverFilter && $selectedServerId) serverFilter = $selectedServerId;
-			if (!databaseFilter && $selectedDatabaseId) databaseFilter = $selectedDatabaseId;
-			normalizeFilters();
+			const dbId = $page.url.searchParams.get('database_id') ?? $selectedDatabaseId ?? databases[0]?.id;
+			if (dbId) {
+				await selectDatabase(dbId);
+			} else if (servers.length > 0) {
+				selectedServer = servers[0].id;
+				selectedServerId.set(servers[0].id);
+			}
 			if (query.trim()) await runSearch(true);
 		} catch (err: any) {
 			handleError(err, 'Failed to initialize search.');
@@ -67,58 +79,28 @@
 		error = err.message || fallback;
 	}
 
-	function normalizeFilters() {
-		if (databaseFilter) {
-			const database = databases.find((item) => item.id === databaseFilter);
-			if (database) {
-				serverFilter = database.server_id;
-				return;
-			}
-			databaseFilter = '';
-		}
-
-		if (serverFilter && !servers.some((server) => server.id === serverFilter)) {
-			serverFilter = '';
-		}
-	}
-
 	function eventValue(event: Event): string {
 		return (event.currentTarget as HTMLSelectElement).value;
 	}
 
-	function selectServerFilter(value: string) {
-		serverFilter = value;
-		if (!value) {
-			databaseFilter = '';
-			return;
-		}
-		if (databaseFilter && !databases.some((database) => database.id === databaseFilter && database.server_id === value)) {
-			databaseFilter = '';
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDbId) {
+			await selectDatabase(database.id);
 		}
 	}
 
-	function selectDatabaseFilter(value: string) {
-		databaseFilter = value;
-		const database = databases.find((item) => item.id === value);
-		if (database) serverFilter = database.server_id;
-	}
-
-	function useCurrentContext() {
-		if ($selectedDatabaseId) {
-			const database = databases.find((item) => item.id === $selectedDatabaseId);
-			if (database) {
-				databaseFilter = database.id;
-				serverFilter = database.server_id;
-				return;
-			}
+	async function selectDatabase(dbId: string) {
+		selectedDbId = dbId;
+		const database = databases.find((item) => item.id === dbId);
+		if (database) {
+			selectedDatabaseId.set(dbId);
+			selectedServer = database.server_id;
+			selectedServerId.set(database.server_id);
 		}
-		serverFilter = $selectedServerId ?? '';
-		databaseFilter = '';
-	}
-
-	function clearFilters() {
-		serverFilter = '';
-		databaseFilter = '';
+		if (query.trim()) await runSearch(true);
 	}
 
 	async function runSearch(semantic: boolean) {
@@ -132,8 +114,8 @@
 			searched = true;
 			const response = await searchMetadata({
 				q: term,
-				server_id: serverFilter || undefined,
-				database_id: databaseFilter || undefined,
+				server_id: selectedServer || undefined,
+				database_id: selectedDbId || undefined,
 				limit: 25,
 				semantic
 			});
@@ -143,8 +125,8 @@
 
 			const params = new URLSearchParams();
 			params.set('q', term);
-			if (serverFilter) params.set('server_id', serverFilter);
-			if (databaseFilter) params.set('database_id', databaseFilter);
+			if (selectedServer) params.set('server_id', selectedServer);
+			if (selectedDbId) params.set('database_id', selectedDbId);
 			await goto(`?${params.toString()}`, { replaceState: true, keepFocus: true });
 		} catch (err: any) {
 			if (requestId === searchRequestId) handleError(err, 'Failed to search metadata.');
@@ -341,122 +323,123 @@
 	function resultScore(result: MetadataSearchResult): number {
 		return Math.round(Math.max(0, Math.min(1, result.score)) * 100);
 	}
+
+	function scoreTone(result: MetadataSearchResult): string {
+		const pct = resultScore(result);
+		if (pct >= 75) return 'text-status-healthy bg-status-healthy/10 border-status-healthy/20';
+		if (pct >= 50) return 'text-status-warning bg-status-warning/10 border-status-warning/20';
+		return 'text-on-surface-variant bg-surface-container-high border-outline-variant';
+	}
 </script>
 
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
+	class="fixed top-0 right-0 z-40 flex h-16 w-[calc(100%-16rem)] items-center justify-between border-b border-outline-variant bg-surface-dim px-container-padding"
 >
-	<span class="material-symbols-outlined text-primary">search</span>
-	<h1 class="font-headline-md text-headline-md text-on-background m-0">Search</h1>
-</header>
-
-<div class="pt-24 px-container-padding pb-12">
-	<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4 shadow-sm">
-		<div class="flex flex-col gap-4">
-			<div class="flex flex-col gap-3 lg:flex-row">
-				<div
-					class="flex min-h-14 flex-1 items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-high px-4 transition-colors focus-within:border-primary focus-within:bg-surface"
-				>
-					<span class="material-symbols-outlined text-[22px] text-primary">search</span>
-					<input
-						type="text"
-						bind:value={query}
-						oninput={onInputSearch}
-						onkeydown={onInputKeydown}
-						placeholder="Search metadata..."
-						class="min-w-0 flex-1 bg-transparent text-base text-on-surface outline-none placeholder:text-on-surface-variant/60"
-					/>
-					{#if loading}
-						<span class="material-symbols-outlined animate-spin text-on-surface-variant">progress_activity</span>
-					{/if}
-				</div>
-
+	<div class="flex items-center gap-4">
+		<span class="material-symbols-outlined text-primary">search</span>
+		<div class="flex items-center gap-3">
+			<h1 class="m-0 font-headline-md text-headline-md text-on-background">Search</h1>
+			<div class="relative">
 				<button
-					type="button"
-					onclick={() => runSearch(true)}
-					disabled={loading || !query.trim()}
-					class="flex min-h-14 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-bold text-on-primary transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+					onclick={() => (searchHelpOpen = !searchHelpOpen)}
+					onmouseenter={() => (searchHelpOpen = true)}
+					onmouseleave={() => (searchHelpOpen = false)}
+					class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-outline-variant text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+					aria-label="Search page explanation"
 				>
-					<span class="material-symbols-outlined text-[18px]">search</span>
-					Search
+					<span class="material-symbols-outlined text-[14px]">help</span>
 				</button>
-			</div>
-
-			<div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-				<label class="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-					Server
-					<div class="relative">
-						<span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">
-							dns
-						</span>
-						<select
-							value={serverFilter}
-							onchange={(event) => selectServerFilter(eventValue(event))}
-							class="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-high py-2 pl-10 pr-8 text-sm font-medium text-on-surface outline-none focus:border-primary"
-						>
-							<option value="">All servers</option>
-							{#each servers as server}
-								<option value={server.id}>{server.name}</option>
-							{/each}
-						</select>
-					</div>
-				</label>
-
-				<label class="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-					Database
-					<div class="relative">
-						<span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">
-							database
-						</span>
-						<select
-							value={databaseFilter}
-							onchange={(event) => selectDatabaseFilter(eventValue(event))}
-							class="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-high py-2 pl-10 pr-8 text-sm font-medium text-on-surface outline-none focus:border-primary disabled:opacity-60"
-							disabled={filteredDatabases.length === 0}
-						>
-							<option value="">All databases</option>
-							{#each filteredDatabases as database}
-								<option value={database.id}>{database.name}</option>
-							{/each}
-						</select>
-					</div>
-				</label>
-
-				<div class="flex items-end gap-2">
-					<button
-						type="button"
-						onclick={useCurrentContext}
-						class="flex h-11 items-center gap-2 rounded-lg border border-outline-variant px-3 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high"
+				{#if searchHelpOpen}
+					<div
+						class="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs text-on-surface shadow-lg"
 					>
-						<span class="material-symbols-outlined text-[18px]">my_location</span>
-						Current
-					</button>
-					<button
-						type="button"
-						onclick={clearFilters}
-						disabled={!hasFilters}
-						class="flex h-11 items-center gap-2 rounded-lg border border-outline-variant px-3 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
-						aria-label="Clear filters"
-					>
-						<span class="material-symbols-outlined text-[18px]">filter_alt_off</span>
-					</button>
-				</div>
-			</div>
-
-			<div class="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-3">
-				<span class="text-xs font-bold uppercase tracking-wide text-on-surface-variant">Scope</span>
-				<span class="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface">
-					<span class="material-symbols-outlined text-[14px]">dns</span>
-					{activeServer?.name ?? 'All servers'}
-				</span>
-				<span class="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface">
-					<span class="material-symbols-outlined text-[14px]">database</span>
-					{activeDatabase?.name ?? 'All databases'}
-				</span>
-				{#if searched}
-					<span class="ml-auto text-xs text-on-surface-variant">{results.length} results</span>
+						<p class="mb-1 font-bold">What is this page?</p>
+						<p class="mb-2 text-on-surface-variant">
+							Semantic search across all monitored metadata — tables, columns, indexes, views and
+							schemas. Results are ranked by similarity to your query.
+						</p>
+						<p class="font-bold">Tips</p>
+						<p class="text-on-surface-variant">
+							Use the server/database selectors to narrow the scope. The match score indicates how
+							closely each result relates to your search term.
+						</p>
+					</div>
 				{/if}
 			</div>
+		</div>
+	</div>
+	{#if searched}
+		<span
+			class="rounded-full border border-outline-variant bg-surface-container px-3 py-1 font-label-caps text-[10px] text-on-surface-variant"
+		>
+			{filteredResults.length} results
+		</span>
+	{/if}
+</header>
+
+<div class="px-container-padding pt-24 pb-12">
+	<!-- Search bar + context selectors -->
+	<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end">
+		<div
+			class="flex min-h-12 flex-1 items-center gap-3 rounded-lg border border-outline-variant bg-surface-container px-4 transition-colors focus-within:border-primary"
+		>
+			<span class="material-symbols-outlined text-[20px] text-primary">search</span>
+			<input
+				type="text"
+				bind:value={query}
+				oninput={onInputSearch}
+				onkeydown={onInputKeydown}
+				placeholder="Search tables, columns, indexes, schemas…"
+				class="min-w-0 flex-1 bg-transparent text-base text-on-surface outline-none placeholder:text-on-surface-variant/60"
+			/>
+			{#if loading}
+				<span class="material-symbols-outlined animate-spin text-on-surface-variant">progress_activity</span>
+			{/if}
+		</div>
+
+		</div>
+
+		<div class="flex flex-wrap items-center gap-3">
+			<button
+				type="button"
+				onclick={() => (filterModalOpen = true)}
+				class="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container px-3 text-xs font-bold text-on-surface transition-colors hover:border-primary/40 hover:text-primary"
+			>
+				<span class="material-symbols-outlined text-[16px]">filter_list</span>
+				Filter
+				{#if selectedTypes.length > 0}
+					<span class="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/20 px-1 text-[10px] font-bold text-primary">
+						{selectedTypes.length}
+					</span>
+				{/if}
+			</button>
+
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<select
+					value={selectedServer}
+					onchange={(event) => selectServer(eventValue(event))}
+					disabled={servers.length <= 1}
+					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
+				>
+					{#each servers as server}
+						<option value={server.id}>{server.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="flex items-center gap-2">
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<select
+					value={selectedDbId}
+					onchange={(event) => selectDatabase(eventValue(event))}
+					disabled={serverDatabases.length <= 1}
+					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+				>
+					{#each serverDatabases as database}
+						<option value={database.id}>{database.name}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 	</section>
 
@@ -467,7 +450,7 @@
 	{/if}
 
 	<section class="space-y-3">
-		{#if searched && results.length > 0}
+		{#if searched && filteredResults.length > 0}
 			<div class="flex flex-wrap items-center gap-2">
 				{#each visibleResultCounts as item}
 					<span class={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${typeTone(item.type)}`}>
@@ -479,18 +462,32 @@
 		{/if}
 
 		{#if !searched && !loading}
-			<div class="rounded-lg border border-dashed border-outline-variant bg-surface-container px-6 py-14 text-center">
-				<span class="material-symbols-outlined mb-3 text-[42px] text-primary">manage_search</span>
-				<p class="font-bold text-on-surface">Search metadata</p>
-			</div>
-		{:else if searched && !loading && results.length === 0}
+			<div class="rounded-lg border border-outline-variant bg-surface-container p-6">
+				<div class="mb-5 flex items-center gap-2">
+					<span class="material-symbols-outlined text-[20px] text-primary">lightbulb</span>
+					<h2 class="m-0 font-headline-md text-base font-bold text-on-surface">Suggested searches</h2>
+				</div>
+				<p class="mb-4 text-sm text-on-surface-variant">Click a term to start, or type your own query above.</p>
+				<div class="flex flex-wrap gap-2">
+					{#each ['primary key', 'foreign key', 'timestamp', 'user', 'email', 'uuid', 'jsonb', 'created_at'] as term}
+						<button
+							type="button"
+							onclick={() => { query = term; runSearch(true); }}
+							class="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+						>
+							<span class="material-symbols-outlined mr-1 text-[14px] align-middle">tag</span>
+							{term}
+						</button>
+					{/each}
+				</div>
+		{:else if searched && !loading && filteredResults.length === 0}
 			<div class="rounded-lg border border-outline-variant bg-surface-container px-6 py-16 text-center">
 				<span class="material-symbols-outlined mb-3 text-[40px] text-on-surface-variant">search_off</span>
 				<p class="font-bold text-on-surface">No results found</p>
 				<p class="text-sm text-on-surface-variant">Try a different term or remove filters.</p>
 			</div>
 		{:else}
-			{#each results as result}
+			{#each filteredResults as result}
 				<div
 					class="group overflow-hidden rounded-lg border border-outline-variant bg-surface-container transition-colors hover:border-primary/30 hover:bg-surface-container-high"
 				>
@@ -524,12 +521,15 @@
 								<p class="line-clamp-2 text-sm leading-6 text-on-surface/80">{result.description}</p>
 							{/if}
 						</div>
-						<div class="flex items-start gap-3">
-							<span class="rounded-lg bg-surface-container-high px-2 py-1 text-xs font-bold text-on-surface-variant">
+						<div class="flex flex-col items-end gap-1">
+						<div class="flex flex-col items-center gap-0.5">
+							<span class={`rounded-lg border px-2.5 py-1 font-mono text-sm font-bold tabular-nums ${scoreTone(result)}`}>
 								{resultScore(result)}%
 							</span>
-							<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">arrow_forward</span>
+							<span class="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">Match</span>
 						</div>
+						<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">arrow_forward</span>
+					</div>
 					</a>
 
 					<div class="flex flex-wrap items-center gap-2 border-t border-outline-variant px-4 py-3">
@@ -589,3 +589,59 @@
 		{/if}
 	</section>
 </div>
+
+{#if filterModalOpen}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm"
+		onclick={(e) => { if (e.target === e.currentTarget) filterModalOpen = false; }}
+	>
+		<div class="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-6 shadow-xl">
+			<div class="mb-6 flex items-center justify-between">
+				<h2 class="m-0 font-headline-sm text-on-surface">Filter by Type</h2>
+				<button
+					type="button"
+					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+					onclick={() => (filterModalOpen = false)}
+				>
+					<span class="material-symbols-outlined">close</span>
+				</button>
+			</div>
+
+			<div class="mb-6 grid grid-cols-2 gap-3">
+				{#each availableTypes as type}
+					<label class="flex cursor-pointer items-center gap-3 rounded-lg border border-outline-variant bg-surface-container p-3 transition-colors hover:border-primary/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+						<input
+							type="checkbox"
+							bind:group={selectedTypes}
+							value={type}
+							class="h-4 w-4 cursor-pointer rounded border-outline-variant text-primary focus:ring-primary focus:ring-offset-surface-container"
+						/>
+						<div class="flex items-center gap-2">
+							<span class={`material-symbols-outlined text-[18px] ${typeTone(type as any).split(' ')[1]}`}>{typeIcon(type as any)}</span>
+							<span class="text-sm font-medium text-on-surface">{typeLabel(type as any)}</span>
+						</div>
+					</label>
+				{/each}
+			</div>
+
+			<div class="flex justify-end gap-3">
+				<button
+					type="button"
+					class="cursor-pointer rounded-lg px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+					onclick={() => { selectedTypes = []; }}
+				>
+					Clear All
+				</button>
+				<button
+					type="button"
+					class="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary transition-colors hover:bg-primary/90"
+					onclick={() => (filterModalOpen = false)}
+				>
+					Apply Filters
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
