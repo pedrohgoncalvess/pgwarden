@@ -167,18 +167,6 @@
 			? 'w-16'
 			: 'w-64'}"
 	>
-		<!-- Collapse / expand toggle button (floats on the right edge) -->
-		<button
-			onclick={toggleSidebar}
-			title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-			aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-			class="absolute top-6 -right-3 z-50 w-6 h-6 rounded-full bg-surface-container-high border border-surface-border flex items-center justify-center text-on-surface-variant hover:bg-primary hover:text-on-primary hover:border-primary transition-colors duration-200 shrink-0"
-		>
-			<span class="material-symbols-outlined text-[16px] leading-none"
-				>{collapsed ? 'chevron_right' : 'chevron_left'}</span
-			>
-		</button>
-
 		<!-- Branding -->
 		<div class="p-4 flex items-center {collapsed ? 'flex-col gap-2' : 'gap-3'}">
 			<img
@@ -512,6 +500,20 @@
 			</div>
 		</div>
 	</aside>
+
+	<!-- Collapse / expand toggle button (root-level fixed so it always paints
+	     above the page headers, which sit at the sidebar's right edge) -->
+	<button
+		onclick={toggleSidebar}
+		title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+		aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+		class="fixed top-6 z-50 w-6 h-6 rounded-full bg-surface-container-high border border-surface-border flex items-center justify-center text-on-surface-variant hover:bg-primary hover:text-on-primary hover:border-primary transition-[left] duration-300 ease-in-out shrink-0"
+		style:left={collapsed ? '3.25rem' : '15.25rem'}
+	>
+		<span class="material-symbols-outlined text-[16px] leading-none"
+			>{collapsed ? 'chevron_right' : 'chevron_left'}</span
+		>
+	</button>
 
 	<NotificationPanel
 		open={notificationsOpen}
