@@ -125,6 +125,23 @@ def _avg_duration(durations: list[Optional[float]]) -> Optional[float]:
     return total / count
 
 
+def _sort_key(item: tuple, order_by: str) -> float:
+    """Compute a numeric sort key for a (signature, agg) pair."""
+    agg = item[1]
+    if order_by == "executions":
+        return agg["execution_count"]
+    durations = agg["durations"]
+    valid = [d for d in durations if d is not None]
+    if not valid:
+        return 0.0
+    if order_by == "max_duration":
+        return max(valid)
+    if order_by == "total_duration":
+        return sum(valid)
+    # avg_duration
+    return sum(valid) / len(valid)
+
+
 async def _fetch_batch(
     db: AsyncSession,
     database_id: int,
@@ -193,6 +210,8 @@ async def get_query_analytics(
     search: Optional[List[str]],
     exclude: Optional[List[str]],
     limit: Optional[int] = 50,
+    order_by: str = "executions",
+    order_dir: str = "desc",
 ) -> QueryAnalyticsResponse:
     db_result = await db.execute(
         select(Database).where(
@@ -318,7 +337,11 @@ async def get_query_analytics(
         timeline_buckets[bucket].append(exec_avg_duration)
 
     total = len(signatures)
-    sorted_signatures = sorted(signatures.items(), key=lambda x: x[1]["execution_count"], reverse=True)
+    sorted_signatures = sorted(
+        signatures.items(),
+        key=lambda item: (_sort_key(item, order_by), item[0]),
+        reverse=order_dir == "desc",
+    )
     page_signatures = sorted_signatures[:limit] if limit else sorted_signatures
 
     items = []

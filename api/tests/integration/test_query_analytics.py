@@ -299,6 +299,65 @@ async def test_query_analytics_exclude(
 
 
 @pytest.mark.asyncio
+async def test_query_analytics_order_by_avg_duration(
+    auth_client: AsyncClient,
+    db_session,
+    test_server_and_database,
+):
+    _, database = test_server_and_database
+    now = datetime.now(timezone.utc)
+    base = now - timedelta(hours=1)
+
+    rows = [
+        NativeQueryMetric(
+            collected_at=base + timedelta(minutes=1),
+            database_id=database.id,
+            pid=100,
+            backend_start=base,
+            user_name="user_a",
+            application_name="app_1",
+            state="active",
+            query="SELECT * FROM fast_table",
+            query_hash="hash1",
+            query_duration_ms=10.0,
+        ),
+        NativeQueryMetric(
+            collected_at=base + timedelta(minutes=2),
+            database_id=database.id,
+            pid=200,
+            backend_start=base,
+            user_name="user_b",
+            application_name="app_2",
+            state="active",
+            query="SELECT * FROM slow_table",
+            query_hash="hash2",
+            query_duration_ms=500.0,
+        ),
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+
+    # Descending by avg_duration: slowest first
+    response = await auth_client.get(
+        f"/v1/databases/{database.public_id}/analytics/query?preset=1d&order_by=avg_duration&order_dir=desc"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert "slow" in data["items"][0]["query_signature"]
+
+    # Ascending by avg_duration: fastest first
+    response_asc = await auth_client.get(
+        f"/v1/databases/{database.public_id}/analytics/query?preset=1d&order_by=avg_duration&order_dir=asc"
+    )
+    assert response_asc.status_code == 200
+    data_asc = response_asc.json()
+    assert len(data_asc["items"]) == 2
+    assert "fast" in data_asc["items"][0]["query_signature"]
+
+
+
+@pytest.mark.asyncio
 async def test_query_analytics_not_found(auth_client: AsyncClient):
     response = await auth_client.get(f"/v1/databases/{uuid.uuid4()}/analytics/query?preset=1d")
     assert response.status_code == 404

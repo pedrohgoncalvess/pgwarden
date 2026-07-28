@@ -10,6 +10,8 @@
 		QueryAnalyticsResponse,
 		QueryAnalyticsItem,
 		AnalyticsPreset,
+		QueryOrderBy,
+		QueryOrderDir,
 		ServerListItem
 	} from '$lib/api';
 
@@ -30,6 +32,10 @@
 	let selectedState = $state('');
 	let searchTerm = $state('');
 	let excludeTerm = $state('commit, begin');
+	let orderBy = $state<QueryOrderBy>('executions');
+	let orderDir = $state<QueryOrderDir>('desc');
+
+
 
 	let expandedQuery = $state<string | null>(null);
 	let pageOffset = $state(0);
@@ -107,31 +113,97 @@
 			.filter((term) => term.length > 0);
 	}
 
-	function readSearchTermsFromUrl(): string[] {
-		return $page.url.searchParams
-			.getAll('search')
-			.map((term) => term.trim())
-			.filter((term) => term.length > 0);
-	}
-
-	function buildSearchQueryString(value: string): string {
+	/**
+	 * Build a URL query string that encodes the full current filter state
+	 * (range/preset, custom dates, user, application, state, search, exclude).
+	 * This is the canonical, shareable representation of the page's filters.
+	 */
+	function buildFiltersQueryString(): string {
 		const params = new URLSearchParams();
-		for (const term of parseSearchTerms(value)) {
+		if (preset) params.set('preset', preset);
+		if (preset === 'custom') {
+			if (startDate) params.set('start', startDate);
+			if (endDate) params.set('end', endDate);
+		}
+		if (selectedUser) params.set('user', selectedUser);
+		if (selectedApplication) params.set('application', selectedApplication);
+		if (selectedState) params.set('state', selectedState);
+		for (const term of parseSearchTerms(searchTerm)) {
 			params.append('search', term);
 		}
+		for (const term of parseExcludeTerms(excludeTerm)) {
+			params.append('exclude', term);
+		}
+		params.set('order_by', orderBy);
+		params.set('order_dir', orderDir);
 		return params.toString();
+	}
+
+	/**
+	 * Read the filter state back from the URL search params into local state.
+	 * Only overrides a filter when its param is actually present, so defaults
+	 * (e.g. the `exclude` default of 'commit, begin') are preserved on a clean URL.
+	 */
+	function readFiltersFromUrl() {
+		const params = $page.url.searchParams;
+		const presetParam = params.get('preset');
+		if (presetParam && presets.some((p) => p.value === presetParam)) {
+			preset = presetParam as AnalyticsPreset;
+		}
+		if (params.has('start')) startDate = params.get('start') ?? '';
+		if (params.has('end')) endDate = params.get('end') ?? '';
+		if (params.has('user')) selectedUser = params.get('user') ?? '';
+		if (params.has('application')) selectedApplication = params.get('application') ?? '';
+		if (params.has('state')) selectedState = params.get('state') ?? '';
+		if (params.has('search')) {
+			searchTerm = params
+				.getAll('search')
+				.map((t) => t.trim())
+				.filter((t) => t.length > 0)
+				.join(', ');
+		}
+		if (params.has('exclude')) {
+			excludeTerm = params
+				.getAll('exclude')
+				.map((t) => t.trim())
+				.filter((t) => t.length > 0)
+				.join(', ');
+		}
+		const orderParam = params.get('order_by');
+		if (orderParam === 'executions' || orderParam === 'avg_duration' || orderParam === 'max_duration' || orderParam === 'total_duration') {
+			orderBy = orderParam;
+		}
+		const dirParam = params.get('order_dir');
+		if (dirParam === 'asc' || dirParam === 'desc') {
+			orderDir = dirParam;
+		}
 	}
 
 	function eventValue(event: Event): string {
 		return (event.currentTarget as HTMLSelectElement).value;
 	}
+	function toggleSort(field: QueryOrderBy) {
+		if (orderBy === field) {
+			orderDir = orderDir === 'desc' ? 'asc' : 'desc';
+		} else {
+			orderBy = field;
+			orderDir = 'desc';
+		}
+		applyFilters();
+	}
+
+	function sortIcon(field: QueryOrderBy): string {
+		if (orderBy !== field) return 'unfold_more';
+		return orderDir === 'desc' ? 'arrow_downward' : 'arrow_upward';
+	}
+
 
 	let serverDatabases = $derived(
 		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
 	);
 
 	function analyticsHref(databaseId: string): string {
-		const queryString = buildSearchQueryString(searchTerm);
+		const queryString = buildFiltersQueryString();
 		return `/analytics/${databaseId}/query${queryString ? `?${queryString}` : ''}`;
 	}
 
@@ -219,6 +291,8 @@
 			if (searchTerm.trim()) options.search = searchTerm.trim();
 			const excludeTerms = parseExcludeTerms(excludeTerm);
 			if (excludeTerms.length > 0) options.exclude = excludeTerms;
+			options.orderBy = orderBy;
+			options.orderDir = orderDir;
 			options.limit = pageLimit;
 
 			data = await getQueryAnalytics(database.id, options);
@@ -242,8 +316,25 @@
 		await loadData(database);
 	}
 
+	/**
+	 * Sync the full filter state into the URL via a replaceState navigation,
+	 * WITHOUT reloading data. Used on initial load so defaults (e.g. the
+	 * `commit, begin` exclude terms) appear in the URL from the start.
+	 */
+	async function syncFiltersUrl() {
+		if (!selectedDb) return;
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/query${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
 	async function applyFilters() {
 		if (!selectedDb) return;
+		// Sync the full filter state into the URL (replaceState so we don't spam
+		// history on every search), then load data with the updated filters.
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/query${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 		await loadData(selectedDb);
 	}
 
@@ -251,7 +342,7 @@
 		try {
 			loading = true;
 			error = '';
-			searchTerm = readSearchTermsFromUrl().join(', ');
+			readFiltersFromUrl();
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 			if (databases.length === 0) {
 				return;
@@ -264,6 +355,9 @@
 				return;
 			}
 			await selectDatabase(db);
+			// Reflect the initial filter state (including defaults like the
+			// exclude terms) in the URL without triggering another data load.
+			await syncFiltersUrl();
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -1145,21 +1239,37 @@
 								>QUERY</th
 							>
 							<th
+								aria-sort={orderBy === 'executions' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>EXECUTIONS</th
 							>
+								<button onclick={() => toggleSort('executions')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+									EXECUTIONS <span class="material-symbols-outlined text-[14px]">{sortIcon('executions')}</span>
+								</button>
+							</th>
 							<th
+								aria-sort={orderBy === 'avg_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>AVG DURATION</th
 							>
+								<button onclick={() => toggleSort('avg_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+									AVG DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('avg_duration')}</span>
+								</button>
+							</th>
 							<th
+								aria-sort={orderBy === 'max_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>MAX DURATION</th
 							>
+								<button onclick={() => toggleSort('max_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+									MAX DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('max_duration')}</span>
+								</button>
+							</th>
 							<th
+								aria-sort={orderBy === 'total_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>TOTAL DURATION</th
 							>
+								<button onclick={() => toggleSort('total_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+									TOTAL DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('total_duration')}</span>
+								</button>
+							</th>
 							<th
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 								>USERS</th

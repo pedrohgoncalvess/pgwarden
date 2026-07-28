@@ -765,6 +765,9 @@ export type AnalyticsDataResponse = {
 
 export type AnalyticsPreset = '1d' | '3d' | '1w' | '2w' | '1m' | 'custom';
 
+export type QueryOrderBy = 'executions' | 'avg_duration' | 'max_duration' | 'total_duration';
+export type QueryOrderDir = 'asc' | 'desc';
+
 export type QueryAnalyticsBreakdownItem = {
 	user_name?: string;
 	application_name?: string;
@@ -1065,6 +1068,8 @@ export async function getQueryAnalytics(
 		state?: string;
 		search?: string;
 		exclude?: string[];
+		orderBy?: QueryOrderBy;
+		orderDir?: QueryOrderDir;
 		limit?: number;
 	} = {}
 ): Promise<QueryAnalyticsResponse> {
@@ -1097,6 +1102,12 @@ export async function getQueryAnalytics(
 	}
 	if (options.limit !== undefined) {
 		url.searchParams.set('limit', String(options.limit));
+	}
+	if (options.orderBy) {
+		url.searchParams.set('order_by', options.orderBy);
+	}
+	if (options.orderDir) {
+		url.searchParams.set('order_dir', options.orderDir);
 	}
 	const res = await fetch(url.toString(), {
 		headers: authHeaders()

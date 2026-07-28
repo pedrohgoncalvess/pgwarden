@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -38,6 +38,8 @@ async def get_query_analytics(
     search: Optional[List[str]] = Query(default=None, description="Search terms within the normalized query signature. Repeated values are OR-ed."),
     exclude: Optional[List[str]] = Query(default=None, description="Exclude queries whose signature contains any of these terms"),
     limit: Optional[int] = Query(default=50, ge=1, le=500, description="Maximum number of query signatures to return"),
+    order_by: Literal["executions", "avg_duration", "max_duration", "total_duration"] = Query(default="executions", description="Sort field"),
+    order_dir: Literal["asc", "desc"] = Query(default="desc", description="Sort direction"),
 ):
     async with DatabaseConnection() as conn:
         return await services.get_query_analytics(
@@ -52,4 +54,6 @@ async def get_query_analytics(
             search,
             exclude,
             limit,
+            order_by,
+            order_dir,
         )
