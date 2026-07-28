@@ -175,6 +175,45 @@
 		return table.schema_name === 'public' ? name : `${table.schema_name}.${name}`;
 	}
 
+	/**
+	 * Build a URL query string that encodes the full current filter state
+	 * (range/preset, custom dates, table ids).
+	 * This is the canonical, shareable representation of the page's filters.
+	 */
+	function buildFiltersQueryString(): string {
+		const params = new URLSearchParams();
+		if (preset) params.set('preset', preset);
+		if (preset === 'custom') {
+			if (startDate) params.set('start', startDate);
+			if (endDate) params.set('end', endDate);
+		}
+		for (const id of selectedTableIds) {
+			params.append('table_id', String(id));
+		}
+		return params.toString();
+	}
+
+	/**
+	 * Read the filter state back from the URL search params into local state.
+	 * Only overrides a filter when its param is actually present, so defaults
+	 * are preserved on a clean URL.
+	 */
+	function readFiltersFromUrl() {
+		const params = $page.url.searchParams;
+		const presetParam = params.get('preset');
+		if (presetParam && presets.some((p) => p.value === presetParam)) {
+			preset = presetParam as AnalyticsPreset;
+		}
+		if (params.has('start')) startDate = params.get('start') ?? '';
+		if (params.has('end')) endDate = params.get('end') ?? '';
+		if (params.has('table_id')) {
+			selectedTableIds = params
+				.getAll('table_id')
+				.map((id) => Number(id))
+				.filter((id) => Number.isFinite(id));
+		}
+	}
+
 	function eventValue(event: Event): string {
 		return (event.currentTarget as HTMLSelectElement).value;
 	}
@@ -233,8 +272,25 @@
 		await loadData(database);
 	}
 
+	/**
+	 * Sync the full filter state into the URL via a replaceState navigation,
+	 * WITHOUT reloading data. Used on initial load so the default filter state
+	 * appears in the URL from the start.
+	 */
+	async function syncFiltersUrl() {
+		if (!selectedDb) return;
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/data${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
 	async function applyFilters() {
 		if (!selectedDb) return;
+		// Sync the full filter state into the URL (replaceState so we don't spam
+		// history on every search), then load data with the updated filters.
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/data${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 		await loadData(selectedDb);
 	}
 
@@ -253,7 +309,11 @@
 				await goto(`/analytics/${db.id}/data`, { replaceState: true });
 				return;
 			}
+			readFiltersFromUrl();
 			await selectDatabase(db);
+			// Reflect the initial filter state in the URL without triggering
+			// another data load.
+			await syncFiltersUrl();
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -524,10 +584,7 @@
 					<div class="flex rounded-lg border border-outline-variant overflow-hidden">
 						{#each presets as p}
 							<button
-								onclick={() => {
-									preset = p.value;
-									applyFilters();
-								}}
+								onclick={() => (preset = p.value)}
 								class="px-3 py-1.5 text-xs font-bold transition-colors {preset === p.value
 									? 'bg-primary text-on-primary'
 									: 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'}"
@@ -584,12 +641,6 @@
 							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none"
 						/>
 					</div>
-					<button
-						onclick={applyFilters}
-						class="px-4 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 cursor-pointer"
-					>
-						Apply
-					</button>
 				{/if}
 
 				
@@ -637,10 +688,7 @@
 										<input
 											type="checkbox"
 											checked={selectedTableIds.includes(table.id)}
-											onchange={() => {
-												toggleTable(table.id);
-												applyFilters();
-											}}
+											onchange={() => toggleTable(table.id)}
 											class="accent-primary w-3.5 h-3.5"
 										/>
 										<span class="truncate">{displayTableName(table)}</span>
@@ -650,10 +698,7 @@
 							{#if selectedTableIds.length > 0}
 								<div class="p-2 border-t border-outline-variant">
 									<button
-										onclick={() => {
-											selectedTableIds = [];
-											applyFilters();
-										}}
+										onclick={() => (selectedTableIds = [])}
 										class="text-[10px] text-error hover:underline cursor-pointer"
 									>
 										Clear selection
@@ -663,6 +708,13 @@
 						</div>
 					{/if}
 				</div>
+				<button
+					onclick={applyFilters}
+					class="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 cursor-pointer"
+				>
+					<span class="material-symbols-outlined text-sm">search</span>
+					Search
+				</button>
 			</div>
 
 			
@@ -679,10 +731,7 @@
 							>
 								{displayTableName(table)}
 								<button
-									onclick={() => {
-										toggleTable(table.id);
-										applyFilters();
-									}}
+									onclick={() => toggleTable(table.id)}
 									class="material-symbols-outlined text-[12px] hover:opacity-70 cursor-pointer"
 									>close</button
 								>
