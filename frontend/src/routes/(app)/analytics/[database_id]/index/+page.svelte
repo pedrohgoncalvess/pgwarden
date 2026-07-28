@@ -28,6 +28,10 @@
 	let selectedTableIds = $state<number[]>([]);
 	let selectedIndexIds = $state<number[]>([]);
 	let searchTerm = $state('');
+	type IndexOrderBy = 'index_name' | 'table_name' | 'index_type' | 'size' | 'scans' | 'hit_rate';
+	type OrderDir = 'asc' | 'desc';
+	let orderBy = $state<IndexOrderBy>('size');
+	let orderDir = $state<OrderDir>('desc');
 
 	let tableDropdownOpen = $state(false);
 	let indexDropdownOpen = $state(false);
@@ -89,13 +93,94 @@
 		return (event.currentTarget as HTMLSelectElement).value;
 	}
 
+	function toggleSort(field: IndexOrderBy) {
+		if (orderBy === field) {
+			orderDir = orderDir === 'desc' ? 'asc' : 'desc';
+		} else {
+			orderBy = field;
+			orderDir = 'desc';
+		}
+		tablePageOffset = 0;
+		void syncFiltersUrl();
+	}
+
+	function sortIcon(field: IndexOrderBy): string {
+		if (orderBy !== field) return 'unfold_more';
+		return orderDir === 'desc' ? 'arrow_downward' : 'arrow_upward';
+	}
+
 	let serverDatabases = $derived(
 		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
 	);
 
+	/**
+	 * Build a URL query string that encodes the full current filter state
+	 * (range/preset, custom dates, table ids, index ids, search).
+	 * This is the canonical, shareable representation of the page's filters.
+	 */
+	function buildFiltersQueryString(): string {
+		const params = new URLSearchParams();
+		if (preset) params.set('preset', preset);
+		if (preset === 'custom') {
+			if (startDate) params.set('start', startDate);
+			if (endDate) params.set('end', endDate);
+		}
+		for (const id of selectedTableIds) {
+			params.append('table_id', String(id));
+		}
+		for (const id of selectedIndexIds) {
+			params.append('index_id', String(id));
+		}
+		if (searchTerm.trim()) params.set('search', searchTerm.trim());
+		params.set('order_by', orderBy);
+		params.set('order_dir', orderDir);
+		return params.toString();
+	}
+
+	/**
+	 * Read the filter state back from the URL search params into local state.
+	 * Only overrides a filter when its param is actually present, so defaults
+	 * are preserved on a clean URL.
+	 */
+	function readFiltersFromUrl() {
+		const params = $page.url.searchParams;
+		const presetParam = params.get('preset');
+		if (presetParam && presets.some((p) => p.value === presetParam)) {
+			preset = presetParam as AnalyticsPreset;
+		}
+		if (params.has('start')) startDate = params.get('start') ?? '';
+		if (params.has('end')) endDate = params.get('end') ?? '';
+		if (params.has('table_id')) {
+			selectedTableIds = params
+				.getAll('table_id')
+				.map((id) => Number(id))
+				.filter((id) => Number.isFinite(id));
+		}
+		if (params.has('index_id')) {
+			selectedIndexIds = params
+				.getAll('index_id')
+				.map((id) => Number(id))
+				.filter((id) => Number.isFinite(id));
+		}
+		if (params.has('search')) searchTerm = params.get('search') ?? '';
+		const orderParam = params.get('order_by');
+		if (
+			orderParam === 'index_name' ||
+			orderParam === 'table_name' ||
+			orderParam === 'index_type' ||
+			orderParam === 'size' ||
+			orderParam === 'scans' ||
+			orderParam === 'hit_rate'
+		) {
+			orderBy = orderParam;
+		}
+		const dirParam = params.get('order_dir');
+		if (dirParam === 'asc' || dirParam === 'desc') orderDir = dirParam;
+	}
+
 	function analyticsHref(databaseId: string): string {
-		const queryString = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : '';
-		return `/analytics/${databaseId}/index${queryString}`;
+		const queryString = buildFiltersQueryString();
+		return `/analytics/${databaseId}/index${queryString ? `?${queryString}` : ''}`;
 	}
 
 	async function selectServer(serverId: string) {
@@ -154,8 +239,25 @@
 		await loadData(database);
 	}
 
+	/**
+	 * Sync the full filter state into the URL via a replaceState navigation,
+	 * WITHOUT reloading data. Used on initial load so the default filter state
+	 * appears in the URL from the start.
+	 */
+	async function syncFiltersUrl() {
+		if (!selectedDb) return;
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/index${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
 	async function applyFilters() {
 		if (!selectedDb) return;
+		// Sync the full filter state into the URL (replaceState so we don't spam
+		// history on every search), then load data with the updated filters.
+		const queryString = buildFiltersQueryString();
+		const target = `/analytics/${selectedDb.id}/index${queryString ? `?${queryString}` : ''}`;
+		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
 		await loadData(selectedDb);
 	}
 
@@ -163,7 +265,7 @@
 		try {
 			loading = true;
 			error = '';
-			searchTerm = $page.url.searchParams.get('search') ?? '';
+			readFiltersFromUrl();
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
 			if (databases.length === 0) {
 				return;
@@ -176,6 +278,9 @@
 				return;
 			}
 			await selectDatabase(db);
+			// Reflect the initial filter state in the URL without triggering
+			// another data load.
+			await syncFiltersUrl();
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -325,7 +430,32 @@
 	let sortedItems = $derived.by(() => {
 		const currentData = data;
 		if (!currentData) return [];
-		return [...currentData.items].sort((a, b) => b.latest_size_bytes - a.latest_size_bytes);
+		return [...currentData.items].sort((a, b) => {
+			let comparison: number;
+			switch (orderBy) {
+				case 'index_name':
+					comparison = a.index_name.localeCompare(b.index_name);
+					break;
+				case 'table_name':
+					comparison = displayTableName({ schema_name: a.schema_name, table_name: a.table_name }).localeCompare(
+						displayTableName({ schema_name: b.schema_name, table_name: b.table_name })
+					);
+					break;
+				case 'index_type':
+					comparison = a.index_type.localeCompare(b.index_type);
+					break;
+				case 'scans':
+					comparison = (a.latest_scan_qt ?? 0) - (b.latest_scan_qt ?? 0);
+					break;
+				case 'hit_rate':
+					comparison = (a.hit_rate ?? 0) - (b.hit_rate ?? 0);
+					break;
+				default:
+					comparison = a.latest_size_bytes - b.latest_size_bytes;
+			}
+			if (comparison === 0) return a.index_name.localeCompare(b.index_name);
+			return orderDir === 'asc' ? comparison : -comparison;
+		});
 	});
 
 	let paginatedItems = $derived.by(() => {
@@ -1037,12 +1167,36 @@
 					<table class="w-full text-left text-sm">
 						<thead class="bg-surface-container-high text-on-surface-variant text-xs uppercase">
 							<tr>
-								<th class="px-4 py-3 font-semibold">Index</th>
-								<th class="px-4 py-3 font-semibold">Table</th>
-								<th class="px-4 py-3 font-semibold">Type</th>
-								<th class="px-4 py-3 font-semibold">Size</th>
-								<th class="px-4 py-3 font-semibold">Scans</th>
-								<th class="px-4 py-3 font-semibold">Hit Rate</th>
+								<th aria-sort={orderBy === 'index_name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('index_name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Index <span class="material-symbols-outlined text-[14px]">{sortIcon('index_name')}</span>
+									</button>
+								</th>
+								<th aria-sort={orderBy === 'table_name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('table_name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Table <span class="material-symbols-outlined text-[14px]">{sortIcon('table_name')}</span>
+									</button>
+								</th>
+								<th aria-sort={orderBy === 'index_type' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('index_type')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Type <span class="material-symbols-outlined text-[14px]">{sortIcon('index_type')}</span>
+									</button>
+								</th>
+								<th aria-sort={orderBy === 'size' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('size')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Size <span class="material-symbols-outlined text-[14px]">{sortIcon('size')}</span>
+									</button>
+								</th>
+								<th aria-sort={orderBy === 'scans' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('scans')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Scans <span class="material-symbols-outlined text-[14px]">{sortIcon('scans')}</span>
+									</button>
+								</th>
+								<th aria-sort={orderBy === 'hit_rate' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
+									<button onclick={() => toggleSort('hit_rate')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
+										Hit Rate <span class="material-symbols-outlined text-[14px]">{sortIcon('hit_rate')}</span>
+									</button>
+								</th>
 								<th class="px-4 py-3 font-semibold">Attributes</th>
 								<th class="px-4 py-3 font-semibold"></th>
 							</tr>
