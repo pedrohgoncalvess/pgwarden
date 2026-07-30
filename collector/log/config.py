@@ -11,7 +11,8 @@ from utils.env_var import get_env_var
 from utils.path_config import project_root
 
 
-class StructuredLogger:  #TODO: Implement sync logging
+# TODO: Implement sync logging.
+class StructuredLogger:
     def __init__(self, log_format: str | None = None):
         log_append_path = get_env_var("LOG_APPEND_PATH")
         log_path = get_env_var("LOG_PATH")
@@ -35,7 +36,7 @@ class StructuredLogger:  #TODO: Implement sync logging
         self.time_format = "%Y-%m-%d %H:%M:%S"
         self.format = Template(self.sep.join(f" ${h.lower()} " for h in self.headers).strip())
 
-    # TODO: Implement convertion to .parquet
+    # TODO: Implement conversion to Parquet.
 
     async def init(self):
         if not os.path.exists(self._log_file_dir_):
