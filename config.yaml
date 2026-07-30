@@ -13,11 +13,11 @@ servers:
       - postgres
 
     # ignore_tables:  # Tables to skip. If no schema is provided, 'public' is assumed.
-      # - audit_log   
-    
-    # include_tables:  # If set, ONLY these tables will be collected (allow-list). 
-      # - users     
-    
+      # - audit_log
+
+    # include_tables:  # If set, ONLY these tables will be collected (allow-list).
+      # - users
+
     ignore_patterns:
       - "^_timescale.*"
       - "^pg_.*"
