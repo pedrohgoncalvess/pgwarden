@@ -3,7 +3,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from notifier.utils import get_env_var
 
@@ -17,12 +17,16 @@ class DatabaseConnection:
 
     Two equivalent usage patterns:
 
-        async with DatabaseConnection() as session:            # __aenter__/__aexit__
+        async with DatabaseConnection() as session:
             ...
 
-        async with DatabaseConnection().connect() as session:  # async context manager
+        async with DatabaseConnection().connect() as session:
             ...
     """
+
+    _engine: AsyncEngine | None = None
+    _session_maker: async_sessionmaker[AsyncSession] | None = None
+    _engine_lock: asyncio.Lock | None = None
 
     def __init__(self) -> None:
         host = get_env_var("DB_HOST")
@@ -33,39 +37,57 @@ class DatabaseConnection:
         self._database_url = (
             f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}"
         )
-        self._engine = None
-        self._session_maker = None
         self._ctx = None
 
-    def _ensure_engine(self) -> None:
-        if not self._engine:
-            self._engine = create_async_engine(
-                self._database_url,
-                echo=False,
-                future=True,
-            )
-            self._session_maker = async_sessionmaker(
-                bind=self._engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-            )
+    @classmethod
+    async def _get_session_maker(
+        cls, database_url: str
+    ) -> async_sessionmaker[AsyncSession]:
+        if cls._session_maker is not None:
+            return cls._session_maker
+        if cls._engine_lock is None:
+            cls._engine_lock = asyncio.Lock()
+
+        async with cls._engine_lock:
+            if cls._session_maker is None:
+                cls._engine = create_async_engine(
+                    database_url,
+                    echo=False,
+                    future=True,
+                    pool_size=5,
+                    max_overflow=0,
+                    pool_timeout=30,
+                    pool_pre_ping=True,
+                    connect_args={"server_settings": {"application_name": "pgwarden_notifier"}},
+                )
+                cls._session_maker = async_sessionmaker(
+                    bind=cls._engine,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                )
+        return cls._session_maker
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator[AsyncSession]:
         """Yield a fresh session that is automatically closed on exit."""
-        self._ensure_engine()
-        session = self._session_maker()
+        session = (await self._get_session_maker(self._database_url))()
         try:
             yield session
         finally:
             await session.close()
 
+    @classmethod
+    async def shutdown(cls) -> None:
+        """Dispose the shared engine and release its pooled connections."""
+        if cls._engine is not None:
+            await cls._engine.dispose()
+        cls._engine = None
+        cls._session_maker = None
+        cls._engine_lock = None
+
     async def close(self) -> None:
-        """Dispose the engine and release all pooled connections."""
-        if self._engine:
-            await self._engine.dispose()
-            self._engine = None
-            self._session_maker = None
+        """Dispose the shared engine and release its pooled connections."""
+        await self.shutdown()
 
     async def __aenter__(self) -> AsyncSession:
         self._ctx = self.connect()

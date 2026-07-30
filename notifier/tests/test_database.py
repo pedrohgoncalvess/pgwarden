@@ -15,3 +15,8 @@ async def test_successful_connection():
         result = await session.execute(text("SELECT 1"))
         value = result.scalar()
         assert value == 1
+
+    async with DatabaseConnection() as second_session:
+        assert second_session.bind is session.bind
+
+    await conn.close()
