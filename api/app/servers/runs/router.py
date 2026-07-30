@@ -1,6 +1,8 @@
 from typing import List
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.auth.services import get_current_user
@@ -8,6 +10,7 @@ from app.common.models import COMMON_RESPONSES, ErrorMessage
 from app.servers.runs import services as run_services
 from app.servers.runs.models import RunControlResult, RunHistoryItem, RunPatch
 from database.connection import DatabaseConnection
+from database.models.collector.server import Server
 from database.operations.collector import ServerRepository
 
 
@@ -16,6 +19,18 @@ router = APIRouter(
     tags=["servers"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+async def _require_server(conn: AsyncSession, server_id: str) -> Server:
+    try:
+        public_id = UUID(server_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    server = await ServerRepository(conn).find_one_by(public_id=public_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    return server
 
 
 @router.get(
@@ -29,10 +44,7 @@ router = APIRouter(
 )
 async def stream_server_runs(server_id: str):
     async with DatabaseConnection() as conn:
-        server_repo = ServerRepository(conn)
-        server = await server_repo.find_one_by(public_id=server_id)
-        if not server:
-            raise HTTPException(status_code=404, detail="Server not found")
+        await _require_server(conn, server_id)
 
     return EventSourceResponse(run_services.run_stream(server_id))
 
@@ -53,10 +65,7 @@ async def get_server_run_history(
     offset: int = Query(default=0, ge=0),
 ):
     async with DatabaseConnection() as conn:
-        server_repo = ServerRepository(conn)
-        server = await server_repo.find_one_by(public_id=server_id)
-        if not server:
-            raise HTTPException(status_code=404, detail="Server not found")
+        await _require_server(conn, server_id)
 
     return await run_services.list_run_history(server_id, limit=limit, offset=offset)
 
@@ -78,10 +87,7 @@ async def patch_server_run(
     patch: RunPatch,
 ):
     async with DatabaseConnection() as conn:
-        server_repo = ServerRepository(conn)
-        server = await server_repo.find_one_by(public_id=server_id)
-        if not server:
-            raise HTTPException(status_code=404, detail="Server not found")
+        await _require_server(conn, server_id)
 
     try:
         result = await run_services.patch_run(run_id, "server", patch.action.value)
