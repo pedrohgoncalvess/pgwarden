@@ -1,7 +1,7 @@
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.databases.schemas.history.exceptions import HistoryDatabaseNotFoundError, HistoryFetchError
@@ -157,6 +157,36 @@ async def get_database_schema_history(
         index_history = index_history_result.scalars().all()
 
         events: list[SchemaHistoryItem] = []
+
+        activity_result = await db.execute(
+            text("""
+                SELECT id, event_type, action, target_type, target_id, details, occurred_at
+                FROM doc.activity_history
+                WHERE database_id = :database_id
+                ORDER BY occurred_at DESC, id DESC
+            """),
+            {"database_id": database.id},
+        )
+        allowed_targets = {
+            "table": set(table_ids),
+            "column": set(column_ids),
+            "index": set(index_ids),
+        }
+        for row in activity_result.mappings():
+            target_type = row["target_type"]
+            target_id = row["target_id"]
+            if table_id is not None and target_type in allowed_targets and target_id not in allowed_targets[target_type]:
+                continue
+            details = row["details"] or {}
+            if row["event_type"] == "tag":
+                tag_name = details.get("tag_name") or details.get("tag_id") or "tag"
+                message = f'Tag "{tag_name}" {row["action"]}'
+            else:
+                message = f'Documentation {row["action"]}'
+            events.append(SchemaHistoryItem(
+                id=f'activity-{row["id"]}', type=row["event_type"], action=row["action"],
+                changed_at=row["occurred_at"], details=message,
+            ))
 
         for t in tables:
             if t.deleted_at is not None:

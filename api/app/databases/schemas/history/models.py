@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 class SchemaHistoryItem(BaseModel):
     id: str
-    type: Literal["table", "column", "index"]
-    action: Literal["added", "removed", "altered"]
+    type: Literal["table", "column", "index", "documentation", "tag"]
+    action: Literal["added", "removed", "altered", "created", "updated", "assigned", "unassigned"]
     schema_name: Optional[str] = None
     table_name: Optional[str] = None
     column_name: Optional[str] = None
