@@ -27,6 +27,16 @@ type DatabaseMetricsSummary = {
 	uptime: UptimeResponse;
 };
 
+export type ServiceHealth = {
+	status: 'healthy' | 'unavailable';
+	updated_at: string | null;
+};
+
+export type HealthResponse = {
+	status: 'healthy' | 'unavailable';
+	services: Record<'collector' | 'analytics' | 'notifier', ServiceHealth>;
+};
+
 export type SchemaColumn = {
 	id: string;
 	name: string;
@@ -38,6 +48,7 @@ export type SchemaColumn = {
 	ordinal_position: number;
 	fk_table_id: string | null;
 	fk_column_id: string | null;
+	is_documented: boolean;
 };
 
 export type SchemaIndex = {
@@ -55,6 +66,7 @@ export type SchemaTable = {
 	schema_name: string;
 	name: string;
 	description: string | null;
+	is_documented: boolean;
 	columns: SchemaColumn[];
 	indexes: SchemaIndex[];
 };
@@ -64,8 +76,8 @@ export type DatabaseSchema = {
 	tables: SchemaTable[];
 };
 
-export type SchemaHistoryAction = 'added' | 'removed' | 'altered';
-export type SchemaHistoryType = 'table' | 'column' | 'index';
+export type SchemaHistoryAction = 'added' | 'removed' | 'altered' | 'created' | 'updated' | 'assigned' | 'unassigned';
+export type SchemaHistoryType = 'table' | 'column' | 'index' | 'documentation' | 'tag';
 
 export type SchemaHistoryItem = {
 	id: string;
@@ -199,6 +211,8 @@ export type NativeQueryMetric = {
 };
 
 export type RunType = 'server' | 'database';
+export type RunHistoryOrderBy = 'name' | 'type' | 'status' | 'started_at' | 'duration' | 'errors';
+export type OrderDir = 'asc' | 'desc';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'deleted';
 export type RunAction = 'pause' | 'resume' | 'stop' | 'delete' | 'force_run';
 
@@ -245,6 +259,12 @@ function authHeaders(): Record<string, string> {
 		headers['Authorization'] = `Bearer ${token}`;
 	}
 	return headers;
+}
+
+export async function getServiceHealth(): Promise<HealthResponse> {
+	const res = await fetch('/api/v1/health', { headers: authHeaders() });
+	if (!res.ok) throw new Error(`Failed to load service health: ${res.status}`);
+	return res.json();
 }
 
 export async function listServers(): Promise<ServerListItem[]> {
@@ -693,6 +713,8 @@ export async function listRunHistory(
 		startedTo?: string;
 		minDurationSeconds?: number;
 		maxDurationSeconds?: number;
+		orderBy?: RunHistoryOrderBy;
+		orderDir?: OrderDir;
 	} = {}
 ): Promise<RunHistoryItem[]> {
 	const params = new URLSearchParams();
@@ -709,6 +731,8 @@ export async function listRunHistory(
 	if (options.maxDurationSeconds !== undefined) {
 		params.set('max_duration_seconds', String(options.maxDurationSeconds));
 	}
+	if (options.orderBy) params.set('order_by', options.orderBy);
+	if (options.orderDir) params.set('order_dir', options.orderDir);
 
 	const res = await fetch(`/api/v1/databases/${databaseId}/runs/history?${params.toString()}`, {
 		headers: authHeaders()
