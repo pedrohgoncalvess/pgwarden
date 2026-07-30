@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import select, desc, func, or_
+from sqlalchemy import case, desc, func, or_, select
 
 from database.connection import DatabaseConnection
 from database.models.collector.server import Server
@@ -238,6 +238,8 @@ async def list_database_run_history(
     started_to: str | None = None,
     min_duration_seconds: float | None = None,
     max_duration_seconds: float | None = None,
+    order_by: str = "started_at",
+    order_dir: str = "desc",
 ) -> List[dict]:
     internal_id = await _get_database_internal_id(database_id)
     if internal_id is None:
@@ -296,7 +298,12 @@ async def list_database_run_history(
         if not type_filters:
             return []
 
-        query = select(Run).where(or_(*type_filters))
+        query = (
+            select(Run)
+            .outerjoin(ConfigServer, Run.config_server_id == ConfigServer.id)
+            .outerjoin(ConfigDatabase, Run.config_database_id == ConfigDatabase.id)
+            .where(or_(*type_filters))
+        )
 
         if status:
             query = query.where(Run.status == status)
@@ -331,8 +338,18 @@ async def list_database_run_history(
         if max_duration_seconds is not None:
             query = query.where(Run.finished_at.is_not(None)).where(duration_expr <= max_duration_seconds)
 
+        order_fields = {
+            "name": func.coalesce(ConfigServer.name, ConfigDatabase.name),
+            "type": case((Run.config_server_id.is_not(None), "server"), else_="database"),
+            "status": Run.status,
+            "started_at": Run.inserted_at,
+            "duration": _duration_seconds(),
+            "errors": func.coalesce(func.cardinality(Run.errors), 0),
+        }
+        order_field = order_fields[order_by]
+        order_clause = order_field.asc() if order_dir == "asc" else order_field.desc()
         runs_result = await conn.execute(
-            query.order_by(desc(Run.inserted_at)).offset(offset).limit(limit)
+            query.order_by(order_clause, desc(Run.id)).offset(offset).limit(limit)
         )
         runs = runs_result.scalars().all()
 

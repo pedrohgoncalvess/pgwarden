@@ -14,6 +14,7 @@ class RunStatus(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
+    DELETED = "deleted"
 
 
 class RunAction(str, Enum):

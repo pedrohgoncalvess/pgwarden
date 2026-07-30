@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sse_starlette.sse import EventSourceResponse
@@ -60,6 +60,8 @@ async def get_database_run_history(
     started_to: str | None = Query(default=None),
     min_duration_seconds: float | None = Query(default=None, ge=0),
     max_duration_seconds: float | None = Query(default=None, ge=0),
+    order_by: Literal["name", "type", "status", "started_at", "duration", "errors"] = Query(default="started_at"),
+    order_dir: Literal["asc", "desc"] = Query(default="desc"),
 ):
     async with DatabaseConnection() as conn:
         db_repo = DatabaseRepository(conn)
@@ -78,6 +80,8 @@ async def get_database_run_history(
         started_to=started_to,
         min_duration_seconds=min_duration_seconds,
         max_duration_seconds=max_duration_seconds,
+        order_by=order_by,
+        order_dir=order_dir,
     )
     return history
 
