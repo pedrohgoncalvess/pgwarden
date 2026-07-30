@@ -52,7 +52,6 @@ _ENTITY_REPOS = {
     "index": IndexRepository,
 }
 
-# Rule types implemented by the notifier evaluator (mirrors notifier/services/rules.py).
 RULE_TYPE_OPTIONS: Dict[str, List[str]] = {
     "server": ["cpu_percent", "ram_percent", "disk_percent"],
     "database": [
@@ -260,6 +259,16 @@ async def create_threshold(rule_id: int, payload: ThresholdCreate):
 
         model, entity_attr = get_threshold_scope(payload.scope)
         repo = threshold_repository(payload.scope, conn)
+        existing = await repo.find_one_by(
+            rule_id=rule_id,
+            type=payload.type,
+            **{entity_attr: entity_id},
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="Threshold already exists for this rule, type and entity",
+            )
         row = model(
             rule_id=rule_id,
             type=payload.type,
