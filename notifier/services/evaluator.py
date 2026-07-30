@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from notifier.channels import Alert, Channel, build_channels
 from notifier.config.load import Threshold
 from notifier.database import fetch_channels, fetch_last_notification_time, fetch_rules
+from notifier.database.heartbeat import touch_heartbeat
 from notifier.database.queries import RuleRow
 from notifier.services.notifications import insert_notification
 from notifier.services.rules import RULE_TYPES
@@ -37,14 +38,15 @@ class Evaluator:
                 delay = _DEFAULT_TICK_SECONDS
                 try:
                     async with connect() as session:
+                        await touch_heartbeat(session)
+                        await session.commit()
                         now = time.monotonic()
                         has_due = any(
                             now >= self._next_run.get(rid, 0.0)
                             for rid in self._next_run
                         ) or not self._next_run
 
-                        # Only fetch rules/channels when at least one rule
-                        # is due (or on the very first tick).
+                        # Avoid database reads while no rule can run.
                         if has_due:
                             rules = await fetch_rules(session)
                             channels = build_channels(
@@ -88,9 +90,9 @@ class Evaluator:
                     await asyncio.wait_for(
                         self._shutdown.wait(), timeout=sleep_time,
                     )
-                    break  # shutdown was set
+                    break
                 except asyncio.TimeoutError:
-                    pass  # normal tick
+                    pass
         finally:
             await self._http_client.aclose()
             self._http_client = None
@@ -158,7 +160,6 @@ class Evaluator:
         delivered: list[Alert] = []
 
         for alert in alerts:
-            # Dispatch to all channels concurrently with retry.
             tasks = [
                 self._send_with_retry(channel, alert)
                 for channel in channels
@@ -220,7 +221,6 @@ class Evaluator:
     ) -> bool:
         cd_key = (entity, severity, metric_type)
 
-        # Check in-memory cache first (fast path).
         last = self._last_sent.get(cd_key)
         if last is not None:
             if datetime.now(timezone.utc) - last < timedelta(seconds=cooldown):
@@ -232,11 +232,9 @@ class Evaluator:
                 session, entity, severity, metric_type,
             )
             if db_last is not None:
-                # Ensure timezone-aware comparison.
                 if db_last.tzinfo is None:
                     db_last = db_last.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) - db_last < timedelta(seconds=cooldown):
-                    # Populate in-memory cache so subsequent checks are fast.
                     self._last_sent[cd_key] = db_last
                     return True
         except Exception:
@@ -252,4 +250,3 @@ class Evaluator:
         can be retried on the next evaluation cycle."""
         cd_key = (alert.entity, alert.severity, alert.rule)
         self._last_sent.pop(cd_key, None)
-
