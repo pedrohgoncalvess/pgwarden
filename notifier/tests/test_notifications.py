@@ -97,9 +97,6 @@ def test_params_are_json_serializable():
     assert json.loads(json.dumps(params)) == params
 
 
-# ---------------------------------------------------------------------------
-# insert_notification
-# ---------------------------------------------------------------------------
 
 async def test_insert_notification_builds_and_persists():
     """insert_notification builds params, formats the message, and issues the INSERT."""
@@ -130,4 +127,3 @@ async def test_insert_notification_builds_and_persists():
     assert parsed["path"] == "/analytics/12/index"
     assert parsed["entity"] == "users_email_idx"
     assert parsed["value"] == 0.75
-

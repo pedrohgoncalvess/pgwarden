@@ -62,9 +62,6 @@ def _make_rule(*targets, name="r1"):
         name=name, interval=30, cooldown=600, window_minutes=10, enabled=True, targets=list(targets),
     )
 
-# ---------------------------------------------------------------------------
-# _insert_rule
-# ---------------------------------------------------------------------------
 
 async def test_insert_rule_returns_id_and_passes_params():
     session = FakeSession().on("RETURNING id", FakeResult(scalar=42))
@@ -76,9 +73,6 @@ async def test_insert_rule_returns_id_and_passes_params():
     assert params == {"name": "default", "interval": 60, "cooldown": 1800, "window": 5, "enabled": True}
 
 
-# ---------------------------------------------------------------------------
-# _seed_default_rule
-# ---------------------------------------------------------------------------
 
 async def test_seed_default_rule_skips_when_rule_exists():
     session = FakeSession().on("notifier.rule LIMIT 1", FakeResult(first=(1,)))
@@ -106,9 +100,6 @@ async def test_seed_default_rule_inserts_rule_and_all_scope_types():
         if "INSERT INTO notifier.rule_" in stmt:
             assert params["rule_id"] == 7
 
-# ---------------------------------------------------------------------------
-# _upsert_rule
-# ---------------------------------------------------------------------------
 
 async def test_upsert_rule_with_no_targets_deletes_from_all_scope_tables():
     session = FakeSession().on("RETURNING id", FakeResult(scalar=100))
@@ -116,7 +107,7 @@ async def test_upsert_rule_with_no_targets_deletes_from_all_scope_tables():
     await sync_module._upsert_rule(session, _make_rule())
 
     statements = _statements(session)
-    assert len(statements) == 5  # 1 upsert + 4 deletes
+    assert len(statements) == 5
     for table, _ in sync_module._SCOPE_TABLE.values():
         assert any(f"DELETE FROM {table}" in stmt for stmt in statements)
 
@@ -165,9 +156,6 @@ async def test_upsert_rule_skips_target_when_no_entity_resolved(monkeypatch):
     assert not any("INSERT INTO notifier.rule_server" in stmt for stmt, _ in session.executed)
 
 
-# ---------------------------------------------------------------------------
-# _resolve_entities
-# ---------------------------------------------------------------------------
 
 async def test_resolve_entities_names_path_dedupes(monkeypatch):
     target = TargetYamlConfig(
@@ -182,7 +170,6 @@ async def test_resolve_entities_names_path_dedupes(monkeypatch):
     monkeypatch.setattr(sync_module, "_resolve_name", fake_resolve_name)
 
     ids = await sync_module._resolve_entities(FakeSession(), target, "rule")
-    # _resolve_entities does not deduplicate names.
     assert ids == [1, 2, 1]
 
 
@@ -236,9 +223,6 @@ async def test_resolve_entities_filters_empty_result_returns_empty():
     assert ids == []
 
 
-# ---------------------------------------------------------------------------
-# _resolve_name
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "scope, name, query_fragment",
@@ -259,9 +243,6 @@ async def test_resolve_name_returns_none_when_not_found():
     assert await sync_module._resolve_name(session, "server", {"server": "ghost"}) is None
 
 
-# ---------------------------------------------------------------------------
-# _upsert_yaml_channels
-# ---------------------------------------------------------------------------
 
 async def test_upsert_yaml_channels_encrypts_credentials():
     config = NotifierYamlConfig(
@@ -305,9 +286,6 @@ async def test_upsert_yaml_channels_skips_encryption_when_no_credentials():
     assert params["credentials"] is None
 
 
-# ---------------------------------------------------------------------------
-# sync_config (orchestrator)
-# ---------------------------------------------------------------------------
 
 async def test_sync_config_seeds_upserts_rules_and_commits(monkeypatch):
     session = FakeSession()
@@ -335,4 +313,3 @@ async def test_sync_config_seeds_upserts_rules_and_commits(monkeypatch):
 
     assert calls == ["seed", "upsert_rule", "upsert_channels"]
     assert session.committed is True
-

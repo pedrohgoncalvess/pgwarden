@@ -89,7 +89,7 @@ async def test_dispatch_concurrent(make_alert):
     
     assert ch1.called
     assert ch2.called
-    assert end - start < 0.1  # Concurrency means it shouldn't take 0.1s (0.05 + 0.05)
+    assert end - start < 0.1
 
 
 async def test_send_with_retry_succeeds_on_second_attempt(make_alert, mock_sleep):
@@ -136,7 +136,6 @@ async def test_cooldown_allows_after_expiry(fake_session, mock_fetch_last_time):
     evaluator = Evaluator()
     evaluator._mark_sent("entity1", "critical", "cpu_percent")
 
-    # Manually set the last-sent time to well beyond the cooldown window.
     evaluator._last_sent[("entity1", "critical", "cpu_percent")] = (
         datetime.now(timezone.utc) - timedelta(minutes=6)
     )

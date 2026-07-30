@@ -122,7 +122,6 @@ async def test_evaluate_rule_skips_null_metric_values(mock_fetch_last_time):
         scope_id=1, scope="server", type="cpu_percent", entity_id=None,
         warning=85.0, critical=95.0, direction="above",
     )
-    # _simple mapper returns None when value is None.
     session = ExecSession([{"entity": "srv1", "value": None}])
     evaluator = Evaluator()
 
@@ -212,7 +211,6 @@ async def test_evaluate_rule_dead_tuple_ratio_mapper(mock_fetch_last_time):
         scope_id=1, scope="table", type="dead_tuple_ratio", entity_id=None,
         warning=0.2, critical=0.5, direction="above",
     )
-    # dead/live = 4000/6000 -> 0.4 -> warning
     session = ExecSession([{"entity": "public.t", "n_dead_tup": 4000, "n_live_tup": 6000}])
     evaluator = Evaluator()
 
@@ -221,4 +219,3 @@ async def test_evaluate_rule_dead_tuple_ratio_mapper(mock_fetch_last_time):
     assert len(alerts) == 1
     assert alerts[0].severity == "warning"
     assert alerts[0].value == 0.4
-

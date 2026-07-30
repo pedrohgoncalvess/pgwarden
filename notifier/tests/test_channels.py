@@ -116,9 +116,6 @@ async def test_slack_uses_shared_client():
     await client.aclose()
 
 
-# ---------------------------------------------------------------------------
-# Alert.format_plain
-# ---------------------------------------------------------------------------
 
 def test_alert_format_plain(make_alert):
     text = make_alert().format_plain()
@@ -128,9 +125,6 @@ def test_alert_format_plain(make_alert):
     assert "95" in text
 
 
-# ---------------------------------------------------------------------------
-# DiscordChannel.send payload
-# ---------------------------------------------------------------------------
 
 async def test_discord_payload_shape(make_alert):
     from notifier.channels.discord import DiscordChannel
@@ -167,9 +161,6 @@ async def test_discord_payload_shape(make_alert):
     assert "server local" in payload["embeds"][0]["description"]
 
 
-# ---------------------------------------------------------------------------
-# EmailChannel.send payload
-# ---------------------------------------------------------------------------
 
 async def test_email_payload_shape(make_alert):
     from notifier.channels.email import EmailChannel
@@ -192,7 +183,6 @@ async def test_email_payload_shape(make_alert):
     assert message["From"] == "a@example.com"
     assert message["To"] == "b@example.com, c@example.com"
     assert "[CRITICAL] cpu_percent" in message["Subject"]
-    # Port 465 => implicit TLS (use_tls=True, start_tls=False).
     assert captured["kwargs"]["use_tls"] is True
     assert captured["kwargs"]["start_tls"] is False
     assert captured["kwargs"]["hostname"] == "smtp.example.com"
@@ -217,4 +207,3 @@ async def test_email_uses_starttls_on_non_465_port(make_alert):
 
     assert captured["kwargs"]["use_tls"] is False
     assert captured["kwargs"]["start_tls"] is True
-

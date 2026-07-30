@@ -42,15 +42,13 @@ def test_decrypt_or_plain_returns_plain_when_valid(encryption_key):
 
 
 def test_decrypt_or_plain_returns_raw_value_when_key_wrong(encryption_key, monkeypatch):
-    # Encrypt with the fixture key, then swap to a different key so decryption fails.
     token = crypto.encrypt("payload")
     monkeypatch.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
 
     result = crypto.decrypt_or_plain(token)
 
-    assert result == token  # falls back to the raw (undecryptable) value
+    assert result == token
 
 
 def test_decrypt_or_plain_returns_none_for_none_input(encryption_key):
-    # Documents current behaviour: a None value short-circuits to None.
     assert crypto.decrypt_or_plain(None) is None

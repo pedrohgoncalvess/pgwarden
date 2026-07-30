@@ -36,9 +36,6 @@ class QueuedSession:
         return MappingsResult([])
 
 
-# ---------------------------------------------------------------------------
-# fetch_channels
-# ---------------------------------------------------------------------------
 
 async def test_fetch_channels_decrypts_and_parses_credentials():
     rows = [
@@ -48,7 +45,7 @@ async def test_fetch_channels_decrypts_and_parses_credentials():
     session = QueuedSession([MappingsResult(rows)])
 
     def fake_decrypt(value):
-        return value if value == "" else value  # already JSON
+        return value if value == "" else value
 
     with patch.object(queries, "decrypt_or_plain", lambda v: v):
         channels = await queries.fetch_channels(session)
@@ -71,9 +68,6 @@ async def test_fetch_channels_uses_decrypt_or_plain():
     assert channels[0].credentials == {"webhook_url": "u"}
 
 
-# ---------------------------------------------------------------------------
-# fetch_rules
-# ---------------------------------------------------------------------------
 
 def _scope_row(rule_id, scope, type_, entity_id=None):
     return {
@@ -92,12 +86,11 @@ def _scope_row(rule_id, scope, type_, entity_id=None):
 
 
 async def test_fetch_rules_builds_rule_tree_from_scope_results():
-    # fetch_rules gathers 4 scope queries; provide one row per scope.
     results = [
         MappingsResult([_scope_row(1, "server", "cpu_percent", 10)]),
         MappingsResult([_scope_row(1, "database", "cache_hit_ratio", 20)]),
-        MappingsResult([]),  # table scope empty
-        MappingsResult([]),  # index scope empty
+        MappingsResult([]),
+        MappingsResult([]),
     ]
     session = QueuedSession(results)
 
@@ -141,9 +134,6 @@ async def test_fetch_rules_returns_empty_when_no_rows():
     assert rules == []
 
 
-# ---------------------------------------------------------------------------
-# fetch_last_notification_time
-# ---------------------------------------------------------------------------
 
 async def test_fetch_last_notification_time_returns_timestamp():
     from datetime import datetime
