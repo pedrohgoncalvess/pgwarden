@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
@@ -15,7 +16,8 @@
 		createSessionEventSource,
 		createLockEventSource,
 		createServerMetricsEventSource,
-		createNativeQueryEventSource
+		createNativeQueryEventSource,
+		getServiceHealth
 	} from '$lib/api';
 	import type {
 		DatabaseListItem,
@@ -27,7 +29,8 @@
 		LockMetric,
 		CpuMetric,
 		RamMetric,
-		NativeQueryMetric
+		NativeQueryMetric,
+		HealthResponse
 	} from '$lib/api';
 
 	let databases = $state<DatabaseListItem[]>([]);
@@ -47,6 +50,8 @@
 	let nativeQueryEventSource = $state<EventSource | null>(null);
 	let lockEventSource = $state<EventSource | null>(null);
 	let serverMetricsEventSource = $state<EventSource | null>(null);
+	let serviceHealth = $state<HealthResponse | null>(null);
+	let quickActionsOpen = $state(false);
 
 	
 	let lockTooltip = $state<{ text: string; x: number; y: number } | null>(null);
@@ -165,9 +170,13 @@
 			selectedDatabaseId.set(selectedDb.id);
 			const dbId = selectedDb.id;
 
-			const metricsSummary = await getDatabaseMetricsSummary(dbId);
+			const [metricsSummary, health] = await Promise.all([
+				getDatabaseMetricsSummary(dbId),
+				getServiceHealth().catch(() => null)
+			]);
 			stats = metricsSummary.stats;
 			uptime = metricsSummary.uptime;
+			serviceHealth = health;
 			connectStreams(selectedDb);
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
@@ -365,6 +374,23 @@
 	function openServerModal() {
 		resetServerForm();
 		showServerModal = true;
+	}
+
+	function runQuickAction(action: 'alert' | 'metrics' | 'docs' | 'link') {
+		quickActionsOpen = false;
+		if (action === 'alert') goto('/alerts/configuration');
+		if (action === 'metrics' && selectedDb) goto(`/analytics/${selectedDb.id}/data`);
+		if (action === 'docs' && selectedDb) goto(`/metadata/${selectedDb.id}/documentation`);
+		if (action === 'link') {
+			if (servers.length === 0) {
+				openServerModal();
+			} else {
+				dbServerId = selectedDb?.server_id ?? servers[0].id;
+				dbName = '';
+				dbError = '';
+				showDbModal = true;
+			}
+		}
 	}
 
 	function closeServerModal() {
@@ -1219,39 +1245,24 @@
 		</div>
 
 		
-		<div
-			class="mt-panel-gap bg-surface-container-lowest border border-outline-variant font-code-sm text-code-sm p-4 overflow-hidden rounded-lg"
-		>
-			<div class="flex justify-between items-center mb-3">
-				<span
-					class="font-label-caps text-on-surface-variant flex items-center gap-2 tracking-widest"
-				>
-					<span class="w-2 h-2 rounded-full bg-primary status-pulse"></span>
-					LIVE POSTGRES LOGS
-				</span>
-				<span class="text-on-surface-variant opacity-50 text-[10px] font-label-caps"
-					>Stream: Active</span
-				>
-			</div>
-			<div class="space-y-1 opacity-80 text-on-surface">
-				<p>
-					<span class="text-on-surface-variant">[2023-10-27 14:32:01]</span>
-					<span class="text-primary-container font-bold">LOG:</span> checkpoint starting: time
-				</p>
-				<p>
-					<span class="text-on-surface-variant">[2023-10-27 14:32:04]</span>
-					<span class="text-primary-container font-bold">LOG:</span> checkpoint complete: wrote 428 buffers
-					(0.1%)
-				</p>
-				<p>
-					<span class="text-on-surface-variant">[2023-10-27 14:32:15]</span>
-					<span class="text-tertiary font-bold">WARNING:</span> autovacuum worker took too long on "public.audit_log"
-				</p>
-				<p>
-					<span class="text-on-surface-variant">[2023-10-27 14:32:45]</span>
-					<span class="text-primary-container font-bold">LOG:</span> disconnection: session time: 0:00:12.454
-					user=admin_root
-				</p>
+		<div class="mt-panel-gap rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
+			<h2 class="mb-3 text-sm font-bold text-on-surface">PGWarden services</h2>
+			<div class="grid gap-3 sm:grid-cols-3">
+				{#each ['collector', 'analytics', 'notifier'] as service}
+					{@const state = serviceHealth?.services[service as keyof HealthResponse['services']]}
+					<div class="rounded-lg border border-outline-variant bg-surface-container p-3">
+						<div class="flex items-center justify-between gap-2">
+							<span class="capitalize text-sm font-medium text-on-surface">{service}</span>
+							<span class="flex items-center gap-1 text-xs {state?.status === 'healthy' ? 'text-status-healthy' : 'text-status-danger'}">
+								<span class="h-2 w-2 rounded-full {state?.status === 'healthy' ? 'bg-status-healthy' : 'bg-status-danger'}"></span>
+								{state?.status ?? 'unavailable'}
+							</span>
+						</div>
+						<p class="mt-2 text-xs text-on-surface-variant">
+							{state?.updated_at ? `Last heartbeat: ${new Date(state.updated_at).toLocaleTimeString()}` : 'No heartbeat received'}
+						</p>
+					</div>
+				{/each}
 			</div>
 		</div>
 	{/if}
@@ -1271,13 +1282,97 @@
 {/if}
 
 
-<button
-	class="fixed bottom-6 right-6 w-14 h-14 bg-primary text-on-primary rounded-full shadow-floating flex items-center justify-center hover:scale-105 active:scale-95 transition-transform group z-50 cursor-pointer"
->
-	<span class="material-symbols-outlined text-[28px] group-hover:rotate-90 transition-transform"
-		>add</span
-	>
-</button>
+{#if quickActionsOpen}
+	<button
+		type="button"
+		class="fixed inset-0 z-40 cursor-default"
+		aria-label="Close quick actions"
+		onclick={() => (quickActionsOpen = false)}
+	></button>
+{/if}
+
+<div class="fixed bottom-5 right-5 z-50 sm:bottom-6 sm:right-6">
+	<div class="relative flex flex-col items-end">
+		{#if quickActionsOpen}
+			<div
+				transition:fly={{ y: 12, duration: 180 }}
+				class="mb-3 w-72 overflow-hidden rounded-2xl border border-outline-variant/80 bg-surface-container p-2 shadow-floating"
+				role="menu"
+				aria-label="Quick actions"
+			>
+				<div class="px-3 pb-2 pt-1">
+					<p class="text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+						Quick actions
+					</p>
+					<p class="mt-1 text-xs text-on-surface-variant">
+						{servers.length === 0
+							? 'Add a server connection to unlock the workspace.'
+							: 'Continue from your current database.'}
+					</p>
+				</div>
+
+				{#if servers.length === 0}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => runQuickAction('link')}
+						class="quick-action"
+					>
+						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">add_link</span></span>
+						<span class="min-w-0 flex-1 text-left">
+							<span class="block text-sm font-semibold text-on-surface">Create link</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant">Connect your first PostgreSQL server</span>
+						</span>
+						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+					</button>
+				{:else}
+					<button type="button" role="menuitem" onclick={() => runQuickAction('alert')} class="quick-action">
+						<span class="quick-action-icon text-error"><span class="material-symbols-outlined">add_alert</span></span>
+						<span class="min-w-0 flex-1 text-left">
+							<span class="block text-sm font-semibold text-on-surface">Create alert</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant">Set a monitoring threshold</span>
+						</span>
+						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+					</button>
+					<button type="button" role="menuitem" onclick={() => runQuickAction('metrics')} class="quick-action">
+						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">insights</span></span>
+						<span class="min-w-0 flex-1 text-left">
+							<span class="block text-sm font-semibold text-on-surface">Study metrics</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant">Explore performance signals</span>
+						</span>
+						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+					</button>
+					<button type="button" role="menuitem" onclick={() => runQuickAction('docs')} class="quick-action">
+						<span class="quick-action-icon text-tertiary"><span class="material-symbols-outlined">menu_book</span></span>
+						<span class="min-w-0 flex-1 text-left">
+							<span class="block text-sm font-semibold text-on-surface">Show documentation</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant">Review the current schema</span>
+						</span>
+						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+					</button>
+					<button type="button" role="menuitem" onclick={() => runQuickAction('link')} class="quick-action">
+						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">database</span></span>
+						<span class="min-w-0 flex-1 text-left">
+							<span class="block text-sm font-semibold text-on-surface">Create link / database</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant">Add another monitored database</span>
+						</span>
+						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+					</button>
+				{/if}
+			</div>
+		{/if}
+
+		<button
+			type="button"
+			onclick={() => (quickActionsOpen = !quickActionsOpen)}
+			aria-label={quickActionsOpen ? 'Close quick actions' : 'Open quick actions'}
+			aria-expanded={quickActionsOpen}
+			class="inline-flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl border border-primary/60 bg-primary text-on-primary shadow-floating transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
+		>
+			<span class="material-symbols-outlined text-[28px] transition-transform duration-200 {quickActionsOpen ? 'rotate-45' : ''}">add</span>
+		</button>
+	</div>
+</div>
 
 <style>
 	.glass-panel {
@@ -1334,5 +1429,32 @@
 	.modal-overlay {
 		background: rgba(0, 0, 0, 0.6);
 		backdrop-filter: blur(4px);
+	}
+	.quick-action {
+		display: flex;
+		width: 100%;
+		align-items: center;
+		gap: 0.75rem;
+		border-radius: 0.75rem;
+		padding: 0.75rem;
+		transition: background-color 150ms ease, transform 150ms ease;
+	}
+	.quick-action:hover {
+		background: var(--color-surface-container-highest);
+		transform: translateX(-2px);
+	}
+	.quick-action:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: -2px;
+	}
+	.quick-action-icon {
+		display: inline-flex;
+		height: 2.25rem;
+		width: 2.25rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.75rem;
+		background: color-mix(in srgb, currentColor 12%, transparent);
 	}
 </style>
