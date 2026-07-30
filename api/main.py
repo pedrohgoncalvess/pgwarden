@@ -27,6 +27,8 @@ from app.databases.docs.router import router as docs_router
 from app.metadata.search.router import router as metadata_search_router
 from app.notifier.router import router as notifier_router
 from app.notifications.router import router as notifications_router
+from app.health.router import router as health_router
+from app.security.default_credentials import sync_default_credentials_notification
 from app.databases.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
 from database.models.base import User
@@ -53,6 +55,8 @@ async def lifespan(app: FastAPI):
 
     email = os.getenv("PGWARDEN_EMAIL")
     password = os.getenv("PGWARDEN_PASSWORD")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
     hashed_password = pwd_context.hash(password)
 
     try:
@@ -68,10 +72,20 @@ async def lifespan(app: FastAPI):
                 )
                 await user_repo.insert(admin_user)
                 print(f"Admin user {email} created successfully.")
+            await sync_default_credentials_notification(
+                conn,
+                email,
+                password,
+                db_user,
+                db_password,
+            )
     except Exception as e:
         print(f"Failed to initialize admin user: {e}")
         
-    yield
+    try:
+        yield
+    finally:
+        await DatabaseConnection.shutdown()
 
 tags_metadata = [
     {
@@ -197,3 +211,4 @@ app.include_router(docs_router, prefix="/v1")
 app.include_router(metadata_search_router, prefix="/v1")
 app.include_router(notifier_router, prefix="/v1")
 app.include_router(notifications_router, prefix="/v1")
+app.include_router(health_router, prefix="/v1")
