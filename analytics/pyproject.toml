@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "python-dotenv>=1.0.0",
     "sqlparse>=0.5.3",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]

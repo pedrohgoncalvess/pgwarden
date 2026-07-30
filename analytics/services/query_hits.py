@@ -4,6 +4,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from analytics.database import DatabaseConnection
+from analytics.database.heartbeat import touch_heartbeat
 from analytics.database.models.analytics import Query, QueryColumnHit, QueryTableHit
 from analytics.database.models.metadata import ColumnModel, Table
 from analytics.database.models.metric import NativeQueryMetric
@@ -45,6 +46,7 @@ async def process_pending_native_queries_with_session(session: AsyncSession, lim
         processed_query_ids.add(query_id)
         processed += 1
 
+    await touch_heartbeat(session)
     await session.commit()
     return processed
 

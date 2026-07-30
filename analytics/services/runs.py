@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from analytics.config import AnalyticsYamlConfig, load_analytics_config
 from analytics.database import DatabaseConnection
+from analytics.database.heartbeat import touch_heartbeat
 from analytics.database.models.analytics import AnalyticsConfig, AnalyticsRun
 from analytics.database.models.metadata import Database
 from analytics.services.query_analysis import process_query_analysis_with_session
@@ -49,7 +50,10 @@ async def run_due_analytics(active_database_ids: set[int] | None = None) -> list
     async with DatabaseConnection() as session:
         yaml_config = load_analytics_config()
         await sync_configs_with_session(session, yaml_config)
-        return await prepare_due_analytics_with_session(session, active_database_ids or set())
+        requests = await prepare_due_analytics_with_session(session, active_database_ids or set())
+        await touch_heartbeat(session)
+        await session.commit()
+        return requests
 
 
 async def run_analytics_loop(poll_interval: int = POLL_INTERVAL_SECONDS) -> None:
@@ -155,6 +159,7 @@ async def _execute_run_request(request: AnalyticsRunRequest) -> AnalyticsRunResu
             if config is not None:
                 config.last_seen = _now()
 
+            await touch_heartbeat(session)
             await session.commit()
             result = AnalyticsRunResult(
                 database_id=request.database_id,
