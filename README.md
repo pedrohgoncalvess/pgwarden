@@ -1,77 +1,114 @@
 <div align="center">
-  <h1>🛡️ PGWarden</h1>
-  <p><strong>Advanced, centralized PostgreSQL monitoring and schema tracking for zero-downtime operations.</strong></p>
+  <img src="frontend/static/branding/logo.jpg" alt="PGWarden logo" width="180" />
+  <h1>PGWarden</h1>
+  <p><strong>Open-source PostgreSQL observability, schema intelligence, and alerting.</strong></p>
+  <p>Monitor your PostgreSQL fleet from one place, investigate performance issues, and keep schema changes visible.</p>
 </div>
 
-<br />
+![PGWarden overview](docs/images/overview.png)
 
-PGWarden is an open-source, robust solution designed to monitor multiple PostgreSQL databases simultaneously from a single pane of glass. It not only tracks performance metrics, locks, and active sessions in real-time, but also keeps a complete and versioned history of your schema (tables, columns, and indexes) changes over time.
+## Why PGWarden?
 
----
+Running PostgreSQL well means seeing more than whether a database is online. PGWarden brings operational signals, query activity, lock contention, schema metadata, and alerting into one self-hosted workspace so teams can identify problems faster and track how their databases evolve.
 
-## ✨ Features
+## Highlights
 
-- **Multi-Server Monitoring:** Connect and monitor several PostgreSQL servers and their databases dynamically.
-- **Metric Collection:** Continuous polling of deep metrics like index usage, sequential scans, live/dead tuples, and vacuum stats.
-- **Schema Versioning:** Keeps a historical audit trail of changes applied to your tables, columns, and indexes. 
-- **Session & Lock Tracking:** See exactly what is hanging or taking too long with real-time session and lock capture.
-- **FastAPI Backend:** A sleek, fully typed, asynchronous API to query metrics and register new targets.
-- **Modern Web UI:** A beautiful frontend visualizing the raw time-series data and mapping out your database schema evolution.
-- **Built on TimescaleDB:** Leverages TimescaleDB hypertables for highly efficient time-series metric storage and fast analytics queries.
+- **Monitor multiple PostgreSQL servers** from a centralized dashboard.
+- **Inspect live workload** with active-query and lock visibility.
+- **Track database health** through connections, CPU, memory, throughput, table statistics, vacuum signals, and index usage.
+- **Explore schema metadata and history** for tables, columns, indexes, and related database objects.
+- **Analyze performance trends** using time-series data stored in TimescaleDB.
+- **Configure alerts** for important operational thresholds, with Slack, Discord, Microsoft Teams, and SMTP email delivery.
+- **Protect credentials** by encrypting stored database and notification credentials with Fernet encryption.
 
-## 🚀 Getting Started
+## Architecture at a glance
 
-PGWarden uses Docker and Docker Compose to make deployment seamless. 
+PGWarden is a Docker Compose stack with focused services. The API and web interface provide the operator experience; background workers collect data, calculate analytics, and deliver notifications; TimescaleDB stores application data and time-series metrics.
+
+| Component | Responsibility |
+| --- | --- |
+| **Frontend** | Web dashboard for monitoring, schema exploration, configuration, and alerts. |
+| **API** | FastAPI service for authentication, configuration, and data access. |
+| **Collector** | Polls registered PostgreSQL targets and persists operational metrics. |
+| **Analytics** | Produces derived performance and database insights. |
+| **Notifier** | Evaluates alert rules and sends notifications to configured channels. |
+| **TimescaleDB** | Stores PGWarden configuration, metadata, and time-series observations. |
+| **Migrations** | Applies the central database schema during startup. |
+
+## Quick start
 
 ### Prerequisites
-- Docker
-- Docker Compose
 
-### Installation & Setup
+- [Docker Engine](https://docs.docker.com/engine/install/)
+- [Docker Compose](https://docs.docker.com/compose/install/) v2
+- Network access from the collector to each PostgreSQL instance you intend to monitor
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/pedrohgoncalvess/pgwarden.git
-   cd pgwarden
-   ```
+### 1. Clone the repository
 
-2. **Set up the Environment Variables**
-   Create a `.env` file referencing the provided `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-   *Make sure you define a strong `ENCRYPTION_KEY`. This key will be used by the API and the Collector to securely encrypt and decrypt the credentials of your monitored remote servers!*
+```bash
+git clone https://github.com/pedrohgoncalvess/pgwarden.git
+cd pgwarden
+```
 
-3. **Start the Application**
-   Run the full stack (TimescaleDB, Backend API, Collector, Migrations, and WebUI) using Docker Compose:
-   ```bash
-   docker compose up -d --build
-   ```
+### 2. Create and configure your environment file
 
-4. **Access the Dashboards**
-   - **Web UI:** Open your browser and navigate to `http://localhost:3000` (or the port defined in your setup) to access the main PGWarden observation dashboard.
-   - **API Documentation:** You can explore the REST API via the built-in Swagger UI at `http://localhost:8080/docs`.
+```bash
+cp .env.example .env
+```
 
-## ⚙️ Architecture
+Before starting the stack, replace the placeholder values in `.env`. At a minimum, generate unique values for `ENCRYPTION_KEY` and `JWT_SECRET_KEY`:
 
-PGWarden is composed of several independent but heavily integrated services:
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
-- **Database (TimescaleDB/PostgreSQL):** Stores both the application state (registered servers, auth, configuration) and the collected time-series metrics.
-- **Collector:** A continuous, asynchronous python worker that spans out to all registered target databases, polls their states based on a configurable interval, and pushes the data back to the central database.
-- **Migrations Service:** Automatically manages the central schema structure upon startup.
-- **REST API:** A FastAPI service handling authentication, target registration, config loading, and data serving for the frontend.
-- **Web UI:** The main dashboard enabling interaction with the collected metrics and schema history.
+Use the first value for `ENCRYPTION_KEY` and the second for `JWT_SECRET_KEY`. Do not reuse the example values or commit your `.env` file. Review the optional database, API port, and CORS settings in [`.env.example`](.env.example) for your environment.
 
-## 🤝 Contributing
+### 3. Start PGWarden
 
-We welcome contributions! Please feel free to submit a Pull Request, report Bugs, or suggest new Features. 
+```bash
+docker compose up -d --build
+```
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+The migrations service completes before the application services start. Check the stack status with:
 
-## 📄 License
+```bash
+docker compose ps
+```
 
-This project is open-source and available under the standard MIT License.
+### 4. Open the application
+
+- **Dashboard:** [http://localhost:3000](http://localhost:3000)
+- **API documentation:** [http://localhost:8080/docs](http://localhost:8080/docs)
+
+For a production deployment, set distinct database and administrator credentials rather than relying on Compose defaults. PGWarden warns when shipped default credentials remain active.
+
+## Configuration and operations
+
+The root [`config.yaml`](config.yaml) contains collector and notifier configuration. Environment variables are documented in [`.env.example`](.env.example); service-specific example files are also available for deployments that use separate environment files.
+
+Useful Compose commands:
+
+```bash
+# Follow all service logs
+docker compose logs -f
+
+# Stop the stack while keeping the database volume
+docker compose down
+```
+
+## Contributing
+
+Contributions, bug reports, and feature proposals are welcome.
+
+1. Fork the repository and create a branch from the default branch.
+2. Make a focused change and add or update tests where appropriate.
+3. Run the relevant checks locally.
+4. Open a pull request that explains the problem, approach, and validation.
+
+Please keep pull requests small and avoid committing secrets, generated local files, or production data.
+
+## License
+
+This repository does not currently include a license file. Add a `LICENSE` before distributing or accepting external contributions so usage and contribution terms are clear.
