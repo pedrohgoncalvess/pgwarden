@@ -1,7 +1,18 @@
--- docs-tags-history
 -- depends: 20260424_02_tsdbop-timescale-tuning
 
 CREATE SCHEMA IF NOT EXISTS doc;
+CREATE SCHEMA IF NOT EXISTS base;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
+CREATE TABLE IF NOT EXISTS "base"."embedding_cache" (
+    id BIGSERIAL,
+    term TEXT NOT NULL,
+    embedding vector(1024) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT embedding_cache_pk PRIMARY KEY (id),
+    CONSTRAINT embedding_cache_term_uq UNIQUE (term)
+);
 
 CREATE TABLE "doc"."tag" (
     id BIGSERIAL,
@@ -11,6 +22,7 @@ CREATE TABLE "doc"."tag" (
     description TEXT,
     color TEXT DEFAULT '#07a96e',
     type VARCHAR(20) NOT NULL DEFAULT 'default',
+    embedding vector(1024),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -28,6 +40,7 @@ CREATE TABLE "doc"."database" (
     id BIGSERIAL,
     database_id BIGINT NOT NULL,
     description TEXT,
+    embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -43,6 +56,7 @@ CREATE TABLE "doc"."schema" (
     database_id BIGINT NOT NULL,
     schema_name TEXT NOT NULL,
     description TEXT,
+    embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -58,6 +72,7 @@ CREATE TABLE "doc"."table" (
     id BIGSERIAL,
     table_id BIGINT NOT NULL,
     description TEXT,
+    embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -75,6 +90,7 @@ CREATE TABLE "doc"."column" (
     description TEXT,
     is_pii BOOLEAN NOT NULL DEFAULT FALSE,
     sample_values TEXT,
+    embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -91,6 +107,7 @@ CREATE TABLE "doc"."index" (
     id BIGSERIAL,
     index_id BIGINT NOT NULL,
     description TEXT,
+    embedding vector(1024),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ,
     updated_by BIGINT,
@@ -242,3 +259,127 @@ CREATE TABLE "doc"."query_tag" (
 );
 
 COMMENT ON TABLE "doc"."query_tag" IS 'Links metadata tags to native query analytics records by query hash within a database.';
+
+CREATE INDEX IF NOT EXISTS doc_database_embedding_idx ON doc.database USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS doc_schema_embedding_idx ON doc.schema USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS doc_table_embedding_idx ON doc."table" USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS doc_column_embedding_idx ON doc."column" USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS doc_index_embedding_idx ON doc."index" USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS doc_tag_embedding_idx ON doc.tag USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS embedding_cache_embedding_idx ON base.embedding_cache USING hnsw (embedding vector_cosine_ops);
+
+-- Immutable user-facing activity history for documentation and tag changes.
+CREATE TABLE "doc"."activity_history" (
+    id BIGSERIAL PRIMARY KEY,
+    database_id BIGINT NOT NULL REFERENCES metadata.database(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN ('documentation', 'tag')),
+    action TEXT NOT NULL CHECK (action IN ('created', 'updated', 'assigned', 'unassigned')),
+    target_type TEXT NOT NULL,
+    target_id BIGINT,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ix_activity_history_database_occurred ON doc.activity_history (database_id, occurred_at DESC);
+
+CREATE OR REPLACE FUNCTION doc.fn_activity_history()
+RETURNS TRIGGER AS $$
+DECLARE
+    payload JSONB;
+    target BIGINT;
+    db_id BIGINT;
+    kind TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN payload := to_jsonb(OLD); ELSE payload := to_jsonb(NEW); END IF;
+    kind := replace(TG_TABLE_NAME, '_doc_tag', '');
+    kind := replace(kind, '_tag', '');
+    IF TG_TABLE_NAME = 'database' THEN db_id := (payload->>'database_id')::bigint; target := db_id;
+    ELSIF TG_TABLE_NAME = 'schema' THEN db_id := (payload->>'database_id')::bigint;
+    ELSIF TG_TABLE_NAME = 'table' THEN
+        target := (payload->>'table_id')::bigint;
+        SELECT database_id INTO db_id FROM metadata."table" WHERE id = target;
+    ELSIF TG_TABLE_NAME = 'column' THEN
+        target := (payload->>'column_id')::bigint;
+        SELECT t.database_id INTO db_id FROM metadata."column" c JOIN metadata."table" t ON t.id = c.table_id WHERE c.id = target;
+    ELSIF TG_TABLE_NAME = 'index' THEN
+        target := (payload->>'index_id')::bigint;
+        SELECT t.database_id INTO db_id FROM metadata."index" i JOIN metadata."table" t ON t.id = i.table_id WHERE i.id = target;
+    ELSE
+        IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+        RETURN NEW;
+    END IF;
+    INSERT INTO doc.activity_history (database_id, event_type, action, target_type, target_id, details)
+    VALUES (db_id, CASE WHEN TG_TABLE_NAME IN ('database','schema','table','column','index') THEN 'documentation' ELSE 'tag' END,
+        CASE WHEN TG_OP = 'INSERT' THEN CASE WHEN TG_TABLE_NAME IN ('database','schema','table','column','index') THEN 'created' ELSE 'assigned' END
+             WHEN TG_OP = 'UPDATE' THEN 'updated' ELSE 'unassigned' END,
+        kind, target, payload);
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_activity_database AFTER INSERT OR UPDATE OR DELETE ON doc.database FOR EACH ROW EXECUTE FUNCTION doc.fn_activity_history();
+CREATE TRIGGER trg_activity_schema AFTER INSERT OR UPDATE OR DELETE ON doc.schema FOR EACH ROW EXECUTE FUNCTION doc.fn_activity_history();
+CREATE TRIGGER trg_activity_table AFTER INSERT OR UPDATE OR DELETE ON doc."table" FOR EACH ROW EXECUTE FUNCTION doc.fn_activity_history();
+CREATE TRIGGER trg_activity_column AFTER INSERT OR UPDATE OR DELETE ON doc.column FOR EACH ROW EXECUTE FUNCTION doc.fn_activity_history();
+CREATE TRIGGER trg_activity_index AFTER INSERT OR UPDATE OR DELETE ON doc.index FOR EACH ROW EXECUTE FUNCTION doc.fn_activity_history();
+
+CREATE OR REPLACE FUNCTION doc.fn_tag_activity_history()
+RETURNS TRIGGER AS $$
+DECLARE
+    payload JSONB;
+    db_id BIGINT;
+    target BIGINT;
+    target_kind TEXT;
+    tag_label TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN payload := to_jsonb(OLD); ELSE payload := to_jsonb(NEW); END IF;
+    SELECT name INTO tag_label FROM doc.tag WHERE id = (payload->>'tag_id')::bigint;
+
+    CASE TG_TABLE_NAME
+        WHEN 'database_tag' THEN
+            db_id := (payload->>'database_id')::bigint; target := db_id; target_kind := 'database';
+        WHEN 'table_tag' THEN
+            target := (payload->>'table_id')::bigint; target_kind := 'table';
+            SELECT database_id INTO db_id FROM metadata."table" WHERE id = target;
+        WHEN 'column_tag' THEN
+            target := (payload->>'column_id')::bigint; target_kind := 'column';
+            SELECT t.database_id INTO db_id FROM metadata."column" c JOIN metadata."table" t ON t.id = c.table_id WHERE c.id = target;
+        WHEN 'index_tag' THEN
+            target := (payload->>'index_id')::bigint; target_kind := 'index';
+            SELECT t.database_id INTO db_id FROM metadata."index" i JOIN metadata."table" t ON t.id = i.table_id WHERE i.id = target;
+        WHEN 'query_tag' THEN
+            db_id := (payload->>'database_id')::bigint; target_kind := 'native_query';
+        WHEN 'database_doc_tag' THEN
+            target_kind := 'database';
+            SELECT database_id, database_id INTO db_id, target FROM doc.database WHERE id = (payload->>'database_doc_id')::bigint;
+        WHEN 'schema_doc_tag' THEN
+            target_kind := 'schema';
+            SELECT database_id INTO db_id FROM doc.schema WHERE id = (payload->>'schema_doc_id')::bigint;
+        WHEN 'table_doc_tag' THEN
+            target_kind := 'table';
+            SELECT d.table_id, t.database_id INTO target, db_id FROM doc."table" d JOIN metadata."table" t ON t.id = d.table_id WHERE d.id = (payload->>'table_doc_id')::bigint;
+        WHEN 'column_doc_tag' THEN
+            target_kind := 'column';
+            SELECT d.column_id, t.database_id INTO target, db_id FROM doc.column d JOIN metadata."column" c ON c.id = d.column_id JOIN metadata."table" t ON t.id = c.table_id WHERE d.id = (payload->>'column_doc_id')::bigint;
+        WHEN 'index_doc_tag' THEN
+            target_kind := 'index';
+            SELECT d.index_id, t.database_id INTO target, db_id FROM doc.index d JOIN metadata."index" i ON i.id = d.index_id JOIN metadata."table" t ON t.id = i.table_id WHERE d.id = (payload->>'index_doc_id')::bigint;
+    END CASE;
+    INSERT INTO doc.activity_history (database_id, event_type, action, target_type, target_id, details)
+    VALUES (db_id, 'tag', CASE WHEN TG_OP = 'INSERT' THEN 'assigned' ELSE 'unassigned' END,
+            target_kind, target, jsonb_build_object('tag_id', payload->>'tag_id', 'tag_name', tag_label));
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_activity_database_tag AFTER INSERT OR DELETE ON doc.database_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_table_tag AFTER INSERT OR DELETE ON doc.table_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_column_tag AFTER INSERT OR DELETE ON doc.column_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_index_tag AFTER INSERT OR DELETE ON doc.index_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_query_tag AFTER INSERT OR DELETE ON doc.query_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_database_doc_tag AFTER INSERT OR DELETE ON doc.database_doc_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_schema_doc_tag AFTER INSERT OR DELETE ON doc.schema_doc_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_table_doc_tag AFTER INSERT OR DELETE ON doc.table_doc_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_column_doc_tag AFTER INSERT OR DELETE ON doc.column_doc_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();
+CREATE TRIGGER trg_activity_index_doc_tag AFTER INSERT OR DELETE ON doc.index_doc_tag FOR EACH ROW EXECUTE FUNCTION doc.fn_tag_activity_history();

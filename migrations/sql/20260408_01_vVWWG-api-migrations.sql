@@ -1,4 +1,3 @@
--- api migrations
 -- depends: 20260324_01_pUn2z
 
 CREATE SCHEMA "base";
@@ -31,4 +30,4 @@ CREATE TABLE "base"."refresh" (
 
 COMMENT ON TABLE "base"."refresh" IS 'Stores refresh tokens for extended user sessions (JWT refresh cycle).';
 COMMENT ON COLUMN "base"."refresh".token IS 'Unique UUID token for session refresh.';
-COMMENT ON COLUMN "base"."refresh".used IS 'Tracks if the token has already been consumed to prevent reuse attacks.';
+COMMENT ON COLUMN "base"."refresh".used IS 'Tracks if the token has already been consumed to prevent reuse attacks.';

@@ -1,4 +1,3 @@
--- notifier module
 -- depends: 20260709_01_zo2AJ-analytics-module
 CREATE SCHEMA IF NOT EXISTS "notifier";
 

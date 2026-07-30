@@ -4,7 +4,6 @@
 -- depends: 20260424_01_9UN1w-add-n-mod-since-analyze
 
 
--- chunk skipping off
 
 SELECT disable_chunk_skipping('metric.session', 'database_id');
 SELECT disable_chunk_skipping('metric.lock',    'database_id');
@@ -18,7 +17,6 @@ SELECT disable_chunk_skipping('metric.io',      'server_id');
 SELECT disable_chunk_skipping('metric.disk',    'server_id');
 
 
--- retention off
 
 SELECT remove_retention_policy('metric.session');
 SELECT remove_retention_policy('metric.lock');
@@ -56,7 +54,6 @@ ALTER TABLE "metric"."io"      SET (timescaledb.enable_columnstore = false);
 ALTER TABLE "metric"."disk"    SET (timescaledb.enable_columnstore = false);
 
 
--- indexes
 
 DROP INDEX IF EXISTS "metric"."ix_metric_table_table_time";
 DROP INDEX IF EXISTS "metric"."ix_metric_index_index_time";
@@ -69,7 +66,6 @@ DROP INDEX IF EXISTS "metric"."ix_metric_disk_server_time";
 DROP INDEX IF EXISTS "metric"."ix_metric_io_server_time";
 
 
--- chunk intervals back to the timescale default
 
 SELECT set_chunk_time_interval('metric.session', INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.lock',    INTERVAL '7 days');
@@ -82,7 +78,6 @@ SELECT set_chunk_time_interval('metric.index',   INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.column',  INTERVAL '7 days');
 
 
--- schema nits
 
 ALTER TABLE "collector"."config_server"
     DROP CONSTRAINT config_server_server_name_uq;

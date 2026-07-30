@@ -1,5 +1,6 @@
--- docs-tags-history
 -- depends: 20260424_02_tsdbop-timescale-tuning
+
+DROP TABLE IF EXISTS base.embedding_cache CASCADE;
 
 DROP TABLE IF EXISTS doc.index_doc_tag CASCADE;
 DROP TABLE IF EXISTS doc.column_doc_tag CASCADE;

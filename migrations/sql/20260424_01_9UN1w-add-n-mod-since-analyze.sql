@@ -1,4 +1,3 @@
--- add n_mod_since_analyze
 -- depends: 20260408_01_vVWWG-api-migrations
 
 ALTER TABLE "metric"."table" ADD COLUMN modifications_since_last_analyze BIGINT;

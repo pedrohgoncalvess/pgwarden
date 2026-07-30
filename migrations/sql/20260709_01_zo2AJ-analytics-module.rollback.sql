@@ -1,3 +1,15 @@
+DROP INDEX IF EXISTS "metric"."native_query_database_queryhash_collected_idx";
+DROP INDEX IF EXISTS "metric"."native_query_database_app_collected_idx";
+DROP INDEX IF EXISTS "metric"."native_query_database_user_collected_idx";
+DROP INDEX IF EXISTS "analytics"."query_analysis_finding_type_idx";
+DROP INDEX IF EXISTS "analytics"."query_analysis_finding_analysis_idx";
+DROP TABLE IF EXISTS "analytics"."query_analysis_finding";
+DROP INDEX IF EXISTS "analytics"."query_analysis_run_idx";
+DROP INDEX IF EXISTS "analytics"."query_analysis_query_idx";
+DROP TABLE IF EXISTS "analytics"."query_analysis";
+DROP INDEX IF EXISTS "analytics"."run_database_created_idx";
+DROP TABLE IF EXISTS "analytics"."run";
+DROP TABLE IF EXISTS "analytics"."config";
 DROP INDEX IF EXISTS "analytics"."query_table_hit_query_idx";
 DROP INDEX IF EXISTS "analytics"."query_column_hit_query_idx";
 DROP TABLE IF EXISTS "analytics"."query_table_hit";

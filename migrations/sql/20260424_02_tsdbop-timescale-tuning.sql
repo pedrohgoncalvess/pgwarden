@@ -1,9 +1,6 @@
--- timescale tuning: chunk intervals, indexes, columnstore, retention,
--- chunk skipping, plus a few schema nits I noticed along the way.
 -- depends: 20260424_01_9UN1w-add-n-mod-since-analyze
 
 
--- schema nits ----------------------------------------------------------------
 
 -- column_id was INTEGER while metadata.column.id is BIGINT. mismatched FK
 -- types work but it's a footgun, so widen it.
@@ -19,7 +16,6 @@ ALTER TABLE "collector"."config_server"
     ADD CONSTRAINT config_server_server_name_uq UNIQUE (server_id, name);
 
 
--- chunk intervals ------------------------------------------------------------
 -- default is 7 days for everything, which is way too coarse for the 3-5s
 -- collectors. rule of thumb: a chunk should fit in roughly 25% of RAM and
 -- match a typical query window. 1 day for the hot stuff, longer for the
@@ -36,7 +32,6 @@ SELECT set_chunk_time_interval('metric.index',   INTERVAL '7 days');
 SELECT set_chunk_time_interval('metric.column',  INTERVAL '14 days');
 
 
--- indexes --------------------------------------------------------------------
 -- the PKs are (collected_at, entity_id) which works for uniqueness guarantees
 -- but is the wrong way round for day-to-day queries like
 -- "show me the last hour for server X". flip it.
@@ -52,7 +47,6 @@ CREATE INDEX ix_metric_disk_server_time   ON "metric"."disk"    (server_id,   mo
 CREATE INDEX ix_metric_io_server_time     ON "metric"."io"      (server_id,   collected_at DESC);
 
 
--- columnstore (hypercore) ----------------------------------------------------
 -- without compression we'd be using timescale as fancy partitioned postgres.
 -- segmentby = whatever queries filter by (it stays uncompressed and acts as
 -- an sparse index under a chunk/partition). orderby = collected_at DESC so timestamps
@@ -127,7 +121,6 @@ CALL add_columnstore_policy('metric.index',   after => INTERVAL '7 days');
 CALL add_columnstore_policy('metric.column',  after => INTERVAL '7 days');
 
 
--- retention ------------------------------------------------------------------
 -- nobody wants 3-second lock samples from a year ago. 90 days is enough for
 -- a full quarter of incident review. metadata metrics are cheap so we keep
 -- those for a year for trend analysis.
@@ -143,7 +136,6 @@ SELECT add_retention_policy('metric.index',   INTERVAL '1 year');
 SELECT add_retention_policy('metric.column',  INTERVAL '1 year');
 
 
--- chunk skipping -------------------------------------------------------------
 -- timescale already excludes chunks by time automatically. this is the opt-in
 -- version for non-time columns: track min/max per chunk so a query like
 -- "where database_id = 5" can skip whole chunks whose range doesn't include 5

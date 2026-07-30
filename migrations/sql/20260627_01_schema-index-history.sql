@@ -1,7 +1,5 @@
 -- depends: 20260324_01_pUn2z
 
--- Audit table for index changes. Captures the previous state of an index row
--- before an update that changes any tracked attribute.
 CREATE TABLE "metadata"."index_history" (
     id           BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     index_id     BIGINT NOT NULL,
@@ -28,7 +26,6 @@ COMMENT ON COLUMN "metadata"."index_history".index_id IS 'References the origina
 COMMENT ON COLUMN "metadata"."index_history".changed_at IS 'Timestamp when the change was detected by the collector.';
 COMMENT ON COLUMN "metadata"."index_history".changed_by IS 'ID of the user or process that triggered the change.';
 
--- Trigger function that stores the OLD index state before an update.
 CREATE OR REPLACE FUNCTION "metadata"."fn_index_history"()
     RETURNS TRIGGER
     LANGUAGE plpgsql
@@ -56,8 +53,6 @@ CREATE TRIGGER trg_index_history
             )
 EXECUTE FUNCTION "metadata"."fn_index_history"();
 
--- Recreate table/column history triggers so that soft deletes (deleted_at changes)
--- are also recorded in their respective audit tables.
 DROP TRIGGER IF EXISTS trg_table_history ON "metadata"."table";
 CREATE TRIGGER trg_table_history
     BEFORE UPDATE ON "metadata"."table"

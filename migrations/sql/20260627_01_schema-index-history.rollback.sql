@@ -1,10 +1,8 @@
--- Rollback: restore original table/column triggers and drop index history artifacts.
 
 DROP TRIGGER IF EXISTS trg_index_history ON "metadata"."index";
 DROP FUNCTION IF EXISTS "metadata"."fn_index_history"();
 DROP TABLE IF EXISTS "metadata"."index_history";
 
--- Restore original table history trigger (does not include deleted_at).
 DROP TRIGGER IF EXISTS trg_table_history ON "metadata"."table";
 CREATE TRIGGER trg_table_history
     BEFORE UPDATE ON "metadata"."table"
@@ -17,7 +15,6 @@ CREATE TRIGGER trg_table_history
             )
 EXECUTE FUNCTION "metadata"."fn_table_history"();
 
--- Restore original column history trigger (does not include deleted_at).
 DROP TRIGGER IF EXISTS trg_column_history ON "metadata"."column";
 CREATE TRIGGER trg_column_history
     BEFORE UPDATE ON "metadata"."column"
