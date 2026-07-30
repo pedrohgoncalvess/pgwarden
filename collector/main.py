@@ -13,6 +13,7 @@ from database import (
     DatabaseConnection, DatabaseRegistry,
     load_storage_query, MonitoredDatabase
 )
+from database.heartbeat import touch_heartbeat
 from config import bootstrap
 from log import logger
 
@@ -238,10 +239,15 @@ async def main() -> None:
     await bootstrap(metrics_db)
     await registry.sync()
 
+    async with metrics_db as conn:
+        await touch_heartbeat(conn)
+
     async def registry_sync_loop():
         while True:
             try:
                 await registry.sync()
+                async with metrics_db as conn:
+                    await touch_heartbeat(conn)
             except Exception as e:
                 await logger.error("Main", "registry_sync", str(e))
             await asyncio.sleep(30)
