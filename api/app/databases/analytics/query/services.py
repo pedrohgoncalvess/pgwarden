@@ -138,7 +138,6 @@ def _sort_key(item: tuple, order_by: str) -> float:
         return max(valid)
     if order_by == "total_duration":
         return sum(valid)
-    # avg_duration
     return sum(valid) / len(valid)
 
 

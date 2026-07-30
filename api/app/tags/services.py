@@ -90,7 +90,6 @@ async def update_tag(db: AsyncSession, tag_id: UUID, tag_in: TagUpdate) -> Tag:
     if not update_data:
         return tag
 
-    # Apply pending changes to a transient copy to build the embedding text.
     pending_name = update_data.get("name", tag.name)
     pending_description = update_data.get("description", tag.description)
     pending_type = update_data.get("type", tag.type)
