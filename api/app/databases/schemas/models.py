@@ -20,6 +20,7 @@ class SchemaColumnResponse(BaseModel):
     ordinal_position: int
     fk_table_id: Optional[UUID] = None
     fk_column_id: Optional[UUID] = None
+    is_documented: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,6 +42,7 @@ class SchemaTableResponse(BaseModel):
     schema_name: str
     name: str
     description: Optional[str] = None
+    is_documented: bool = False
     columns: List[SchemaColumnResponse] = []
     indexes: List[SchemaIndexResponse] = []
 

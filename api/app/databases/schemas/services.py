@@ -10,6 +10,8 @@ from app.databases.schemas.models import (
 from database.models.metadata import (
     Database, Table, ColumnModel, Index, IndexColumn
 )
+from database.models.doc.table import TableDoc
+from database.models.doc.column import ColumnDoc
 
 
 async def get_database_schema(db: AsyncSession, database_id: UUID) -> SchemaResponse:
@@ -34,6 +36,9 @@ async def get_database_schema(db: AsyncSession, database_id: UUID) -> SchemaResp
             select(ColumnModel).where(ColumnModel.table_id.in_(table_ids), ColumnModel.deleted_at.is_(None))
         )
         columns = columns_result.scalars().all()
+
+        documented_table_ids = set((await db.execute(select(TableDoc.table_id))).scalars().all())
+        documented_column_ids = set((await db.execute(select(ColumnDoc.column_id))).scalars().all())
 
         column_id_to_public = {c.id: c.public_id for c in columns}
 
@@ -73,6 +78,7 @@ async def get_database_schema(db: AsyncSession, database_id: UUID) -> SchemaResp
                         ordinal_position=c.ordinal_position,
                         fk_table_id=fk_table_pub,
                         fk_column_id=fk_col_pub
+                        ,is_documented=c.id in documented_column_ids
                     ))
 
             t_indexes = []
@@ -97,6 +103,7 @@ async def get_database_schema(db: AsyncSession, database_id: UUID) -> SchemaResp
                 schema_name=t.schema_name,
                 name=t.name,
                 description=t.description,
+                is_documented=t.id in documented_table_ids,
                 columns=t_columns,
                 indexes=t_indexes
             ))
