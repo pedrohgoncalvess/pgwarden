@@ -1,4 +1,3 @@
-import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -77,15 +76,12 @@ async def _fetch_scope(
 
 
 async def fetch_rules(session: AsyncSession) -> list[RuleRow]:
-    """Return all enabled rules with their scope targets.
-
-    The four scope queries run concurrently via ``asyncio.gather``.
-    """
-    tasks = [
-        _fetch_scope(session, scope, table, entity_column)
-        for scope, (table, entity_column) in _SCOPE_QUERIES.items()
-    ]
-    scope_results = await asyncio.gather(*tasks)
+    """Return all enabled rules with their scope targets."""
+    scope_results = []
+    for scope, (table, entity_column) in _SCOPE_QUERIES.items():
+        scope_results.append(
+            await _fetch_scope(session, scope, table, entity_column)
+        )
 
     rules: dict[int, RuleRow] = {}
     for scope_rows in scope_results:

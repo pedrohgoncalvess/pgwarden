@@ -20,7 +20,6 @@ async def run():
     connection = DatabaseConnection()
     shutdown_event = asyncio.Event()
 
-    # Register signal handlers for graceful shutdown.
     loop = asyncio.get_running_loop()
 
     def _signal_handler():
@@ -31,8 +30,7 @@ async def run():
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _signal_handler)
     else:
-        # Windows doesn't support add_signal_handler; use signal.signal
-        # as a best-effort fallback.
+        # asyncio cannot register signal handlers on Windows.
         def _win_handler(signum, frame):
             _signal_handler()
 
