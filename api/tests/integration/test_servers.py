@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from unittest.mock import AsyncMock, patch
 
 
@@ -120,10 +121,13 @@ async def test_get_run_history_success(auth_client: AsyncClient, db_session):
     await db_session.commit()
     await db_session.refresh(server)
 
-    config = ConfigServer(server_id=server.id, name="cpu_collector", interval=60, is_paused=False)
-    db_session.add(config)
-    await db_session.commit()
-    await db_session.refresh(config)
+    config_result = await db_session.execute(
+        select(ConfigServer).where(
+            ConfigServer.server_id == server.id,
+            ConfigServer.name == "cpu_collector",
+        )
+    )
+    config = config_result.scalar_one()
 
     run = Run(config_server_id=config.id, status="success", finished_at=datetime.now(timezone.utc))
     db_session.add(run)
@@ -153,10 +157,13 @@ async def test_patch_run_pause_resume(auth_client: AsyncClient, db_session):
     await db_session.commit()
     await db_session.refresh(server)
 
-    config = ConfigServer(server_id=server.id, name="ram_collector", interval=60, is_paused=False)
-    db_session.add(config)
-    await db_session.commit()
-    await db_session.refresh(config)
+    config_result = await db_session.execute(
+        select(ConfigServer).where(
+            ConfigServer.server_id == server.id,
+            ConfigServer.name == "ram_collector",
+        )
+    )
+    config = config_result.scalar_one()
 
     response = await auth_client.patch(
         f"/v1/servers/{server.public_id}/runs/{config.id}",
@@ -192,10 +199,13 @@ async def test_patch_run_delete(auth_client: AsyncClient, db_session):
     await db_session.commit()
     await db_session.refresh(server)
 
-    config = ConfigServer(server_id=server.id, name="disk_collector", interval=60, is_paused=False)
-    db_session.add(config)
-    await db_session.commit()
-    await db_session.refresh(config)
+    config_result = await db_session.execute(
+        select(ConfigServer).where(
+            ConfigServer.server_id == server.id,
+            ConfigServer.name == "disk_collector",
+        )
+    )
+    config = config_result.scalar_one()
 
     response = await auth_client.patch(
         f"/v1/servers/{server.public_id}/runs/{config.id}",

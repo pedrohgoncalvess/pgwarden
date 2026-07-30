@@ -337,7 +337,6 @@ async def test_query_analytics_order_by_avg_duration(
     db_session.add_all(rows)
     await db_session.commit()
 
-    # Descending by avg_duration: slowest first
     response = await auth_client.get(
         f"/v1/databases/{database.public_id}/analytics/query?preset=1d&order_by=avg_duration&order_dir=desc"
     )
@@ -346,7 +345,6 @@ async def test_query_analytics_order_by_avg_duration(
     assert len(data["items"]) == 2
     assert "slow" in data["items"][0]["query_signature"]
 
-    # Ascending by avg_duration: fastest first
     response_asc = await auth_client.get(
         f"/v1/databases/{database.public_id}/analytics/query?preset=1d&order_by=avg_duration&order_dir=asc"
     )
