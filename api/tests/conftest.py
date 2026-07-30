@@ -11,6 +11,8 @@ Estratégia:
 """
 
 import os
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
 
@@ -21,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from yoyo import get_backend, read_migrations
 
 os.environ.setdefault("IS_TESTING", "1")
 os.environ.setdefault("DB_HOST",     os.getenv("DB_HOST",     "localhost"))
@@ -28,9 +31,8 @@ os.environ.setdefault("DB_PORT",     os.getenv("DB_PORT",     "5437"))
 os.environ.setdefault("DB_USER",     os.getenv("DB_USER",     "postgres"))
 os.environ.setdefault("DB_PASSWORD", os.getenv("DB_PASSWORD", "postgres"))
 os.environ.setdefault("DB_NAME",     os.getenv("TEST_DB_NAME","pgwarden_test"))
-os.environ.setdefault("SECRET_KEY",  os.getenv("SECRET_KEY",  "test-secret-key-not-for-production"))
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-not-for-production-32-bytes"
 
-from database.models import Base          # noqa: E402  (also registers all submodels)
 from database.models.base.user import User           # noqa: E402
 import database.connection as _db_connection_module  # noqa: E402
 
@@ -41,6 +43,13 @@ _DB_URL = (
     f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}"
     f"/{os.environ['DB_NAME']}"
 )
+_SYNC_DB_URL = (
+    f"postgresql+psycopg://"
+    f"{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}"
+    f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}"
+    f"/{os.environ['DB_NAME']}"
+)
+_MIGRATIONS_PATH = Path(__file__).resolve().parents[2] / "migrations" / "sql"
 
 from sqlalchemy.pool import NullPool
 
@@ -53,12 +62,27 @@ _TestSessionMaker = async_sessionmaker(
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def _create_tables():
-    async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def _apply_migrations():
+    backend = get_backend(_SYNC_DB_URL)
+    migrations = read_migrations(str(_MIGRATIONS_PATH))
+    with backend.lock():
+        backend.apply_migrations(backend.to_apply(migrations))
     yield
-    async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    await _test_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _stub_embeddings(monkeypatch):
+    async def generate_embedding_stub(_db, _text):
+        return [0.0] * 1024
+
+    from app.databases.docs.services import column, database, index, schema, table
+    from app.metadata.search import services as search_services
+    from app.tags import services as tag_services
+
+    modules = [column, database, index, schema, table, search_services, tag_services]
+    for module in modules:
+        monkeypatch.setattr(module, "generate_embedding_cached", generate_embedding_stub)
 
 
 @pytest_asyncio.fixture

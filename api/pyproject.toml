@@ -24,6 +24,8 @@ dependencies = [
     "pytest-html>=4.1.1",
     "httpx>=0.28.0",
     "sentence-transformers>=5.6.0",
+    "yoyo-migrations>=9.0.0",
+    "psycopg[binary]>=3.3.3",
 ]
 
 [tool.pytest.ini_options]
