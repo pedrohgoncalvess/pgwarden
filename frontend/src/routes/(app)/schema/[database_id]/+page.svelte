@@ -611,12 +611,13 @@
 	function historyTypeIcon(type: SchemaHistoryItem['type']): string {
 		if (type === 'table') return 'table_chart';
 		if (type === 'column') return 'view_column';
+		if (type === 'documentation') return 'description';
 		return 'tag';
 	}
 
 	function historyActionClass(action: SchemaHistoryItem['action']): string {
-		if (action === 'added') return 'bg-success-container text-on-success-container';
-		if (action === 'removed') return 'bg-error-container text-on-error-container';
+		if (action === 'added' || action === 'created' || action === 'assigned') return 'bg-success-container text-on-success-container';
+		if (action === 'removed' || action === 'unassigned') return 'bg-error-container text-on-error-container';
 		return 'bg-tertiary-container text-on-tertiary-container';
 	}
 

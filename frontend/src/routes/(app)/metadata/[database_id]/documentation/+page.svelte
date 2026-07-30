@@ -573,7 +573,6 @@
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div class="border-b border-outline-variant bg-surface-container-low px-4 py-3">
 				<div class="flex items-center gap-3">
-					<h2 class="m-0 font-headline-md text-headline-md">Objects</h2>
 					<div
 						class="flex-1 flex items-center rounded-lg border border-outline-variant bg-surface-container-high px-3 focus-within:border-primary"
 					>
@@ -663,8 +662,8 @@
 														: 'hover:bg-surface-container-high text-on-surface'}"
 												>
 													<span class="material-symbols-outlined text-[19px]">table</span>
-													<div class="min-w-0">
-														<p class="truncate text-sm font-medium">{table.name}</p>
+							<div class="min-w-0">
+								<p class="truncate text-sm font-medium">{table.name} {#if table.is_documented}<span class="material-symbols-outlined align-middle text-[14px] text-primary" title="Documented">check_circle</span>{/if}</p>
 														<p class="truncate text-[11px] opacity-75">
 															{table.columns.length} columns / {table.indexes.length} indexes
 														</p>
@@ -683,7 +682,8 @@
 																: 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
 														>
 															<span class="material-symbols-outlined text-[16px]">view_column</span>
-															<span class="min-w-0 flex-1 truncate">{column.name}</span>
+									<span class="min-w-0 flex-1 truncate">{column.name}</span>
+									{#if column.is_documented}<span class="material-symbols-outlined text-[14px] text-primary" title="Documented">check_circle</span>{/if}
 															<span class="truncate text-[10px] opacity-70">{column.data_type}</span
 															>
 														</button>
