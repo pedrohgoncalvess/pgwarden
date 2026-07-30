@@ -5,7 +5,14 @@
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
 	import { listDatabases, listServers, listRunHistory } from '$lib/api';
-	import type { DatabaseListItem, RunHistoryItem, RunType, ServerListItem } from '$lib/api';
+	import type {
+		DatabaseListItem,
+		RunHistoryItem,
+		RunHistoryOrderBy,
+		RunType,
+		OrderDir,
+		ServerListItem
+	} from '$lib/api';
 
 	
 	let servers = $state<ServerListItem[]>([]);
@@ -23,6 +30,8 @@
 	let filterName = $state('');
 	let filterMinDuration = $state('');
 	let filterMaxDuration = $state('');
+	let orderBy = $state<RunHistoryOrderBy>('started_at');
+	let orderDir = $state<OrderDir>('desc');
 	const limit = 50;
 	let serverDatabases = $derived(
 		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
@@ -82,6 +91,74 @@
 		};
 	}
 
+	function buildHistoryQueryString(): string {
+		const params = new URLSearchParams();
+		if (filterStartedFrom) params.set('started_from', filterStartedFrom);
+		if (filterStartedTo) params.set('started_to', filterStartedTo);
+		if (filterType) params.set('run_type', filterType);
+		if (filterStatus) params.set('status', filterStatus);
+		if (filterName.trim()) params.set('name', filterName.trim());
+		if (filterMinDuration.trim()) params.set('min_duration_seconds', filterMinDuration.trim());
+		if (filterMaxDuration.trim()) params.set('max_duration_seconds', filterMaxDuration.trim());
+		if (offset > 0) params.set('offset', String(offset));
+		params.set('order_by', orderBy);
+		params.set('order_dir', orderDir);
+		return params.toString();
+	}
+
+	function readHistoryFiltersFromUrl() {
+		const params = $page.url.searchParams;
+		if (params.has('started_from')) filterStartedFrom = params.get('started_from') ?? '';
+		if (params.has('started_to')) filterStartedTo = params.get('started_to') ?? '';
+		if (params.get('run_type') === 'server' || params.get('run_type') === 'database') {
+			filterType = params.get('run_type') as RunType;
+		}
+		if (params.has('status')) filterStatus = params.get('status') ?? '';
+		if (params.has('name')) filterName = params.get('name') ?? '';
+		if (params.has('min_duration_seconds')) filterMinDuration = params.get('min_duration_seconds') ?? '';
+		if (params.has('max_duration_seconds')) filterMaxDuration = params.get('max_duration_seconds') ?? '';
+		const offsetParam = Number(params.get('offset'));
+		if (Number.isInteger(offsetParam) && offsetParam >= 0) offset = offsetParam;
+		const orderParam = params.get('order_by');
+		if (
+			orderParam === 'name' ||
+			orderParam === 'type' ||
+			orderParam === 'status' ||
+			orderParam === 'started_at' ||
+			orderParam === 'duration' ||
+			orderParam === 'errors'
+		) {
+			orderBy = orderParam;
+		}
+		const dirParam = params.get('order_dir');
+		if (dirParam === 'asc' || dirParam === 'desc') orderDir = dirParam;
+	}
+
+	function historyHref(databaseId: string): string {
+		const queryString = buildHistoryQueryString();
+		return `/runs/${databaseId}/history${queryString ? `?${queryString}` : ''}`;
+	}
+
+	async function syncHistoryUrl() {
+		if (!selectedDb) return;
+		await goto(historyHref(selectedDb.id), { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	function toggleSort(field: RunHistoryOrderBy) {
+		if (orderBy === field) {
+			orderDir = orderDir === 'desc' ? 'asc' : 'desc';
+		} else {
+			orderBy = field;
+			orderDir = 'desc';
+		}
+		void applyFilters();
+	}
+
+	function sortIcon(field: RunHistoryOrderBy): string {
+		if (orderBy !== field) return 'unfold_more';
+		return orderDir === 'desc' ? 'arrow_downward' : 'arrow_upward';
+	}
+
 	function eventValue(event: Event): string {
 		return (event.currentTarget as HTMLSelectElement).value;
 	}
@@ -91,7 +168,7 @@
 		selectedServerId.set(serverId);
 		const database = databases.find((item) => item.server_id === serverId);
 		if (database && database.id !== selectedDb?.id) {
-			await goto(`/runs/${database.id}/history`, { replaceState: true });
+			await goto(historyHref(database.id), { replaceState: true });
 			await loadDatabaseHistory(database);
 		}
 	}
@@ -105,7 +182,11 @@
 		loading = true;
 		error = '';
 		try {
-			history = await listRunHistory(db.id, limit, offset, historyFilters());
+			history = await listRunHistory(db.id, limit, offset, {
+				...historyFilters(),
+				orderBy,
+				orderDir
+			});
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -123,12 +204,14 @@
 		const nextOffset = Math.max(0, offset + delta * limit);
 		if (!selectedDb || nextOffset === offset) return;
 		offset = nextOffset;
+		await syncHistoryUrl();
 		await loadDatabaseHistory(selectedDb, false);
 	}
 
 	async function applyFilters() {
 		if (!selectedDb) return;
 		offset = 0;
+		await syncHistoryUrl();
 		await loadDatabaseHistory(selectedDb, false);
 	}
 
@@ -153,13 +236,15 @@
 				return;
 			}
 
+			readHistoryFiltersFromUrl();
 			const routeDbId = $page.params.database_id;
 			const db = databases.find((d) => d.id === routeDbId) ?? databases[0];
 			if (db.id !== routeDbId) {
-				await goto(`/runs/${db.id}/history`, { replaceState: true });
+				await goto(historyHref(db.id), { replaceState: true });
 				return;
 			}
-			await loadDatabaseHistory(db);
+			await loadDatabaseHistory(db, false);
+			await syncHistoryUrl();
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
@@ -260,7 +345,7 @@
 					onchange={(event) => {
 						const database = databases.find((item) => item.id === eventValue(event));
 						if (database) {
-							goto(`/runs/${database.id}/history`, { replaceState: true });
+							goto(historyHref(database.id), { replaceState: true });
 							loadDatabaseHistory(database);
 						}
 					}}
@@ -378,30 +463,24 @@
 				<table class="w-full text-left border-collapse">
 					<thead class="bg-surface-container-high">
 						<tr>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>NAME</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>TYPE</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>STATUS</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>STARTED</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>DURATION</th
-							>
-							<th
-								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
-								>ERRORS</th
-							>
+							<th aria-sort={orderBy === 'name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">NAME <span class="material-symbols-outlined text-[14px]">{sortIcon('name')}</span></button>
+							</th>
+							<th aria-sort={orderBy === 'type' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('type')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">TYPE <span class="material-symbols-outlined text-[14px]">{sortIcon('type')}</span></button>
+							</th>
+							<th aria-sort={orderBy === 'status' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('status')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">STATUS <span class="material-symbols-outlined text-[14px]">{sortIcon('status')}</span></button>
+							</th>
+							<th aria-sort={orderBy === 'started_at' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('started_at')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">STARTED <span class="material-symbols-outlined text-[14px]">{sortIcon('started_at')}</span></button>
+							</th>
+							<th aria-sort={orderBy === 'duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('duration')}</span></button>
+							</th>
+							<th aria-sort={orderBy === 'errors' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
+								<button onclick={() => toggleSort('errors')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">ERRORS <span class="material-symbols-outlined text-[14px]">{sortIcon('errors')}</span></button>
+							</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-outline-variant/20">
