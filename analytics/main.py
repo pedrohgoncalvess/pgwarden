@@ -1,11 +1,14 @@
 import asyncio
 
-from analytics.services import process_pending_native_queries
+from analytics.database import DatabaseConnection
+from analytics.services.runs import run_analytics_loop
 
 
 async def run():
-    processed = await process_pending_native_queries()
-    print(f"Processed {processed} native queries")
+    try:
+        await run_analytics_loop()
+    finally:
+        await DatabaseConnection.shutdown()
 
 
 def main():
