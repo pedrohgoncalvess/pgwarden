@@ -167,7 +167,6 @@
 			? 'w-16'
 			: 'w-64'}"
 	>
-		<!-- Branding -->
 		<div class="p-4 flex items-center {collapsed ? 'flex-col gap-2' : 'gap-3'}">
 			<img
 				src="/branding/logo.jpg"
@@ -212,7 +211,6 @@
 		{/if}
 
 		<nav class="flex-1 px-2 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-			<!-- Top-level nav items (always visible, icon-only when collapsed) -->
 			{#each navItems as item}
 				{@const href = resolveHref(item.href, item.needsDb, $page.params.database_id ?? null)}
 				{@const active = isActive(item.href, $page.url.pathname)}
@@ -232,7 +230,6 @@
 			{/each}
 
 			{#if !collapsed}
-				<!-- Alerts group -->
 				<div class="mt-2">
 					<button
 						onclick={() => (expandedAlerts = !expandedAlerts)}
@@ -267,7 +264,6 @@
 						</div>
 					{/if}
 				</div>
-				<!-- Analytics group -->
 				<div class="mt-2">
 					<button
 						onclick={() => (expandedAnalytics = !expandedAnalytics)}
@@ -308,7 +304,6 @@
 					{/if}
 				</div>
 
-				<!-- Runs group -->
 				<div class="mt-2">
 					<button
 						onclick={() => (expandedRuns = !expandedRuns)}
@@ -385,7 +380,6 @@
 						</div>
 					{/if}
 				</div>
-				<!-- Metadata group -->
 				<div class="mt-2">
 					<button
 						onclick={() => (expandedMetadata = !expandedMetadata)}
@@ -422,7 +416,6 @@
 					{/if}
 				</div>
 
-				<!-- Settings group -->
 				<div class="mt-2">
 					<button
 						onclick={() => (expandedSettings = !expandedSettings)}
@@ -465,7 +458,6 @@
 			{/if}
 		</nav>
 
-		<!-- Footer Profile -->
 		<div class="border-t border-surface-border p-4 mt-auto">
 			<div
 				class="flex items-center {collapsed

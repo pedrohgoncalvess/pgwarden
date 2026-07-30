@@ -378,7 +378,6 @@
 </header>
 
 <div class="px-container-padding pt-24 pb-12">
-	<!-- Search bar + context selectors -->
 	<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end">
 		<div
 			class="flex min-h-12 flex-1 items-center gap-3 rounded-lg border border-outline-variant bg-surface-container px-4 transition-colors focus-within:border-primary"

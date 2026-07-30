@@ -7,7 +7,7 @@ async function forward(request: Request, url: URL) {
 	const targetUrl = `${backendUrl}${url.pathname.replace(/^\/api/, '')}${url.search}`;
 
 	const requestHeaders = new Headers(request.headers);
-	requestHeaders.delete('host'); 
+	requestHeaders.delete('host');
 
 	try {
 		const response = await fetch(targetUrl, {
@@ -17,7 +17,8 @@ async function forward(request: Request, url: URL) {
 				request.method !== 'GET' && request.method !== 'HEAD'
 					? await request.arrayBuffer()
 					: undefined,
-			// @ts-ignore
+			// Node's fetch requires duplex for a request body, but RequestInit omits it.
+			// @ts-expect-error
 			duplex: 'half'
 		});
 

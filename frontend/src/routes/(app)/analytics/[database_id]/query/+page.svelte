@@ -113,11 +113,6 @@
 			.filter((term) => term.length > 0);
 	}
 
-	/**
-	 * Build a URL query string that encodes the full current filter state
-	 * (range/preset, custom dates, user, application, state, search, exclude).
-	 * This is the canonical, shareable representation of the page's filters.
-	 */
 	function buildFiltersQueryString(): string {
 		const params = new URLSearchParams();
 		if (preset) params.set('preset', preset);
@@ -139,11 +134,7 @@
 		return params.toString();
 	}
 
-	/**
-	 * Read the filter state back from the URL search params into local state.
-	 * Only overrides a filter when its param is actually present, so defaults
-	 * (e.g. the `exclude` default of 'commit, begin') are preserved on a clean URL.
-	 */
+	// Leave defaults untouched when the URL omits a filter.
 	function readFiltersFromUrl() {
 		const params = $page.url.searchParams;
 		const presetParam = params.get('preset');
@@ -316,11 +307,6 @@
 		await loadData(database);
 	}
 
-	/**
-	 * Sync the full filter state into the URL via a replaceState navigation,
-	 * WITHOUT reloading data. Used on initial load so defaults (e.g. the
-	 * `commit, begin` exclude terms) appear in the URL from the start.
-	 */
 	async function syncFiltersUrl() {
 		if (!selectedDb) return;
 		const queryString = buildFiltersQueryString();
@@ -330,8 +316,7 @@
 
 	async function applyFilters() {
 		if (!selectedDb) return;
-		// Sync the full filter state into the URL (replaceState so we don't spam
-		// history on every search), then load data with the updated filters.
+		// Prevent each filter change from becoming a browser-history entry.
 		const queryString = buildFiltersQueryString();
 		const target = `/analytics/${selectedDb.id}/query${queryString ? `?${queryString}` : ''}`;
 		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
@@ -355,8 +340,7 @@
 				return;
 			}
 			await selectDatabase(db);
-			// Reflect the initial filter state (including defaults like the
-			// exclude terms) in the URL without triggering another data load.
+			// Make the initial state shareable without duplicating the data request.
 			await syncFiltersUrl();
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
