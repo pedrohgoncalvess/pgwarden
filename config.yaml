@@ -23,8 +23,7 @@ servers:
       - "^pg_.*"
 
     # Collector configuration ----------------------------------------------------
-    # Uncomment only the collectors you want to change. Collectors not mentioned
-    # here keep their built-in defaults.
+    # Collectors not mentioned here keep their built-in defaults.
     collector:
       # table_collector:
       #   interval: 1800
