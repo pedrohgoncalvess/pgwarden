@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from statistics import mean
+from statistics import mean, median
 from typing import Any
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import exists
 
 from analytics.database.models.analytics import (
     Query,
@@ -13,7 +14,7 @@ from analytics.database.models.analytics import (
     QueryColumnHit,
     QueryTableHit,
 )
-from analytics.database.models.metadata import ColumnModel, Database, Index, IndexColumn, Table
+from analytics.database.models.metadata import ColumnModel, Database, Index, IndexColumn, IndexHistory, Table
 from analytics.database.models.metric import (
     ColumnMetric,
     CpuMetric,
@@ -29,6 +30,10 @@ from analytics.database.models.metric import (
 ANALYSIS_LIMIT = 100
 WINDOW_PADDING_SECONDS = 30
 BASELINE_SECONDS = 60 * 60
+REGRESSION_HISTORY_DAYS = 7
+REGRESSION_HISTORY_MIN_SAMPLES = 5
+SCHEMA_CHANGE_LOOKBACK_HOURS = 48
+REGRESSION_FACTOR_THRESHOLD = 3.0
 
 
 @dataclass(frozen=True)
@@ -46,6 +51,14 @@ class FindingDraft:
     explanation: str
     recommendation: str | None
     evidence: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DroppedIndexInfo:
+    name: str
+    definition: str
+    table_id: int
+    changed_at: datetime
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,8 @@ class QueryContext:
     disk_samples: list[DiskMetric]
     session_samples: list[SessionMetric]
     lock_samples: list[LockMetric]
+    duration_history_ms: list[float]
+    recent_dropped_indexes: list[DroppedIndexInfo]
 
 
 async def process_query_analysis_with_session(
@@ -163,6 +178,8 @@ async def _build_context(session: AsyncSession, query: Query) -> QueryContext | 
     disk_samples = await _rows_between(session, DiskMetric, database.server_id, window.started_at, window.ended_at)
     session_samples = await _session_samples(session, native_query, window)
     lock_samples = await _lock_samples(session, query.database_id, table_ids, window)
+    duration_history = await _query_duration_history(session, query, days=REGRESSION_HISTORY_DAYS)
+    recent_dropped_indexes = await _recent_dropped_indexes(session, query.database_id, window.started_at)
 
     return QueryContext(
         query=query,
@@ -178,6 +195,8 @@ async def _build_context(session: AsyncSession, query: Query) -> QueryContext | 
         disk_samples=disk_samples,
         session_samples=session_samples,
         lock_samples=lock_samples,
+        duration_history_ms=duration_history,
+        recent_dropped_indexes=recent_dropped_indexes,
     )
 
 
@@ -380,14 +399,71 @@ async def _lock_samples(
     return list(result.scalars().all())
 
 
+async def _query_duration_history(
+    session: AsyncSession,
+    query: Query,
+    days: int = REGRESSION_HISTORY_DAYS,
+) -> list[float]:
+    """Return recorded duration_ms values for the same query hash over the last N days."""
+    if not query.hash:
+        return []
+
+    cutoff = datetime.now().astimezone() - timedelta(days=days)
+    result = await session.execute(
+        select(NativeQueryMetric.query_duration_ms)
+        .where(NativeQueryMetric.database_id == query.database_id)
+        .where(NativeQueryMetric.query_hash == query.hash)
+        .where(NativeQueryMetric.query_duration_ms.is_not(None))
+        .where(NativeQueryMetric.collected_at >= cutoff)
+        .order_by(NativeQueryMetric.collected_at.asc())
+    )
+    return [float(row[0]) for row in result.all()]
+
+
+async def _recent_dropped_indexes(
+    session: AsyncSession,
+    database_id: int,
+    before: datetime,
+) -> list[DroppedIndexInfo]:
+    """Return indexes that were dropped (deleted_at set) within the lookback window."""
+    cutoff = before - timedelta(hours=SCHEMA_CHANGE_LOOKBACK_HOURS)
+    result = await session.execute(
+        select(Index.id, Index.name, Index.definition, Index.table_id, Index.deleted_at)
+        .where(Index.database_id == database_id)
+        .where(Index.deleted_at.is_not(None))
+        .where(Index.deleted_at >= cutoff)
+        .where(Index.deleted_at <= before)
+        .order_by(Index.deleted_at.desc())
+    )
+    return [
+        DroppedIndexInfo(
+            name=row.name,
+            definition=row.definition,
+            table_id=row.table_id,
+            changed_at=row.deleted_at,
+        )
+        for row in result.all()
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Analysis orchestrator
+# ---------------------------------------------------------------------------
+
 def _analyze_context(context: QueryContext) -> list[FindingDraft]:
     findings: list[FindingDraft] = []
     findings.extend(_resource_findings(context))
     findings.extend(_lock_findings(context))
     findings.extend(_missing_index_findings(context))
     findings.extend(_maintenance_findings(context))
+    findings.extend(_regression_findings(context))
+    findings.extend(_schema_change_findings(context))
     return sorted(findings, key=lambda finding: finding.confidence, reverse=True)
 
+
+# ---------------------------------------------------------------------------
+# Resource findings (CPU / RAM / IO / Disk)
+# ---------------------------------------------------------------------------
 
 def _resource_findings(context: QueryContext) -> list[FindingDraft]:
     findings: list[FindingDraft] = []
@@ -492,11 +568,30 @@ def _resource_findings(context: QueryContext) -> list[FindingDraft]:
     return findings
 
 
+# ---------------------------------------------------------------------------
+# Lock findings
+# ---------------------------------------------------------------------------
+
 def _lock_findings(context: QueryContext) -> list[FindingDraft]:
     lock_waits = [sample for sample in context.session_samples if sample.wait_event_type == "Lock"]
     ungranted_locks = [lock for lock in context.lock_samples if lock.is_granted is False]
     if not lock_waits and not ungranted_locks:
         return []
+
+    # Build a simple blocking chain from exclusive vs. shared overlap
+    exclusive_modes = {"ExclusiveLock", "AccessExclusiveLock", "RowExclusiveLock"}
+    exclusive_holders = [
+        lock for lock in context.lock_samples
+        if lock.is_granted is True and lock.mode in exclusive_modes
+    ]
+    blocking_chain: list[dict] = []
+    for holder in exclusive_holders:
+        if holder.query_preview:
+            blocking_chain.append({
+                "holder_pid": holder.holder_pid,
+                "mode": holder.mode,
+                "query_preview": holder.query_preview[:200],
+            })
 
     return [
         FindingDraft(
@@ -511,9 +606,62 @@ def _lock_findings(context: QueryContext) -> list[FindingDraft]:
                 "ungranted_lock_samples": len(ungranted_locks),
                 "lock_modes": sorted({lock.mode for lock in context.lock_samples if lock.mode}),
                 "wait_events": sorted({sample.wait_event for sample in lock_waits if sample.wait_event}),
+                "blocking_chain": blocking_chain,
             },
         )
     ]
+
+
+# ---------------------------------------------------------------------------
+# Missing index findings (with selectivity awareness and DDL suggestion)
+# ---------------------------------------------------------------------------
+
+def _estimate_selectivity(metric: ColumnMetric | None, n_live_tup: int | None) -> float | None:
+    """
+    Return an estimated selectivity fraction (0..1) where lower = more selective
+    (i.e. lower fraction of rows share the same value).
+
+    PostgreSQL pg_stats.n_distinct semantics:
+      - negative:  fraction of rows that are distinct (e.g. -0.98 ≈ 98% unique).
+                   Selectivity ≈ abs(n_distinct) / n_distinct_values = 1 / (abs(n_distinct) * rows)
+                   Simplified: abs(n_distinct) already expresses the *fraction of total rows per value*
+                   but inverted — more-negative means more selective.
+                   We return  1.0 / (abs(n_distinct) * rows) so that higher-cardinality columns get
+                   lower selectivity scores.
+      - positive:  absolute count of distinct values.  Selectivity per value = 1 / n_distinct
+                   normalised by rows so it is comparable with the negative case.
+    Returns None when insufficient data is available.
+    """
+    if metric is None or metric.n_distinct is None:
+        return None
+    n_distinct = metric.n_distinct
+    rows = max(n_live_tup or 1, 1)
+    if n_distinct < 0:
+        # abs gives the fraction of rows that are distinct values (e.g. 0.98 for near-unique).
+        # We want: how many rows share each distinct value on average?
+        # avg_rows_per_value = rows * (1 - abs(n_distinct))   ... for duplication
+        # selectivity = avg_rows_per_value / rows = (1 - abs(n_distinct))
+        # Lower = more selective (less duplication per value).
+        return 1.0 - abs(n_distinct)
+    if n_distinct == 0:
+        return None
+    # positive: absolute count of distinct values → fraction of rows sharing each value
+    return rows / n_distinct / rows  # simplifies to 1 / n_distinct (fraction per value)
+
+
+def _suggest_index_ddl(table: Table, columns: list[ColumnModel], column_metrics: dict[int, ColumnMetric], n_live_tup: int | None) -> str:
+    """
+    Deterministically suggest a CREATE INDEX statement.
+    Columns are ordered by ascending selectivity (most selective leading column).
+    """
+    def sort_key(col: ColumnModel) -> float:
+        sel = _estimate_selectivity(column_metrics.get(col.id), n_live_tup)
+        return sel if sel is not None else 1.0  # unknown → treat as least selective
+
+    sorted_cols = sorted(columns, key=sort_key)
+    col_list = ", ".join(col.name for col in sorted_cols)
+    qualified = f"{table.schema_name}.{table.name}"
+    return f"CREATE INDEX CONCURRENTLY ON {qualified} ({col_list});"
 
 
 def _missing_index_findings(context: QueryContext) -> list[FindingDraft]:
@@ -532,13 +680,40 @@ def _missing_index_findings(context: QueryContext) -> list[FindingDraft]:
             continue
 
         metric = insight.metric
+        n_live_tup = metric.n_live_tup if metric else None
         large_table = bool(metric and (metric.n_live_tup or 0) >= 10_000)
         seq_scan_heavy = bool(metric and (metric.seq_scan or 0) > max(metric.idx_scan or 0, 1) * 3)
+
+        # Base confidence
         confidence = 0.55
         if large_table:
             confidence += 0.15
         if seq_scan_heavy:
             confidence += 0.15
+
+        # Selectivity adjustment: reward highly selective columns, penalise mostly-NULL ones
+        selectivity_scores: list[float] = []
+        high_null_penalty = False
+        for col in missing_columns:
+            col_metric = insight.column_metrics.get(col.id)
+            sel = _estimate_selectivity(col_metric, n_live_tup)
+            if sel is not None:
+                selectivity_scores.append(sel)
+            if col_metric and col_metric.null_fraction is not None and col_metric.null_fraction > 0.5:
+                high_null_penalty = True
+
+        if selectivity_scores:
+            best_selectivity = min(selectivity_scores)  # lowest fraction = most selective
+            if best_selectivity < 0.01:
+                confidence += 0.10  # very high cardinality column → excellent index candidate
+            elif best_selectivity < 0.05:
+                confidence += 0.05
+        if high_null_penalty:
+            confidence -= 0.05
+
+        suggested_ddl = _suggest_index_ddl(
+            insight.table, missing_columns, insight.column_metrics, n_live_tup
+        )
 
         findings.append(
             FindingDraft(
@@ -547,12 +722,16 @@ def _missing_index_findings(context: QueryContext) -> list[FindingDraft]:
                 confidence=min(confidence, 0.9),
                 title=f"Possible missing index on {insight.table.schema_name}.{insight.table.name}",
                 explanation="The query filters on columns that do not match the leading columns of a known index.",
-                recommendation="Consider an index aligned with the most selective predicates; validate it with EXPLAIN before production use.",
+                recommendation=(
+                    f"Consider adding: {suggested_ddl} "
+                    "Validate with EXPLAIN (ANALYZE, BUFFERS) before applying to production."
+                ),
                 evidence={
                     "table": f"{insight.table.schema_name}.{insight.table.name}",
                     "missing_prefix_columns": [column.name for column in missing_columns],
                     "existing_index_prefixes": sorted(indexed_prefixes),
-                    "n_live_tup": metric.n_live_tup if metric else None,
+                    "suggested_ddl": suggested_ddl,
+                    "n_live_tup": n_live_tup,
                     "seq_scan": metric.seq_scan if metric else None,
                     "idx_scan": metric.idx_scan if metric else None,
                     "condition_column_stats": {
@@ -565,6 +744,10 @@ def _missing_index_findings(context: QueryContext) -> list[FindingDraft]:
 
     return findings
 
+
+# ---------------------------------------------------------------------------
+# Maintenance findings (vacuum / stale stats)
+# ---------------------------------------------------------------------------
 
 def _maintenance_findings(context: QueryContext) -> list[FindingDraft]:
     findings: list[FindingDraft] = []
@@ -625,6 +808,144 @@ def _maintenance_findings(context: QueryContext) -> list[FindingDraft]:
     return findings
 
 
+# ---------------------------------------------------------------------------
+# Query regression detection (NEW)
+# ---------------------------------------------------------------------------
+
+def _regression_findings(context: QueryContext) -> list[FindingDraft]:
+    """Detect when a query is running significantly slower than its historical baseline."""
+    history = context.duration_history_ms
+    current_ms = context.native_query.query_duration_ms
+
+    if current_ms is None or len(history) < REGRESSION_HISTORY_MIN_SAMPLES:
+        return []
+
+    historical_without_current = [d for d in history if d != current_ms]
+    if len(historical_without_current) < REGRESSION_HISTORY_MIN_SAMPLES:
+        historical_without_current = history
+
+    p50 = median(historical_without_current)
+    p95 = _percentile(historical_without_current, 95)
+
+    if p50 <= 0:
+        return []
+
+    regression_factor = current_ms / p50
+    if regression_factor < REGRESSION_FACTOR_THRESHOLD:
+        return []
+
+    # Confidence scales with how extreme the regression is
+    confidence = 0.75
+    if regression_factor >= 10.0:
+        confidence = 0.92
+    elif regression_factor >= 5.0:
+        confidence = 0.85
+
+    severity = "critical" if regression_factor >= 10.0 else "warning"
+
+    return [
+        FindingDraft(
+            type="query_regression",
+            severity=severity,
+            confidence=confidence,
+            title="Significant query performance regression detected",
+            explanation=(
+                f"This query is running {regression_factor:.1f}x slower than its {REGRESSION_HISTORY_DAYS}-day "
+                f"median ({current_ms:.0f} ms vs. median {p50:.0f} ms). "
+                "This indicates a recent change in execution conditions."
+            ),
+            recommendation=(
+                "Check for table growth, dropped indexes, stale statistics, or increased lock contention "
+                "since the last time this query ran at normal speed. "
+                "Use EXPLAIN (ANALYZE, BUFFERS) to compare actual vs. estimated row counts."
+            ),
+            evidence={
+                "current_ms": round(current_ms, 2),
+                "historical_p50_ms": round(p50, 2),
+                "historical_p95_ms": round(p95, 2),
+                "regression_factor": round(regression_factor, 2),
+                "history_sample_count": len(history),
+                "history_days": REGRESSION_HISTORY_DAYS,
+            },
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Schema change correlation (NEW)
+# ---------------------------------------------------------------------------
+
+def _schema_change_findings(context: QueryContext) -> list[FindingDraft]:
+    """
+    Detect when a recently dropped index covers tables accessed by this query.
+    Correlates schema changes with potential performance impact.
+    """
+    if not context.recent_dropped_indexes:
+        return []
+
+    query_table_ids = {insight.table.id for insight in context.tables}
+    relevant_drops = [
+        drop for drop in context.recent_dropped_indexes
+        if drop.table_id in query_table_ids
+    ]
+
+    if not relevant_drops:
+        return []
+
+    # Higher confidence when this query also has a regression signal
+    has_regression = context.native_query.query_duration_ms is not None and (
+        len(context.duration_history_ms) >= REGRESSION_HISTORY_MIN_SAMPLES
+        and context.native_query.query_duration_ms > median(context.duration_history_ms) * REGRESSION_FACTOR_THRESHOLD
+    )
+    confidence = 0.88 if has_regression else 0.72
+
+    dropped_names = [d.name for d in relevant_drops]
+    hours_ago = min(
+        (context.window.started_at - d.changed_at).total_seconds() / 3600
+        for d in relevant_drops
+    )
+
+    return [
+        FindingDraft(
+            type="schema_change_correlation",
+            severity="critical" if has_regression else "warning",
+            confidence=confidence,
+            title=f"Index dropped on accessed table within {SCHEMA_CHANGE_LOOKBACK_HOURS}h window",
+            explanation=(
+                f"The index(es) {dropped_names} were dropped within {hours_ago:.1f} hours before this query's "
+                "execution window. Queries accessing those tables may be performing full sequential scans instead."
+            ),
+            recommendation=(
+                "Review whether the dropped index was required by this or similar queries. "
+                "Use EXPLAIN to verify the current query plan and recreate the index if needed: "
+                + " | ".join(
+                    f"CREATE INDEX CONCURRENTLY {d.name} {_extract_on_clause(d.definition)};"
+                    for d in relevant_drops
+                )
+            ),
+            evidence={
+                "dropped_indexes": [
+                    {
+                        "name": d.name,
+                        "definition": d.definition,
+                        "table_id": d.table_id,
+                        "dropped_at": _iso(d.changed_at),
+                        "hours_before_query": round(
+                            (context.window.started_at - d.changed_at).total_seconds() / 3600, 2
+                        ),
+                    }
+                    for d in relevant_drops
+                ],
+                "correlated_with_regression": has_regression,
+            },
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
+
 def _values(rows: list, attr: str) -> list[float]:
     return [float(value) for row in rows if (value := getattr(row, attr, None)) is not None]
 
@@ -669,12 +990,44 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _percentile(values: list[float], p: int) -> float:
+    """Return the p-th percentile of a sorted list using the nearest-rank method."""
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    # Nearest-rank: ceil(p/100 * n), 1-indexed → convert to 0-indexed
+    import math
+    idx = max(0, math.ceil(p / 100 * n) - 1)
+    return sorted_vals[idx]
+
+
+def _extract_on_clause(definition: str) -> str:
+    """
+    Extract the ON ... (...) part from an index definition string.
+    Falls back to the full definition if it cannot be parsed.
+    """
+    upper = definition.upper()
+    on_pos = upper.find(" ON ")
+    if on_pos != -1:
+        return definition[on_pos:]
+    return definition
+
+
 def _summary(findings: list[FindingDraft]) -> str:
     if not findings:
-        return "Nenhum culpado provavel identificado com as metricas disponiveis."
+        return "No significant issues identified with the available metrics."
 
     top = findings[0]
-    if len(findings) == 1:
-        return f"Hipotese principal: {top.title}."
+    critical = [f for f in findings if f.severity == "critical"]
+    warnings = [f for f in findings if f.severity == "warning"]
 
-    return f"Hipotese principal: {top.title}. Outros sinais encontrados: {len(findings) - 1}."
+    parts: list[str] = [f"Primary hypothesis: {top.title}."]
+    if len(findings) > 1:
+        detail_parts: list[str] = []
+        if critical:
+            detail_parts.append(f"{len(critical)} critical signal(s)")
+        if warnings:
+            detail_parts.append(f"{len(warnings)} warning(s)")
+        parts.append(f"Also found: {', '.join(detail_parts)}.")
+    return " ".join(parts)
