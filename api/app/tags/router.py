@@ -24,7 +24,7 @@ router = APIRouter(
 )
 
 @router.post(
-    "/",
+    "",
     response_model=TagResponse,
     summary="Create a new tag",
     description="Creates a new metadata tag scoped to a specific server.",
@@ -40,7 +40,7 @@ async def create_tag(tag_in: TagCreate):
         return await services.create_tag(conn, tag_in)
 
 @router.get(
-    "/",
+    "",
     response_model=List[TagResponse],
     summary="List all tags",
     description="Returns all metadata tags.",
