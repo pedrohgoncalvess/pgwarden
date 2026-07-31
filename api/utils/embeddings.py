@@ -61,8 +61,8 @@ async def _generate_openrouter_embedding(text: str, api_key: str) -> list[float]
 
 
 async def _generate_local_embedding(text: str) -> list[float] | None:
-    model = _get_sentence_transformer_model()
     try:
+        model = _get_sentence_transformer_model()
         embedding = await asyncio.to_thread(
             model.encode,
             text,
