@@ -1,3 +1,5 @@
+import { apiFetch as fetch, authHeaders } from '$lib/auth';
+
 export type NotificationLevel = 'critical' | 'warning' | 'info';
 
 export type NotificationItem = {
@@ -15,14 +17,6 @@ export type NotificationListResponse = {
 	hidden_count: number;
 	level_counts: Record<NotificationLevel, number>;
 };
-
-function authHeaders(): Record<string, string> {
-	const token = localStorage.getItem('token');
-	return {
-		'Content-Type': 'application/json',
-		...(token ? { Authorization: `Bearer ${token}` } : {})
-	};
-}
 
 export async function listNotifications(options: {
 	hidden?: boolean;
