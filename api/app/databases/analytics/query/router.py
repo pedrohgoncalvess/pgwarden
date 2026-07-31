@@ -3,7 +3,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.databases.analytics.query.models import QueryAnalyticsResponse
+from app.databases.analytics.query.models import (
+    QueryAnalyticsResponse,
+    QueryExecutionHistoryResponse,
+    QueryContextResponse,
+)
 from app.databases.analytics.query import services
 from app.auth.services import get_current_user
 from app.common.models import COMMON_RESPONSES, ErrorMessage
@@ -56,4 +60,68 @@ async def get_query_analytics(
             limit,
             order_by,
             order_dir,
+        )
+
+
+@router.get(
+    "/query/history",
+    response_model=QueryExecutionHistoryResponse,
+    summary="Get query execution history",
+    description="Returns a time-series of executions for a specific query hash.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Database not found"},
+        **COMMON_RESPONSES
+    }
+)
+async def get_query_execution_history(
+    database_id: UUID,
+    query_hash: str = Query(..., description="Query hash to get history for"),
+    start_date: Optional[str] = Query(default=None, description="Start date in ISO 8601 format"),
+    end_date: Optional[str] = Query(default=None, description="End date in ISO 8601 format"),
+    preset: Optional[str] = Query(default="1w", description="Preset range"),
+    limit: int = Query(default=500, le=2000, description="Max rows to return"),
+):
+    async with DatabaseConnection() as conn:
+        return await services.get_query_execution_history(
+            conn,
+            database_id,
+            query_hash,
+            start_date,
+            end_date,
+            preset,
+            limit,
+        )
+
+
+@router.get(
+    "/query/context",
+    response_model=QueryContextResponse,
+    summary="Get query context",
+    description="Returns server, database, and table metrics around the time a specific query executed.",
+    responses={
+        404: {"model": ErrorMessage, "description": "Database not found"},
+        400: {"model": ErrorMessage, "description": "Execution not found"},
+        **COMMON_RESPONSES
+    }
+)
+async def get_query_context(
+    database_id: UUID,
+    query_hash: str = Query(..., description="Query hash"),
+    collected_at: str = Query(..., description="Exact collected_at timestamp of the execution (ISO 8601)"),
+):
+    from datetime import datetime, timezone
+    
+    try:
+        dt = datetime.fromisoformat(collected_at.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise ValueError("Invalid timestamp format")
+
+    async with DatabaseConnection() as conn:
+        return await services.get_query_context(
+            conn,
+            database_id,
+            query_hash,
+            dt,
         )

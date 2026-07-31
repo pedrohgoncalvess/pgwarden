@@ -65,3 +65,120 @@ class QueryAnalyticsResponse(BaseModel):
     filters: QueryAnalyticsFilters
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QueryExecutionHistoryItem(BaseModel):
+    collected_at: datetime
+    duration_ms: Optional[float]
+    user_name: Optional[str]
+    application_name: Optional[str]
+    rows_returned: Optional[int]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryExecutionHistoryResponse(BaseModel):
+    query_hash: str
+    query_preview: str
+    items: List[QueryExecutionHistoryItem]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextExecution(BaseModel):
+    collected_at: datetime
+    duration_ms: Optional[float]
+    query: str
+    user_name: Optional[str]
+    application_name: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextServerMetrics(BaseModel):
+    cpu_percent: Optional[float]
+    ram_percent: Optional[float]
+    disk_percent: Optional[float]
+    read_bytes: Optional[int]
+    write_bytes: Optional[int]
+    cpu_stale: Optional[bool] = False
+    ram_stale: Optional[bool] = False
+    disk_stale: Optional[bool] = False
+    io_stale: Optional[bool] = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextDatabaseConnections(BaseModel):
+    active: int
+    idle: int
+    idle_in_transaction: int
+    waiting: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextIndex(BaseModel):
+    index_id: int
+    index_name: str
+    index_type: str
+    definition: str
+    is_unique: bool
+    is_primary: bool
+    size_bytes: Optional[int]
+    scan_qt: Optional[int]
+    hit_rate: Optional[float]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextColumn(BaseModel):
+    column_id: int
+    name: str
+    data_type: str
+    is_nullable: bool
+    n_distinct: Optional[float]
+    null_fraction: Optional[float]
+    avg_width: Optional[int]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextTable(BaseModel):
+    table_id: int
+    schema_name: str
+    table_name: str
+    n_live_tup: Optional[int]
+    n_dead_tup: Optional[int]
+    seq_scan: Optional[int]
+    idx_scan: Optional[int]
+    last_vacuum: Optional[datetime]
+    last_autovacuum: Optional[datetime]
+    last_analyze: Optional[datetime]
+    last_autoanalyze: Optional[datetime]
+    size_bytes: Optional[int]
+    indexes: List[QueryContextIndex]
+    columns: List[QueryContextColumn]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextLock(BaseModel):
+    table_name: Optional[str] = None
+    holder_pid: int
+    type: str
+    mode: str
+    is_granted: Optional[bool] = True
+    query_preview: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueryContextResponse(BaseModel):
+    execution: QueryContextExecution
+    server_metrics: QueryContextServerMetrics
+    database_connections: QueryContextDatabaseConnections
+    tables: List[QueryContextTable]
+    locks: List[QueryContextLock] = []
+
+    model_config = ConfigDict(from_attributes=True)

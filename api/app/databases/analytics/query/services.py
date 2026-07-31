@@ -3,6 +3,19 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
+import re
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Tuple
+from uuid import UUID
+
+from sqlalchemy import select, and_, tuple_, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+import re
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+from uuid import UUID
 
 from sqlalchemy import select, and_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +27,47 @@ from app.databases.analytics.query.models import (
     QueryAnalyticsFilters,
     QueryAnalyticsUserBreakdown,
     QueryAnalyticsApplicationBreakdown,
+    QueryExecutionHistoryItem,
+    QueryExecutionHistoryResponse,
+    QueryContextResponse,
+    QueryContextExecution,
+    QueryContextServerMetrics,
+    QueryContextDatabaseConnections,
+    QueryContextTable,
+    QueryContextIndex,
+    QueryContextColumn,
 )
 from app.databases.schemas.exceptions import DatabaseNotFoundError
 from database.models.metadata.database import Database
+from database.models.metadata.table import Table
+from database.models.metadata.column import ColumnModel
+from database.models.metadata.index import Index
+from database.models.metadata.index_column import IndexColumn
 from database.models.metric.native_query import NativeQueryMetric
+from database.models.metric.cpu import CpuMetric
+from database.models.metric.ram import RamMetric
+from database.models.metric.disk import DiskMetric
+from database.models.metric.io import IoMetric
+from database.models.metric.session import SessionMetric
+from database.models.metric.table import TableMetric
+from database.models.metric.column import ColumnMetric
+from database.models.metric.index import IndexMetric
+from database.models.metric.lock import LockMetric
+from app.databases.analytics.query.models import (
+    QueryAnalyticsResponse,
+    QueryExecutionHistoryResponse,
+    QueryContextResponse,
+    QueryExecutionHistoryItem,
+    QueryContextExecution,
+    QueryContextServerMetrics,
+    QueryContextDatabaseConnections,
+    QueryContextTable,
+    QueryContextIndex,
+    QueryContextColumn,
+    QueryContextLock,
+)
+from database.models.analytics.query_table_hit import QueryTableHit
+from database.models.analytics.query import Query
 from utils import decrypt_or_plain
 
 
@@ -403,4 +453,339 @@ async def get_query_analytics(
             applications=sorted(applications_set, key=lambda x: (x is None, x or "")),
             states=sorted(states_set, key=lambda x: (x is None, x or "")),
         ),
+    )
+
+
+async def get_query_execution_history(
+    db: AsyncSession,
+    database_id: UUID,
+    query_hash: str,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    preset: Optional[str],
+    limit: int = 500,
+) -> QueryExecutionHistoryResponse:
+    db_result = await db.execute(
+        select(Database).where(
+            Database.public_id == database_id,
+            Database.deleted_at.is_(None),
+        )
+    )
+    database = db_result.scalar_one_or_none()
+    if not database:
+        raise DatabaseNotFoundError(str(database_id))
+
+    start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
+    if limit > 2000:
+        limit = 2000
+
+    result = await db.execute(
+        select(
+            NativeQueryMetric.collected_at,
+            NativeQueryMetric.query_duration_ms,
+            NativeQueryMetric.user_name,
+            NativeQueryMetric.application_name,
+            NativeQueryMetric.query,
+        )
+        .where(
+            NativeQueryMetric.database_id == database.id,
+            NativeQueryMetric.query_hash == query_hash,
+            NativeQueryMetric.collected_at >= start_dt,
+            NativeQueryMetric.collected_at <= end_dt,
+        )
+        .order_by(NativeQueryMetric.collected_at.desc())
+        .limit(limit)
+    )
+    rows = result.all()
+
+    query_text = rows[0].query if rows else ""
+    query_preview = _build_preview(_normalize_query(query_text))
+
+    items = [
+        QueryExecutionHistoryItem(
+            collected_at=row.collected_at,
+            duration_ms=row.query_duration_ms,
+            user_name=row.user_name,
+            application_name=row.application_name,
+            rows_returned=None,
+        )
+        for row in reversed(rows)  # Oldest first for charts
+    ]
+
+    return QueryExecutionHistoryResponse(
+        query_hash=query_hash,
+        query_preview=query_preview,
+        items=items,
+    )
+
+
+async def get_query_context(
+    db: AsyncSession,
+    database_id: UUID,
+    query_hash: str,
+    collected_at: datetime,
+) -> QueryContextResponse:
+    db_result = await db.execute(
+        select(Database).where(
+            Database.public_id == database_id,
+            Database.deleted_at.is_(None),
+        )
+    )
+    database = db_result.scalar_one_or_none()
+    if not database:
+        raise DatabaseNotFoundError(str(database_id))
+
+    # 1. Fetch the exact execution
+    exec_result = await db.execute(
+        select(NativeQueryMetric)
+        .where(
+            NativeQueryMetric.database_id == database.id,
+            NativeQueryMetric.query_hash == query_hash,
+            NativeQueryMetric.collected_at == collected_at,
+        )
+        .limit(1)
+    )
+    execution_row = exec_result.scalar_one_or_none()
+    if not execution_row:
+        raise ValueError("Execution not found")
+
+    execution = QueryContextExecution(
+        collected_at=execution_row.collected_at,
+        duration_ms=execution_row.query_duration_ms,
+        query=execution_row.query or "",
+        user_name=execution_row.user_name,
+        application_name=execution_row.application_name,
+    )
+
+    window_start = collected_at - timedelta(seconds=45)
+    window_end = collected_at + timedelta(seconds=45)
+
+    # 2. Server Metrics (fetch closest/most recent metric for each type and check staleness)
+    cpu_query = await db.execute(
+        select(CpuMetric)
+        .where(CpuMetric.server_id == database.server_id, CpuMetric.collected_at <= window_end)
+        .order_by(CpuMetric.collected_at.desc())
+        .limit(1)
+    )
+    ram_query = await db.execute(
+        select(RamMetric)
+        .where(RamMetric.server_id == database.server_id, RamMetric.collected_at <= window_end)
+        .order_by(RamMetric.collected_at.desc())
+        .limit(1)
+    )
+    disk_query = await db.execute(
+        select(DiskMetric)
+        .where(DiskMetric.server_id == database.server_id, DiskMetric.collected_at <= window_end)
+        .order_by(DiskMetric.collected_at.desc())
+        .limit(10)
+    )
+    io_query = await db.execute(
+        select(IoMetric)
+        .where(IoMetric.server_id == database.server_id, IoMetric.collected_at <= window_end)
+        .order_by(IoMetric.collected_at.desc())
+        .limit(1)
+    )
+    
+    cpu_row = cpu_query.scalar_one_or_none()
+    ram_row = ram_query.scalar_one_or_none()
+    disk_rows = disk_query.scalars().all()
+    io_row = io_query.scalar_one_or_none()
+
+    # Disk metric calculation: pick root '/' or max mount point percent
+    disk_percent = None
+    disk_row = None
+    if disk_rows:
+        root_disk = next((d for d in disk_rows if d.mount_point in ["/", "C:", "C:\\"]), None)
+        disk_row = root_disk or max(disk_rows, key=lambda d: d.percent if d.percent is not None else -1)
+        disk_percent = disk_row.percent if disk_row else None
+
+    STALE_THRESHOLD_SECONDS = 180  # 3 minutes
+
+    def is_stale(metric_time: Optional[datetime]) -> bool:
+        if not metric_time:
+            return True
+        return abs((collected_at - metric_time).total_seconds()) > STALE_THRESHOLD_SECONDS
+
+    server_metrics = QueryContextServerMetrics(
+        cpu_percent=cpu_row.cpu_percent if cpu_row else None,
+        ram_percent=ram_row.percent if ram_row else None,
+        disk_percent=disk_percent,
+        read_bytes=io_row.read_bytes if io_row else None,
+        write_bytes=io_row.write_bytes if io_row else None,
+        cpu_stale=is_stale(cpu_row.collected_at) if cpu_row else True,
+        ram_stale=is_stale(ram_row.collected_at) if ram_row else True,
+        disk_stale=is_stale(disk_row.collected_at) if disk_row else True,
+        io_stale=is_stale(io_row.collected_at) if io_row else True,
+    )
+
+    # 3. Connections
+    sessions = await db.execute(select(SessionMetric.state).where(SessionMetric.database_id == database.id, SessionMetric.collected_at >= window_start, SessionMetric.collected_at <= window_end))
+    state_counts = {"active": 0, "idle": 0, "idle in transaction": 0, "waiting": 0}
+    session_rows = sessions.all()
+    # Deduplicate by considering the closest time or just use aggregate if they are all from the same snapshot.
+    # A simple approach is just counting the latest snapshot within the window.
+    latest_session_time_result = await db.execute(
+        select(SessionMetric.collected_at)
+        .where(SessionMetric.database_id == database.id, SessionMetric.collected_at >= window_start, SessionMetric.collected_at <= window_end)
+        .order_by(SessionMetric.collected_at.desc())
+        .limit(1)
+    )
+    latest_session_time = latest_session_time_result.scalar_one_or_none()
+    if latest_session_time:
+        latest_sessions = await db.execute(
+            select(SessionMetric.state, SessionMetric.wait_event_type)
+            .where(SessionMetric.database_id == database.id, SessionMetric.collected_at == latest_session_time)
+        )
+        for s in latest_sessions.all():
+            state = s.state or ""
+            if state.startswith("active"):
+                if s.wait_event_type == "Lock":
+                    state_counts["waiting"] += 1
+                else:
+                    state_counts["active"] += 1
+            elif state.startswith("idle in transaction"):
+                state_counts["idle in transaction"] += 1
+            elif state.startswith("idle"):
+                state_counts["idle"] += 1
+
+    database_connections = QueryContextDatabaseConnections(
+        active=state_counts["active"],
+        idle=state_counts["idle"],
+        idle_in_transaction=state_counts["idle in transaction"],
+        waiting=state_counts["waiting"],
+    )
+
+    # 4. Tables
+    # Find table hits for this query hash from Query analytics model
+    query_row_result = await db.execute(
+        select(Query.id)
+        .where(
+            Query.database_id == database.id,
+            func.lower(Query.hash) == query_hash.lower(),
+        )
+        .limit(1)
+    )
+    query_id = query_row_result.scalar_one_or_none()
+    
+    tables_response = []
+    if query_id:
+        table_hits_result = await db.execute(select(QueryTableHit.schema_name, QueryTableHit.table_name).where(QueryTableHit.query_id == query_id).distinct())
+        table_hits = table_hits_result.all()
+        
+        for hit in table_hits:
+            table_obj = await db.execute(select(Table).where(Table.database_id == database.id, Table.schema_name == hit.schema_name, Table.name == hit.table_name, Table.deleted_at.is_(None)).limit(1))
+            t = table_obj.scalar_one_or_none()
+            if not t:
+                continue
+            
+            t_metric = await db.execute(select(TableMetric).where(TableMetric.table_id == t.id, TableMetric.collected_at <= window_end).order_by(TableMetric.collected_at.desc()).limit(1))
+            tm = t_metric.scalar_one_or_none()
+            
+            indexes = []
+            idx_result = await db.execute(select(Index).where(Index.table_id == t.id, Index.deleted_at.is_(None)))
+            for idx in idx_result.scalars().all():
+                idx_metric = await db.execute(select(IndexMetric).where(IndexMetric.index_id == idx.id, IndexMetric.collected_at <= window_end).order_by(IndexMetric.collected_at.desc()).limit(1))
+                im = idx_metric.scalar_one_or_none()
+                
+                # Hit rate calculation: blks_hit / (blks_hit + blks_read)
+                hit_rate = None
+                if im and im.blks_hit is not None and im.blks_read is not None:
+                    total_blks = im.blks_hit + im.blks_read
+                    if total_blks > 0:
+                        hit_rate = im.blks_hit / total_blks
+
+                indexes.append(QueryContextIndex(
+                    index_id=idx.id,
+                    index_name=idx.name,
+                    index_type=idx.type,
+                    definition=idx.definition,
+                    is_unique=idx.is_unique,
+                    is_primary=idx.is_primary,
+                    size_bytes=im.size if im else None,
+                    scan_qt=im.scan_qt if im else None,
+                    hit_rate=hit_rate,
+                ))
+            
+            columns = []
+            col_result = await db.execute(select(ColumnModel).where(ColumnModel.table_id == t.id, ColumnModel.deleted_at.is_(None)))
+            for col in col_result.scalars().all():
+                col_metric = await db.execute(select(ColumnMetric).where(ColumnMetric.column_id == col.id, ColumnMetric.collected_at <= window_end).order_by(ColumnMetric.collected_at.desc()).limit(1))
+                cm = col_metric.scalar_one_or_none()
+                columns.append(QueryContextColumn(
+                    column_id=col.id,
+                    name=col.name,
+                    data_type=col.data_type,
+                    is_nullable=col.is_nullable,
+                    n_distinct=cm.n_distinct if cm else None,
+                    null_fraction=cm.null_fraction if cm else None,
+                    avg_width=cm.avg_width if cm else None,
+                ))
+
+            tables_response.append(QueryContextTable(
+                table_id=t.id,
+                schema_name=t.schema_name,
+                table_name=t.name,
+                n_live_tup=tm.n_live_tup if tm else None,
+                n_dead_tup=tm.n_dead_tup if tm else None,
+                seq_scan=tm.seq_scan if tm else None,
+                idx_scan=tm.idx_scan if tm else None,
+                last_vacuum=tm.last_vacuum if tm else None,
+                last_autovacuum=tm.last_autovacuum if tm else None,
+                last_analyze=tm.last_analyze if tm else None,
+                last_autoanalyze=tm.last_autoanalyze if tm else None,
+                size_bytes=tm.table_size_bytes if tm else None,
+                indexes=indexes,
+                columns=columns,
+            ))
+            
+    # 5. Locks (filtered to tables accessed by query or execution PID)
+    locks_response = []
+    related_table_ids = [t.table_id for t in tables_response]
+    
+    lock_conditions = [
+        LockMetric.database_id == database.id,
+        LockMetric.collected_at >= window_start,
+        LockMetric.collected_at <= window_end,
+    ]
+    
+    if related_table_ids:
+        lock_conditions.append(
+            or_(
+                LockMetric.table_id.in_(related_table_ids),
+                LockMetric.holder_pid == execution_row.pid,
+            )
+        )
+    elif execution_row.pid:
+        lock_conditions.append(LockMetric.holder_pid == execution_row.pid)
+
+    locks_result = await db.execute(
+        select(LockMetric, Table.name.label("table_name"))
+        .outerjoin(Table, Table.id == LockMetric.table_id)
+        .where(*lock_conditions)
+        .order_by(LockMetric.collected_at.desc())
+        .limit(100)
+    )
+    seen_locks = set()
+    for lock_row, t_name in locks_result.all():
+        key = (lock_row.holder_pid, lock_row.type, lock_row.mode, t_name, lock_row.is_granted)
+        if key in seen_locks:
+            continue
+        seen_locks.add(key)
+        locks_response.append(
+            QueryContextLock(
+                table_name=t_name,
+                holder_pid=lock_row.holder_pid,
+                type=lock_row.type,
+                mode=lock_row.mode,
+                is_granted=lock_row.is_granted,
+                query_preview=lock_row.query_preview,
+            )
+        )
+
+    return QueryContextResponse(
+        execution=execution,
+        server_metrics=server_metrics,
+        database_connections=database_connections,
+        tables=tables_response,
+        locks=locks_response,
     )
