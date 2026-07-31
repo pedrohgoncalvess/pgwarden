@@ -19,7 +19,6 @@
 
 	const analyticsItems = [
 		{ name: 'Data', href: '/analytics/data', icon: 'bar_chart', needsDb: true },
-		{ name: 'Query', href: '/analytics/query', icon: 'search', needsDb: true },
 		{ name: 'Index', href: '/analytics/index', icon: 'data_object', needsDb: true },
 		{
 			name: 'Recommendations',
@@ -27,7 +26,12 @@
 			icon: 'tips_and_updates',
 			needsDb: true
 		},
-		{ name: 'Time travel', href: '/analytics/deep', icon: 'history_toggle_off', needsDb: true }
+		{ name: 'Time travel', href: '/analytics/time-travel', icon: 'history_toggle_off', needsDb: true }
+	];
+
+	const queryItems = [
+		{ name: 'Basic', href: '/analytics/query', icon: 'search', needsDb: true },
+		{ name: 'Deep', href: '/analytics/deep', icon: 'travel_explore', needsDb: true }
 	];
 
 	const runItems = [
@@ -66,6 +70,10 @@
 	];
 
 	let expandedAnalytics = $state($page.url.pathname.startsWith('/analytics'));
+	let expandedQuery = $state(
+		$page.url.pathname.startsWith('/analytics/query') ||
+		$page.url.pathname.startsWith('/analytics/deep')
+	);
 	let expandedAlerts = $state($page.url.pathname.startsWith('/alerts'));
 	let expandedRuns = $state($page.url.pathname.startsWith('/runs'));
 	let expandedRunsSettings = $state(
@@ -145,6 +153,8 @@
 		}
 
 		if (isActive('/analytics', currentPath)) expandedAnalytics = true;
+		if (currentPath.includes('/analytics/query') || currentPath.includes('/analytics/deep'))
+			expandedQuery = true;
 		if (isActive('/alerts', currentPath)) expandedAlerts = true;
 		if (isActive('/runs', currentPath)) expandedRuns = true;
 		if (/^\/runs\/[^/]+\/settings\/(server|database)/.test(currentPath))
@@ -395,6 +405,46 @@
 										<span>{item.name}</span>
 									</a>
 								{/each}
+								<div class="space-y-1">
+									<button
+										onclick={() => (expandedQuery = !expandedQuery)}
+										class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant justify-between w-full"
+									>
+										<div class="flex items-center gap-3">
+											<span class="material-symbols-outlined text-base">search</span>
+											<span>Query</span>
+										</div>
+										<span class="material-symbols-outlined text-sm"
+											>{expandedQuery ? 'expand_less' : 'expand_more'}</span
+										>
+									</button>
+									{#if expandedQuery}
+										<div class="space-y-1 mt-1 pl-4 border-l border-surface-border ml-[21px]">
+											{#each queryItems as item}
+												{@const href = resolveHref(
+													item.href,
+													item.needsDb,
+													$page.params.database_id ?? null
+												)}
+												{@const active = isSubmenuActive(item.href, $page.url.pathname)}
+												<a
+													href={active ? $page.url.pathname : href}
+													aria-current={active ? 'page' : undefined}
+													class="sidebar-item sidebar-nested font-body-sm text-on-surface-variant {active
+														? 'active'
+														: ''}"
+												>
+													<span
+														class="material-symbols-outlined text-[14px]"
+														style={active ? "font-variation-settings: 'FILL' 1;" : ''}
+														>{item.icon}</span
+													>
+													<span>{item.name}</span>
+												</a>
+											{/each}
+										</div>
+									{/if}
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -450,7 +500,7 @@
 										>
 									</button>
 									{#if expandedRunsSettings}
-										<div class="space-y-1 mt-1">
+										<div class="space-y-1 mt-1 pl-4 border-l border-surface-border ml-[21px]">
 											{#each runSettingsItems as item}
 												{@const href = resolveRunSettingsHref(item)}
 												{@const active = isRunSettingsActive(item, $page.url.pathname)}
@@ -462,7 +512,7 @@
 														: ''}"
 												>
 													<span
-														class="material-symbols-outlined text-base"
+														class="material-symbols-outlined text-[14px]"
 														style={active ? "font-variation-settings: 'FILL' 1;" : ''}
 														>{item.icon}</span
 													>
@@ -568,7 +618,7 @@
 						{#if !collapsed}
 							<div class="flex flex-col">
 								<span class="font-body-sm text-on-surface font-semibold">admin</span>
-								<span class="text-[10px] text-on-surface-variant">Session Active</span>
+								<span class="text-[10px] text-on-surface-variant">Session active</span>
 							</div>
 						{/if}
 					</div>
