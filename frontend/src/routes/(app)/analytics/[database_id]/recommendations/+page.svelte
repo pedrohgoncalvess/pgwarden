@@ -1,9 +1,27 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { getAnalyticsRecommendations, patchAnalyticsRecommendation } from '$lib/api';
-	import type { AnalyticsRecommendation, AnalyticsRecommendationStatus } from '$lib/api';
+	import { goto } from '$app/navigation';
+	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
+	import { selectedServerId } from '$lib/stores/selectedServer';
+	import {
+		getAnalyticsRecommendations,
+		patchAnalyticsRecommendation,
+		listDatabases,
+		listServers
+	} from '$lib/api';
+	import type {
+		AnalyticsRecommendation,
+		AnalyticsRecommendationStatus,
+		DatabaseListItem,
+		ServerListItem
+	} from '$lib/api';
 	import RecommendationCard from './RecommendationCard.svelte';
+
+	let servers = $state<ServerListItem[]>([]);
+	let databases = $state<DatabaseListItem[]>([]);
+	let selectedDb = $state<DatabaseListItem | null>(null);
+	let selectedServer = $state('');
 
 	let items = $state<AnalyticsRecommendation[]>([]);
 	let loading = $state(true);
@@ -13,12 +31,18 @@
 	let expandedEvidenceId = $state<number | null>(null);
 
 	const databaseId = $derived($page.params.database_id ?? '');
+
+	let serverDatabases = $derived(
+		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+	);
+
 	const counts = $derived({
 		total: items.length,
 		critical: items.filter((item) => item.severity === 'critical').length,
 		warning: items.filter((item) => item.severity === 'warning').length,
 		info: items.filter((item) => item.severity === 'info').length
 	});
+
 	const statuses: { value: AnalyticsRecommendationStatus | 'all'; label: string }[] = [
 		{ value: 'open', label: 'Open' },
 		{ value: 'dismissed', label: 'Dismissed' },
@@ -26,13 +50,41 @@
 		{ value: 'all', label: 'All' }
 	];
 
-	async function load() {
-		if (!databaseId) return;
+	function eventValue(event: Event): string {
+		return (event.currentTarget as HTMLSelectElement).value;
+	}
+
+	async function selectServer(serverId: string) {
+		selectedServer = serverId;
+		selectedServerId.set(serverId);
+		const database = databases.find((item) => item.server_id === serverId);
+		if (database && database.id !== selectedDb?.id) {
+			await selectDatabase(database, true);
+		}
+	}
+
+	async function selectDatabase(database: DatabaseListItem, replace = false) {
+		if (replace) {
+			await goto(`/analytics/${database.id}/recommendations`, { replaceState: true });
+		}
+		await loadData(database);
+	}
+
+	async function loadData(database: DatabaseListItem) {
+		selectedDb = database;
+		selectedDatabaseId.set(database.id);
+		selectedServer = database.server_id;
+		selectedServerId.set(database.server_id);
 		loading = true;
 		error = '';
 		try {
-			items = await getAnalyticsRecommendations(databaseId, status);
+			items = await getAnalyticsRecommendations(database.id, status);
 		} catch (loadError) {
+			if (loadError instanceof Error && loadError.message?.includes('401')) {
+				localStorage.removeItem('token');
+				window.location.href = '/login';
+				return;
+			}
 			error = loadError instanceof Error ? loadError.message : 'Failed to load recommendations.';
 		} finally {
 			loading = false;
@@ -40,11 +92,11 @@
 	}
 
 	async function update(item: AnalyticsRecommendation, nextStatus: AnalyticsRecommendationStatus) {
-		if (!databaseId) return;
+		if (!selectedDb) return;
 		updating = new Set([...updating, item.id]);
 		error = '';
 		try {
-			const updated = await patchAnalyticsRecommendation(databaseId, item.id, nextStatus);
+			const updated = await patchAnalyticsRecommendation(selectedDb.id, item.id, nextStatus);
 			items = items.map((entry) => (entry.id === updated.id ? updated : entry));
 			if (status !== 'all' && status !== nextStatus) {
 				items = items.filter((entry) => entry.id !== item.id);
@@ -62,121 +114,221 @@
 	function selectStatus(nextStatus: AnalyticsRecommendationStatus | 'all') {
 		if (status === nextStatus) return;
 		status = nextStatus;
-		void load();
+		if (selectedDb) {
+			void loadData(selectedDb);
+		}
 	}
 
 	function toggleEvidence(itemId: number, isOpen: boolean) {
 		expandedEvidenceId = isOpen ? itemId : null;
 	}
 
+	async function load() {
+		loading = true;
+		error = '';
+		try {
+			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
+			if (databases.length === 0) {
+				return;
+			}
+
+			const routeDbId = $page.params.database_id;
+			const db = databases.find((d) => d.id === routeDbId) ?? databases[0];
+			if (db.id !== routeDbId) {
+				await goto(`/analytics/${db.id}/recommendations`, { replaceState: true });
+				return;
+			}
+			await loadData(db);
+		} catch (err: any) {
+			if (err.message?.includes('401')) {
+				localStorage.removeItem('token');
+				window.location.href = '/login';
+				return;
+			}
+			error = err.message || 'Failed to load databases.';
+		} finally {
+			loading = false;
+		}
+	}
+
 	onMount(() => void load());
 </script>
 
-<div class="min-w-0 px-container-padding pb-12 pt-24">
-	<div class="mb-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-		<div class="min-w-0">
-			<p class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Analytics</p>
-			<h1 class="m-0 font-headline-lg text-headline-lg">Recommendations</h1>
-			<p class="mt-2 max-w-3xl text-sm text-on-surface-variant">
-				Actionable findings from query, schema, index, maintenance, and capacity data.
-			</p>
-		</div>
-		<div
-			class="flex max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-1"
-		>
-			{#each statuses as option}
-				<button
-					onclick={() => selectStatus(option.value)}
-					class="shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition {status === option.value
-						? 'bg-primary text-on-primary shadow-sm'
-						: 'text-on-surface-variant hover:bg-surface-container-highest'}"
-				>
-					{option.label}
-				</button>
-			{/each}
-			<button
-				onclick={load}
-				disabled={loading}
-				class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-50"
-				aria-label="Refresh recommendations"
-				title="Refresh recommendations"
-			>
-				<span class="material-symbols-outlined text-[18px] {loading ? 'animate-spin' : ''}">
-					refresh
-				</span>
-			</button>
-		</div>
+<!-- Fixed Header -->
+<header
+	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+>
+	<div class="flex items-center gap-3">
+		<span class="material-symbols-outlined text-primary">tips_and_updates</span>
+		<h1 class="font-headline-md text-headline-md text-on-background m-0">Analytics</h1>
+		<span class="font-label-caps text-[10px] text-on-surface-variant">/ Recommendations</span>
+		{#if selectedDb}
+			<span class="font-label-caps text-[10px] text-on-surface-variant">{selectedDb.name}</span>
+		{/if}
 	</div>
+	<button
+		onclick={load}
+		class="flex items-center gap-2 px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-lg font-bold text-sm hover:border-primary/40 hover:text-primary transition-all duration-200 cursor-pointer"
+	>
+		<span class="material-symbols-outlined text-sm">refresh</span>
+		Refresh
+	</button>
+</header>
 
+<div class="pt-24 px-container-padding pb-12">
 	{#if error}
 		<div
-			class="mb-5 rounded-lg border border-error/30 bg-error-container/10 p-4 text-sm text-error"
+			class="mb-6 p-4 bg-error-container/20 border-l-4 border-error rounded-r flex items-center gap-3"
 		>
-			{error}
+			<span class="material-symbols-outlined text-error">error</span>
+			<p class="font-code-sm text-sm text-error">{error}</p>
 		</div>
 	{/if}
 
-	<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-		<div class="rounded-xl border border-outline-variant bg-surface-container p-4">
-			<div class="text-2xl font-bold text-on-surface">{counts.total}</div>
-			<div class="mt-1 text-xs font-bold uppercase tracking-wide text-on-surface-variant">
-				Displayed
+	{#if loading && databases.length === 0}
+		<div class="flex items-center justify-center py-12">
+			<svg
+				class="h-8 w-8 animate-spin text-primary"
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
+				></circle>
+				<path
+					class="opacity-75"
+					fill="currentColor"
+					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+				></path>
+			</svg>
+		</div>
+	{:else if databases.length === 0}
+		<div class="flex flex-col items-center justify-center py-24">
+			<div
+				class="w-20 h-20 rounded-2xl bg-surface-container-high border border-outline-variant flex items-center justify-center mb-6"
+			>
+				<span class="material-symbols-outlined text-[40px] text-on-surface-variant">database</span>
 			</div>
-		</div>
-		<div class="rounded-xl border border-error/25 bg-error/5 p-4">
-			<div class="text-2xl font-bold text-error">{counts.critical}</div>
-			<div class="mt-1 text-xs font-bold uppercase tracking-wide text-error">Critical</div>
-		</div>
-		<div class="rounded-xl border border-tertiary/25 bg-tertiary/5 p-4">
-			<div class="text-2xl font-bold text-tertiary">{counts.warning}</div>
-			<div class="mt-1 text-xs font-bold uppercase tracking-wide text-tertiary">Warning</div>
-		</div>
-		<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
-			<div class="text-2xl font-bold text-primary">{counts.info}</div>
-			<div class="mt-1 text-xs font-bold uppercase tracking-wide text-primary">Information</div>
-		</div>
-	</div>
-
-	{#if loading}
-		<div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-			{#each [1, 2, 3] as placeholder}
-				<div
-					class="h-72 animate-pulse rounded-xl border border-outline-variant bg-surface-container"
-					aria-hidden="true"
-				>
-					<div class="h-1 rounded-t-xl bg-primary/20"></div>
-					<div class="space-y-4 p-5">
-						<div class="h-9 w-3/4 rounded bg-surface-container-highest"></div>
-						<div class="h-4 w-full rounded bg-surface-container-highest"></div>
-						<div class="h-20 rounded bg-surface-container-highest"></div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:else if items.length === 0}
-		<div
-			class="rounded-xl border border-dashed border-outline-variant bg-surface-container p-10 text-center"
-		>
-			<span class="material-symbols-outlined text-4xl text-primary">tips_and_updates</span>
-			<h2 class="mt-3 font-headline-md">
-				No {status === 'all' ? '' : status} recommendations
+			<h2 class="font-headline-md text-headline-md font-bold text-on-surface mb-2">
+				No databases connected
 			</h2>
-			<p class="text-sm text-on-surface-variant">
-				Run Analytics after enough metric data has been collected to generate findings.
+			<p class="text-body-md text-on-surface-variant max-w-md text-center mb-8">
+				Connect a database from the Servers page to view analytics.
 			</p>
 		</div>
 	{:else}
-		<div class="grid items-stretch gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-			{#each items as item (item.id)}
-				<RecommendationCard
-					{item}
-					busy={updating.has(item.id)}
-					{databaseId}
-					onUpdate={(nextStatus) => update(item, nextStatus)}
-					evidenceOpen={expandedEvidenceId === item.id}
-					onEvidenceToggle={(isOpen) => toggleEvidence(item.id, isOpen)}
-				/>
-			{/each}
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+			<div class="flex flex-wrap items-center gap-3">
+				<label class="flex items-center gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+					<select
+						value={selectedServer}
+						onchange={(event) => selectServer(eventValue(event))}
+						disabled={servers.length <= 1}
+						class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
+					>
+						{#each servers as server}
+							<option value={server.id}>{server.name}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="flex items-center gap-2">
+					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+					<select
+						value={selectedDb?.id ?? ''}
+						onchange={(event) => {
+							const database = databases.find((item) => item.id === eventValue(event));
+							if (database) selectDatabase(database, true);
+						}}
+						disabled={serverDatabases.length <= 1}
+						class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+					>
+						{#each serverDatabases as db}
+							<option value={db.id}>{db.name}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+
+			<div
+				class="flex max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-1"
+			>
+				{#each statuses as option}
+					<button
+						onclick={() => selectStatus(option.value)}
+						class="shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition {status === option.value
+							? 'bg-primary text-on-primary shadow-sm'
+							: 'text-on-surface-variant hover:bg-surface-container-highest'}"
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
 		</div>
+
+		<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+			<div class="rounded-xl border border-outline-variant bg-surface-container p-4">
+				<div class="text-2xl font-bold text-on-surface">{counts.total}</div>
+				<div class="mt-1 text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+					Displayed
+				</div>
+			</div>
+			<div class="rounded-xl border border-error/25 bg-error/5 p-4">
+				<div class="text-2xl font-bold text-error">{counts.critical}</div>
+				<div class="mt-1 text-xs font-bold uppercase tracking-wide text-error">Critical</div>
+			</div>
+			<div class="rounded-xl border border-tertiary/25 bg-tertiary/5 p-4">
+				<div class="text-2xl font-bold text-tertiary">{counts.warning}</div>
+				<div class="mt-1 text-xs font-bold uppercase tracking-wide text-tertiary">Warning</div>
+			</div>
+			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
+				<div class="text-2xl font-bold text-primary">{counts.info}</div>
+				<div class="mt-1 text-xs font-bold uppercase tracking-wide text-primary">Information</div>
+			</div>
+		</div>
+
+		{#if loading}
+			<div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+				{#each [1, 2, 3] as placeholder}
+					<div
+						class="h-72 animate-pulse rounded-xl border border-outline-variant bg-surface-container"
+						aria-hidden="true"
+					>
+						<div class="h-1 rounded-t-xl bg-primary/20"></div>
+						<div class="space-y-4 p-5">
+							<div class="h-9 w-3/4 rounded bg-surface-container-highest"></div>
+							<div class="h-4 w-full rounded bg-surface-container-highest"></div>
+							<div class="h-20 rounded bg-surface-container-highest"></div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{:else if items.length === 0}
+			<div
+				class="rounded-xl border border-dashed border-outline-variant bg-surface-container p-10 text-center"
+			>
+				<span class="material-symbols-outlined text-4xl text-primary">tips_and_updates</span>
+				<h2 class="mt-3 font-headline-md">
+					No {status === 'all' ? '' : status} recommendations
+				</h2>
+				<p class="text-sm text-on-surface-variant">
+					Run Analytics after enough metric data has been collected to generate findings.
+				</p>
+			</div>
+		{:else}
+			<div class="grid items-stretch gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+				{#each items as item (item.id)}
+					<RecommendationCard
+						{item}
+						busy={updating.has(item.id)}
+						databaseId={selectedDb?.id ?? databaseId}
+						onUpdate={(nextStatus) => update(item, nextStatus)}
+						evidenceOpen={expandedEvidenceId === item.id}
+						onEvidenceToggle={(isOpen) => toggleEvidence(item.id, isOpen)}
+					/>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
+
