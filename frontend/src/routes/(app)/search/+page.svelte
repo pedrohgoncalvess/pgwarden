@@ -597,7 +597,7 @@
 	>
 		<div class="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-6 shadow-xl">
 			<div class="mb-6 flex items-center justify-between">
-				<h2 class="m-0 font-headline-sm text-on-surface">Filter by Type</h2>
+				<h2 class="m-0 font-headline-sm text-on-surface">Filter by type</h2>
 				<button
 					type="button"
 					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"

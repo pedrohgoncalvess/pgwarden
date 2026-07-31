@@ -290,7 +290,7 @@
 				<div class="flex items-center gap-2">
 					<span class="material-symbols-outlined text-sm text-primary">precision_manufacturing</span
 					>
-					<h2 class="m-0 font-headline-md text-headline-md">Live Runs</h2>
+					<h2 class="m-0 font-headline-md text-headline-md">Live runs</h2>
 					<div
 						class="relative"
 						role="group"

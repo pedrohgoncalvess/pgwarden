@@ -376,7 +376,7 @@
 				<div class="danger-zone-header px-5 py-4 flex items-center gap-3">
 					<span class="material-symbols-outlined text-error text-[18px]">dangerous</span>
 					<div>
-						<h3 class="text-sm font-bold text-error m-0 uppercase tracking-wider">Danger Zone</h3>
+						<h3 class="text-sm font-bold text-error m-0 uppercase tracking-wider">Danger zone</h3>
 						<p class="text-[11px] text-on-surface-variant mt-0.5">
 							Irreversible actions — all collected data will be permanently erased.
 						</p>

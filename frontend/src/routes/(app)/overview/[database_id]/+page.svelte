@@ -446,7 +446,7 @@
 				<div>
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
-						for="srvName">Server Name</label
+						for="srvName">Server name</label
 					>
 					<div class="relative group mt-1.5">
 						<span
@@ -602,7 +602,7 @@
 							<span>Testing...</span>
 						{:else}
 							<span class="material-symbols-outlined text-sm">network_check</span>
-							<span>Test Connection</span>
+							<span>Test connection</span>
 						{/if}
 					</button>
 					<button
@@ -654,7 +654,7 @@
 					</div>
 					<div>
 						<h2 class="font-headline-md text-headline-md font-bold text-on-surface m-0">
-							Link Database
+							Link database
 						</h2>
 						<p class="text-[11px] text-on-surface-variant mt-0.5">
 							Select a server and database name
@@ -690,7 +690,7 @@
 				<div>
 					<label
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
-						for="dbName">Database Name</label
+						for="dbName">Database name</label
 					>
 					<div class="relative group mt-1.5">
 						<span
@@ -751,7 +751,7 @@
 							<span>Creating...</span>
 						{:else}
 							<span class="material-symbols-outlined text-sm">add_link</span>
-							<span>Link Database</span>
+							<span>Link database</span>
 						{/if}
 					</button>
 				</div>
@@ -1102,7 +1102,7 @@
 						class="px-4 py-3 border-b border-outline-variant flex items-center gap-2 bg-surface-container-low"
 					>
 						<span class="material-symbols-outlined text-error text-sm">lock</span>
-						<h2 class="font-headline-md text-headline-md m-0">Live Locks</h2>
+						<h2 class="font-headline-md text-headline-md m-0">Live locks</h2>
 					</div>
 					<div class="p-2 space-y-2 flex-1 overflow-y-auto custom-scrollbar bg-surface-container">
 						{#if locks === null}

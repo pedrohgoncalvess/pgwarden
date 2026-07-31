@@ -733,7 +733,7 @@
 			>
 				<div class="flex items-center gap-2">
 					<span class="material-symbols-outlined text-sm text-primary">show_chart</span>
-					<h2 class="m-0 font-headline-md text-headline-md">Size History</h2>
+					<h2 class="m-0 font-headline-md text-headline-md">Size history</h2>
 				</div>
 				<div class="flex items-center gap-4 text-xs">
 					{#if showDatabase}

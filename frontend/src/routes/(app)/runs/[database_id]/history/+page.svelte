@@ -272,7 +272,7 @@
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">history</span>
-		<h1 class="font-headline-md text-headline-md text-on-background m-0">Run History</h1>
+		<h1 class="font-headline-md text-headline-md text-on-background m-0">Run history</h1>
 		{#if selectedDb}
 			<span class="font-label-caps text-[10px] text-on-surface-variant">{selectedDb.name}</span>
 		{/if}
@@ -481,7 +481,7 @@
 			>
 				<div class="flex items-center gap-2">
 					<span class="material-symbols-outlined text-sm text-primary">history</span>
-					<h2 class="m-0 font-headline-md text-headline-md">Execution History</h2>
+					<h2 class="m-0 font-headline-md text-headline-md">Execution history</h2>
 				</div>
 				<span class="font-code-sm text-code-sm text-on-surface-variant">
 					{history.length} runs
