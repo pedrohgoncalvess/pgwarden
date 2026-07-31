@@ -624,13 +624,17 @@ export async function getDatabaseSchemaHistory(
 	databaseId: string,
 	tableId?: string,
 	limit = 100,
-	offset = 0
+	offset = 0,
+	columnId?: string
 ): Promise<SchemaHistoryResponse> {
 	const url = new URL(`/api/v1/databases/${databaseId}/schemas/history`, window.location.origin);
 	url.searchParams.set('limit', String(limit));
 	url.searchParams.set('offset', String(offset));
 	if (tableId) {
 		url.searchParams.set('table_id', tableId);
+	}
+	if (columnId) {
+		url.searchParams.set('column_id', columnId);
 	}
 	const res = await fetch(url.toString(), {
 		headers: authHeaders()
@@ -846,6 +850,103 @@ export type QueryAnalyticsResponse = {
 	filters: QueryAnalyticsFilters;
 };
 
+export type QueryExecutionHistoryItem = {
+	collected_at: string;
+	duration_ms: number | null;
+	user_name: string | null;
+	application_name: string | null;
+	rows_returned: number | null;
+};
+
+export type QueryExecutionHistoryResponse = {
+	query_hash: string;
+	query_preview: string;
+	items: QueryExecutionHistoryItem[];
+};
+
+export type QueryContextExecution = {
+	collected_at: string;
+	duration_ms: number | null;
+	query: string;
+	user_name: string | null;
+	application_name: string | null;
+};
+
+export type QueryContextServerMetrics = {
+	cpu_percent: number | null;
+	ram_percent: number | null;
+	disk_percent: number | null;
+	read_bytes: number | null;
+	write_bytes: number | null;
+	cpu_stale?: boolean;
+	ram_stale?: boolean;
+	disk_stale?: boolean;
+	io_stale?: boolean;
+};
+
+export type QueryContextDatabaseConnections = {
+	active: number;
+	idle: number;
+	idle_in_transaction: number;
+	waiting: number;
+};
+
+export type QueryContextIndex = {
+	index_id: number;
+	index_name: string;
+	index_type: string;
+	definition: string;
+	is_unique: boolean;
+	is_primary: boolean;
+	size_bytes: number | null;
+	scan_qt: number | null;
+	hit_rate: number | null;
+};
+
+export type QueryContextColumn = {
+	column_id: number;
+	name: string;
+	data_type: string;
+	is_nullable: boolean;
+	n_distinct: number | null;
+	null_fraction: number | null;
+	avg_width: number | null;
+};
+
+export type QueryContextTable = {
+	table_id: number;
+	schema_name: string;
+	table_name: string;
+	n_live_tup: number | null;
+	n_dead_tup: number | null;
+	seq_scan: number | null;
+	idx_scan: number | null;
+	last_vacuum: string | null;
+	last_autovacuum: string | null;
+	last_analyze: string | null;
+	last_autoanalyze: string | null;
+	size_bytes: number | null;
+	indexes: QueryContextIndex[];
+	columns: QueryContextColumn[];
+};
+
+export type QueryContextLock = {
+	table_name: string | null;
+	holder_pid: number;
+	type: string;
+	mode: string;
+	is_granted: boolean | null;
+	query_preview: string | null;
+};
+
+export type QueryContextResponse = {
+	execution: QueryContextExecution;
+	server_metrics: QueryContextServerMetrics;
+	database_connections: QueryContextDatabaseConnections;
+	tables: QueryContextTable[];
+	locks: QueryContextLock[];
+};
+
 export type IndexAnalyticsFilterItem = {
 	id: number;
 	table_id: number;
@@ -946,6 +1047,12 @@ export type TableQueryUsageItem = {
 	execution_count: number;
 	last_executed_at: string | null;
 	avg_duration_ms: number | null;
+};
+
+export type ColumnQueryUsageItem = TableQueryUsageItem & {
+	is_selected: boolean;
+	is_condition: boolean;
+	is_condition_foreign: boolean;
 };
 
 export type AnalyticsServiceConfig = {
@@ -1183,6 +1290,62 @@ export async function getQueryAnalytics(
 	return res.json();
 }
 
+export async function getQueryExecutionHistory(
+	databaseId: string,
+	queryHash: string,
+	options: {
+		preset?: AnalyticsPreset;
+		startDate?: string;
+		endDate?: string;
+		limit?: number;
+	} = {}
+): Promise<QueryExecutionHistoryResponse> {
+	const url = new URL(
+		`/api/v1/databases/${databaseId}/analytics/query/history`,
+		window.location.origin
+	);
+	url.searchParams.set('query_hash', queryHash);
+	if (options.preset && options.preset !== 'custom') {
+		url.searchParams.set('preset', options.preset);
+	}
+	if (options.startDate) {
+		url.searchParams.set('start_date', options.startDate);
+	}
+	if (options.endDate) {
+		url.searchParams.set('end_date', options.endDate);
+	}
+	if (options.limit !== undefined) {
+		url.searchParams.set('limit', String(options.limit));
+	}
+	const res = await fetch(url.toString(), {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to get query execution history: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function getQueryContext(
+	databaseId: string,
+	queryHash: string,
+	collectedAt: string
+): Promise<QueryContextResponse> {
+	const url = new URL(
+		`/api/v1/databases/${databaseId}/analytics/query/context`,
+		window.location.origin
+	);
+	url.searchParams.set('query_hash', queryHash);
+	url.searchParams.set('collected_at', collectedAt);
+	const res = await fetch(url.toString(), {
+		headers: authHeaders()
+	});
+	if (!res.ok) {
+		throw new Error(`Failed to get query context: ${res.status}`);
+	}
+	return res.json();
+}
+
 export async function getIndexAnalytics(
 	databaseId: string,
 	options: {
@@ -1261,6 +1424,20 @@ export async function getTableUsage(
 	});
 	if (!res.ok) throw new Error(`Failed to get table usage: ${res.status}`);
 	const body = (await res.json()) as { items: TableQueryUsageItem[] };
+	return body.items;
+}
+
+export async function getColumnUsage(
+	databaseId: string,
+	tableId: string,
+	columnId: string
+): Promise<ColumnQueryUsageItem[]> {
+	const res = await fetch(
+		`/api/v1/databases/${databaseId}/analytics/table-usage/${tableId}/columns/${columnId}`,
+		{ headers: authHeaders() }
+	);
+	if (!res.ok) throw new Error(`Failed to get column usage: ${res.status}`);
+	const body = (await res.json()) as { items: ColumnQueryUsageItem[] };
 	return body.items;
 }
 
