@@ -7,6 +7,7 @@ from app.servers.runs.models import (
     RunPatch, RunHistoryItem, RunControlResult
 )
 from app.servers.runs import services as run_services
+from app.servers.runs.service_runs import control_service_run
 from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
 from database.operations.metadata import DatabaseRepository
@@ -53,7 +54,7 @@ async def get_database_run_history(
     database_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    run_type: str | None = Query(default=None, pattern="^(server|database)$"),
+    run_type: str | None = Query(default=None, pattern="^(server|database|service)$"),
     status: str | None = Query(default=None, min_length=1),
     name: str | None = Query(default=None, min_length=1),
     started_from: str | None = Query(default=None),
@@ -84,6 +85,31 @@ async def get_database_run_history(
         order_dir=order_dir,
     )
     return history
+
+
+@router.patch(
+    "/services/{service}",
+    response_model=RunControlResult,
+    summary="Control an Analytics or Notifier service",
+)
+async def patch_service_run(
+    database_id: str,
+    service: Literal["analytics", "notifier"],
+    patch: RunPatch,
+):
+    if patch.action.value not in ("force_run", "stop"):
+        raise HTTPException(status_code=400, detail="Services support force_run or stop")
+    async with DatabaseConnection() as conn:
+        db_repo = DatabaseRepository(conn)
+        database = await db_repo.find_one_by(public_id=database_id)
+        if not database:
+            raise HTTPException(status_code=404, detail="Database not found")
+        try:
+            result = await control_service_run(conn, database.id, service, patch.action.value)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error))
+    result["action"] = patch.action.value
+    return RunControlResult.model_validate(result)
 
 
 @router.patch(

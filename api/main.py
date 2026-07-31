@@ -19,6 +19,9 @@ from app.databases.metrics.router import router as db_metrics_router
 from app.databases.native_queries.router import router as db_native_queries_router
 from app.databases.analytics.router import router as db_analytics_router
 from app.databases.analytics.query.router import router as query_analytics_router
+from app.databases.analytics.server_metrics_router import router as server_metrics_analytics_router
+from app.databases.analytics.table_usage_router import router as table_usage_router
+from app.databases.analytics.recommendations_router import router as recommendations_router
 from app.servers.configs.router import router as srv_config_router
 from app.servers.runs.router import router as srv_runs_router
 from app.servers.metrics.router import router as srv_metrics_router
@@ -28,6 +31,7 @@ from app.metadata.search.router import router as metadata_search_router
 from app.notifier.router import router as notifier_router
 from app.notifications.router import router as notifications_router
 from app.health.router import router as health_router
+from app.services.router import router as services_router
 from app.security.default_credentials import sync_default_credentials_notification
 from app.databases.schemas.exceptions import BaseAppException
 from database.connection import DatabaseConnection
@@ -203,6 +207,9 @@ app.include_router(db_metrics_router, prefix="/v1")
 app.include_router(db_native_queries_router, prefix="/v1")
 app.include_router(db_analytics_router, prefix="/v1")
 app.include_router(query_analytics_router, prefix="/v1")
+app.include_router(server_metrics_analytics_router, prefix="/v1")
+app.include_router(table_usage_router, prefix="/v1")
+app.include_router(recommendations_router, prefix="/v1")
 app.include_router(srv_config_router, prefix="/v1")
 app.include_router(srv_runs_router, prefix="/v1")
 app.include_router(srv_metrics_router, prefix="/v1")
@@ -212,3 +219,4 @@ app.include_router(metadata_search_router, prefix="/v1")
 app.include_router(notifier_router, prefix="/v1")
 app.include_router(notifications_router, prefix="/v1")
 app.include_router(health_router, prefix="/v1")
+app.include_router(services_router, prefix="/v1")

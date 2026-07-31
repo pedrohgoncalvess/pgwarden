@@ -8,12 +8,14 @@ from pydantic import BaseModel, ConfigDict
 class RunType(str, Enum):
     SERVER = "server"
     DATABASE = "database"
+    SERVICE = "service"
 
 
 class RunStatus(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
+    UNAVAILABLE = "unavailable"
     DELETED = "deleted"
 
 

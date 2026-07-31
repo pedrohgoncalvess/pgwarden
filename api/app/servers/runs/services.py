@@ -12,6 +12,7 @@ from database.models.collector.config_server import ConfigServer
 from database.models.collector.config_database import ConfigDatabase
 from database.models.collector.run import Run
 from database.models.metadata.database import Database
+from app.servers.runs.service_runs import get_service_history, get_service_runs
 
 
 def _serialize_run_snapshot(item: dict) -> dict:
@@ -142,6 +143,7 @@ async def _get_runs_by_database(database_id: str):
             select(ConfigDatabase).where(ConfigDatabase.database_id == internal_id)
         )
         db_configs = db_cfg_result.scalars().all()
+        service_runs = await get_service_runs(conn, internal_id, server_id, db_name)
 
     runs = []
     for cfg in db_configs:
@@ -158,7 +160,7 @@ async def _get_runs_by_database(database_id: str):
             "status": _derive_status(cfg.is_paused, cfg.next_run_at),
         })
 
-    return runs
+    return runs + service_runs
 
 
 async def run_stream(server_id: str):
@@ -268,8 +270,9 @@ async def list_database_run_history(
         db_config_rows = db_cfg_result.all()
         db_config_ids = [row[0] for row in db_config_rows]
 
+        service_history = await get_service_history(conn, internal_id)
         if not server_config_ids and not db_config_ids:
-            return []
+            return _filter_service_history(service_history, run_type, status, name, limit, offset)
 
         config_lookup = {
             ("server", cfg_id): {
@@ -296,7 +299,7 @@ async def list_database_run_history(
         if run_type in (None, "database") and db_config_ids:
             type_filters.append(Run.config_database_id.in_(db_config_ids))
         if not type_filters:
-            return []
+            return _filter_service_history(service_history, run_type, status, name, limit, offset)
 
         query = (
             select(Run)
@@ -322,7 +325,7 @@ async def list_database_run_history(
             if matching_database_ids and run_type in (None, "database"):
                 name_filters.append(Run.config_database_id.in_(matching_database_ids))
             if not name_filters:
-                return []
+                return _filter_service_history(service_history, run_type, status, name, limit, offset)
             query = query.where(or_(*name_filters))
 
         started_from_dt = _parse_datetime(started_from)
@@ -353,7 +356,30 @@ async def list_database_run_history(
         )
         runs = runs_result.scalars().all()
 
-        return [_serialize_run(r, config_lookup) for r in runs]
+        collector_history = [_serialize_run(r, config_lookup) for r in runs]
+        service_history = _filter_service_history(service_history, run_type, status, name, limit, 0)
+        combined = collector_history + service_history
+        combined.sort(key=lambda item: item.get("started_at") or "", reverse=order_dir == "desc")
+        return combined[offset:offset + limit]
+
+
+def _filter_service_history(
+    items: List[dict],
+    run_type: str | None,
+    status: str | None,
+    name: str | None,
+    limit: int,
+    offset: int,
+) -> List[dict]:
+    if run_type not in (None, "service"):
+        return []
+    filtered = [
+        item for item in items
+        if (not status or item["status"] == status)
+        and (not name or name.lower() in (item["name"] or "").lower())
+    ]
+    filtered.sort(key=lambda item: item.get("started_at") or "", reverse=True)
+    return filtered[offset:offset + limit]
 
 
 async def patch_run(run_id: int, run_type: str, action: str) -> dict:
