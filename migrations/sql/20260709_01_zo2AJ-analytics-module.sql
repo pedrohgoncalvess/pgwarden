@@ -67,10 +67,14 @@ CREATE TABLE "analytics"."run" (
     id BIGSERIAL,
     database_id BIGINT NOT NULL,
     run_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'scheduled',
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT "run_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "run_status_check" CHECK ("status" IN ('scheduled', 'running', 'completed', 'error')),
     CONSTRAINT "run_database_fkey" FOREIGN KEY ("database_id") REFERENCES "metadata"."database" ("id") ON DELETE CASCADE
 );
 
@@ -115,6 +119,31 @@ CREATE TABLE "analytics"."query_analysis_finding" (
 
 CREATE INDEX "query_analysis_finding_analysis_idx" ON "analytics"."query_analysis_finding" ("analysis_id");
 CREATE INDEX "query_analysis_finding_type_idx" ON "analytics"."query_analysis_finding" ("type");
+
+CREATE TABLE "analytics"."recommendation" (
+    id BIGSERIAL,
+    database_id BIGINT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    recommendation TEXT,
+    evidence JSONB NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'open',
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT "recommendation_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "recommendation_database_fkey" FOREIGN KEY ("database_id") REFERENCES "metadata"."database" ("id") ON DELETE CASCADE,
+    CONSTRAINT "recommendation_database_fingerprint_key" UNIQUE ("database_id", "fingerprint"),
+    CONSTRAINT "recommendation_severity_check" CHECK ("severity" IN ('info', 'warning', 'critical')),
+    CONSTRAINT "recommendation_status_check" CHECK ("status" IN ('open', 'dismissed', 'resolved'))
+);
+
+CREATE INDEX "recommendation_database_status_idx"
+    ON "analytics"."recommendation" ("database_id", "status", "severity", "last_seen_at" DESC);
 
 CREATE INDEX "native_query_database_user_collected_idx"
     ON "metric"."native_query" (database_id, user_name, collected_at DESC);

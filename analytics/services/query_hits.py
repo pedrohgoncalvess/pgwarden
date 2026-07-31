@@ -16,8 +16,14 @@ async def process_pending_native_queries(limit: int = 500) -> int:
         return await process_pending_native_queries_with_session(session, limit=limit)
 
 
-async def process_pending_native_queries_with_session(session: AsyncSession, limit: int = 500) -> int:
-    native_queries = await _pending_queries(session, limit)
+async def process_pending_native_queries_with_session(
+    session: AsyncSession,
+    limit: int = 500,
+    database_id: int | None = None,
+    commit: bool = True,
+) -> int:
+    """Parse pending queries, optionally scoped to one database and transaction."""
+    native_queries = await _pending_queries(session, limit, database_id)
     if not native_queries:
         return 0
 
@@ -46,17 +52,22 @@ async def process_pending_native_queries_with_session(session: AsyncSession, lim
         processed_query_ids.add(query_id)
         processed += 1
 
-    await touch_heartbeat(session)
-    await session.commit()
+    if commit:
+        await touch_heartbeat(session)
+        await session.commit()
     return processed
 
 
-async def _pending_queries(session: AsyncSession, limit: int) -> list[NativeQueryMetric]:
+async def _pending_queries(
+    session: AsyncSession,
+    limit: int,
+    database_id: int | None,
+) -> list[NativeQueryMetric]:
+    statement = select(NativeQueryMetric).where(NativeQueryMetric.query.is_not(None))
+    if database_id is not None:
+        statement = statement.where(NativeQueryMetric.database_id == database_id)
     result = await session.execute(
-        select(NativeQueryMetric)
-        .where(NativeQueryMetric.query.is_not(None))
-        .order_by(NativeQueryMetric.collected_at.asc())
-        .limit(limit)
+        statement.order_by(NativeQueryMetric.collected_at.asc()).limit(limit)
     )
     return list(result.scalars().all())
 

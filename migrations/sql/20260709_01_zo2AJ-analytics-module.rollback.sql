@@ -1,6 +1,8 @@
 DROP INDEX IF EXISTS "metric"."native_query_database_queryhash_collected_idx";
 DROP INDEX IF EXISTS "metric"."native_query_database_app_collected_idx";
 DROP INDEX IF EXISTS "metric"."native_query_database_user_collected_idx";
+DROP INDEX IF EXISTS "analytics"."recommendation_database_status_idx";
+DROP TABLE IF EXISTS "analytics"."recommendation";
 DROP INDEX IF EXISTS "analytics"."query_analysis_finding_type_idx";
 DROP INDEX IF EXISTS "analytics"."query_analysis_finding_analysis_idx";
 DROP TABLE IF EXISTS "analytics"."query_analysis_finding";

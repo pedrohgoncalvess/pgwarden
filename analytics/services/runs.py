@@ -12,6 +12,7 @@ from analytics.database.models.analytics import AnalyticsConfig, AnalyticsRun
 from analytics.database.models.metadata import Database
 from analytics.services.query_analysis import process_query_analysis_with_session
 from analytics.services.query_hits import process_pending_native_queries_with_session
+from analytics.services.recommendations import refresh_recommendations
 
 DEFAULT_RUN_INTERVAL_SECONDS = 30 * 60
 MIN_RUN_INTERVAL_SECONDS = 10
@@ -121,6 +122,8 @@ async def prepare_due_analytics_with_session(
         database_id = run.database_id
         interval = _effective_interval(config.run_interval)
         next_run_at = _now() + timedelta(seconds=interval)
+        run.status = "running"
+        run.started_at = _now()
         session.add(AnalyticsRun(database_id=database_id, run_at=next_run_at))
         requests.append(
             AnalyticsRunRequest(
@@ -154,10 +157,16 @@ async def _execute_run_request(request: AnalyticsRunRequest) -> AnalyticsRunResu
                     database_id=request.database_id,
                     include_recommendations=request.recommendation_enabled,
                 )
+            if request.recommendation_enabled:
+                await refresh_recommendations(session, request.database_id)
 
             config = await session.get(AnalyticsConfig, request.config_id)
             if config is not None:
                 config.last_seen = _now()
+            run = await session.get(AnalyticsRun, request.run_id)
+            if run is not None:
+                run.status = "completed"
+                run.finished_at = _now()
 
             await touch_heartbeat(session)
             await session.commit()
@@ -231,6 +240,7 @@ async def _due_runs(
         .join(AnalyticsConfig, AnalyticsConfig.database_id == AnalyticsRun.database_id)
         .join(Database, Database.id == AnalyticsRun.database_id)
         .where(AnalyticsRun.run_at <= _now())
+        .where(AnalyticsRun.status == "scheduled")
         .where(Database.is_active.is_(True))
         .where(Database.deleted_at.is_(None))
         .order_by(AnalyticsRun.run_at.asc())
@@ -252,5 +262,7 @@ async def _record_run_error(
     run = await session.get(AnalyticsRun, run_id)
     if run is not None:
         run.error = error
+        run.status = "error"
+        run.finished_at = _now()
 
     await session.commit()

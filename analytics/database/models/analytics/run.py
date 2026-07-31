@@ -13,5 +13,8 @@ class AnalyticsRun(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     database_id = Column(BigInteger, ForeignKey("metadata.database.id", ondelete="CASCADE"), nullable=False)
     run_at = Column(DateTime(timezone=True), nullable=False)
+    status = Column(Text, nullable=False, default="scheduled")
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
