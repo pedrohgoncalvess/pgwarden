@@ -27,6 +27,11 @@ async function forward(request: Request, url: URL) {
 			headers: response.headers
 		});
 	} catch (err) {
+		console.error('Backend API request failed', {
+			method: request.method,
+			targetUrl,
+			error: err
+		});
 		throw error(500, 'Error connecting to backend API');
 	}
 }
