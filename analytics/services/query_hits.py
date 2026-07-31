@@ -102,7 +102,12 @@ async def _metadata_for_database(session: AsyncSession, database_id: int) -> lis
 
 
 async def _get_or_create_query_id(session: AsyncSession, native_query: NativeQueryMetric) -> int | None:
-    result = await session.execute(select(Query.id).where(Query.query == native_query.query))
+    result = await session.execute(
+        select(Query.id).where(
+            Query.database_id == native_query.database_id,
+            Query.query == native_query.query,
+        )
+    )
     query_id = result.scalar_one_or_none()
     if query_id is not None:
         return query_id

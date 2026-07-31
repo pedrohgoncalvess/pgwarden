@@ -4,14 +4,15 @@ CREATE SCHEMA IF NOT EXISTS "analytics";
 CREATE TABLE "analytics"."query"(
     id BIGSERIAL,
     database_id BIGINT NOT NULL,
-    query TEXT NOT NULL UNIQUE,
+    query TEXT NOT NULL,
     user_name TEXT,
     application_name TEXT,
     hash TEXT NOT NULL,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
 
-    CONSTRAINT "query_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "query_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "query_database_query_key" UNIQUE ("database_id", "query")
 );
 
 CREATE TABLE "analytics"."query_column_hit"(
