@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.auth.services import get_current_user
-from app.databases.analytics.table_usage import get_table_usage, get_table_usage_available
+from app.databases.analytics.table_usage import (
+    get_column_usage,
+    get_table_usage,
+    get_table_usage_available,
+)
 from database.connection import DatabaseConnection
 
 
@@ -30,6 +34,20 @@ class TableUsageResponse(BaseModel):
     """Parsed queries that use one tracked schema table."""
 
     items: list[TableQueryUsageItem]
+
+
+class ColumnQueryUsageItem(TableQueryUsageItem):
+    """Captured workload information for one parsed column reference."""
+
+    is_selected: bool
+    is_condition: bool
+    is_condition_foreign: bool
+
+
+class ColumnUsageResponse(BaseModel):
+    """Parsed queries that use one tracked schema column."""
+
+    items: list[ColumnQueryUsageItem]
 
 
 router = APIRouter(
@@ -55,3 +73,19 @@ async def get_usage(database_id: UUID, table_id: UUID) -> TableUsageResponse:
     """Get parsed queries and their captured workload for a table."""
     async with DatabaseConnection() as conn:
         return TableUsageResponse(items=await get_table_usage(conn, database_id, table_id))
+
+
+@router.get(
+    "/{table_id}/columns/{column_id}",
+    response_model=ColumnUsageResponse,
+)
+async def get_column_query_usage(
+    database_id: UUID,
+    table_id: UUID,
+    column_id: UUID,
+) -> ColumnUsageResponse:
+    """Get parsed queries and their captured workload for a column."""
+    async with DatabaseConnection() as conn:
+        return ColumnUsageResponse(
+            items=await get_column_usage(conn, database_id, table_id, column_id)
+        )

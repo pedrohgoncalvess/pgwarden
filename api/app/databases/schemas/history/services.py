@@ -106,7 +106,9 @@ async def get_database_schema_history(
     limit: int = 100,
     offset: int = 0,
     table_id: UUID | None = None,
+    column_id: UUID | None = None,
 ) -> SchemaHistoryResponse:
+    """Return schema changes, optionally scoped to one table or column."""
     try:
         db_result = await db.execute(
             select(Database).where(Database.public_id == database_id, Database.deleted_at.is_(None))
@@ -177,6 +179,14 @@ async def get_database_schema_history(
             target_id = row["target_id"]
             if table_id is not None and target_type in allowed_targets and target_id not in allowed_targets[target_type]:
                 continue
+            target_table = table_by_id.get(target_id) if target_type == "table" else None
+            target_column = column_by_id.get(target_id) if target_type == "column" else None
+            target_index = index_by_id.get(target_id) if target_type == "index" else None
+            if target_column:
+                target_table = table_by_id.get(target_column.table_id)
+            elif target_index:
+                target_table = table_by_id.get(target_index.table_id)
+            target_object = target_column or target_index or target_table
             details = row["details"] or {}
             if row["event_type"] == "tag":
                 tag_name = details.get("tag_name") or details.get("tag_id") or "tag"
@@ -185,6 +195,12 @@ async def get_database_schema_history(
                 message = f'Documentation {row["action"]}'
             events.append(SchemaHistoryItem(
                 id=f'activity-{row["id"]}', type=row["event_type"], action=row["action"],
+                schema_name=target_table.schema_name if target_table else None,
+                table_name=target_table.name if target_table else None,
+                column_name=target_column.name if target_column else None,
+                index_name=target_index.name if target_index else None,
+                object_id=target_object.public_id if target_object else None,
+                table_id=target_table.public_id if target_table else None,
                 changed_at=row["occurred_at"], details=message,
             ))
 
@@ -330,6 +346,8 @@ async def get_database_schema_history(
             ))
 
         events.sort(key=lambda e: e.changed_at, reverse=True)
+        if column_id is not None:
+            events = [event for event in events if event.object_id == column_id]
         total = len(events)
         paginated = events[offset:offset + limit]
 

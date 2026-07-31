@@ -35,8 +35,15 @@ async def get_schema_history(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of events to return"),
     offset: int = Query(0, ge=0, description="Number of events to skip"),
     table_id: UUID | None = Query(None, description="Filter events to a specific table"),
+    column_id: UUID | None = Query(None, description="Filter events to a specific column"),
 ):
+    """Return schema history, optionally scoped to a table or column."""
     async with DatabaseConnection() as conn:
         return await get_database_schema_history(
-            conn, database_id, limit=limit, offset=offset, table_id=table_id
+            conn,
+            database_id,
+            limit=limit,
+            offset=offset,
+            table_id=table_id,
+            column_id=column_id,
         )
