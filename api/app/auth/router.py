@@ -1,14 +1,14 @@
 import uuid
 from datetime import timedelta, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette import status
 
 from app.auth.models import UserLogin, RefreshTokenRequest, AuthResponse
-from app.auth.services import verify_password, create_access_token
+from app.auth.services import create_access_token, get_current_user, verify_password
 from app.common.models import COMMON_RESPONSES, ErrorMessage
 from database.connection import DatabaseConnection
-from database.models.base import Refresh
+from database.models.base import Refresh, User
 from database.operations.base import RefreshRepository
 from database.operations.base.user import UserRepository
 
@@ -20,6 +20,20 @@ router = APIRouter(
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 90
 REFRESH_TOKEN_EXPIRE_MINUTES = 300
+
+
+@router.get(
+    "/validate",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Validate access token",
+    responses=COMMON_RESPONSES,
+)
+async def validate_access_token(
+    _current_user: User = Depends(get_current_user),
+) -> Response:
+    """Validate the current access token and user account."""
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
 
 @router.post(
     "",
