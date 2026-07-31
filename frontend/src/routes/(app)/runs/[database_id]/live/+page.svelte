@@ -4,10 +4,9 @@
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
-	import { listDatabases, listServers, createRunEventSource, controlRun } from '$lib/api';
+	import { listDatabases, listServers, createRunEventSource, controlRun, controlServiceRun } from '$lib/api';
 	import type { DatabaseListItem, RunItem, RunAction, RunType, ServerListItem } from '$lib/api';
 
-	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -19,10 +18,11 @@
 	let controlling = $state<Set<string>>(new Set());
 	let showStatusHelp = $state(false);
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
-	
 	function statusColor(status: string): string {
 		if (status === 'running') return 'text-primary';
 		if (status === 'paused') return 'text-tertiary';
@@ -40,7 +40,9 @@
 	function typeBadge(type: RunType): string {
 		return type === 'server'
 			? 'bg-secondary/10 text-secondary border-secondary/20'
-			: 'bg-primary/10 text-primary border-primary/20';
+			: type === 'service'
+				? 'bg-tertiary/10 text-tertiary border-tertiary/20'
+				: 'bg-primary/10 text-primary border-primary/20';
 	}
 
 	function formatDuration(ms: number): string {
@@ -108,6 +110,22 @@
 		}
 	}
 
+	async function handleServiceControl(r: RunItem, action: 'force_run' | 'stop') {
+		if (!selectedDb) return;
+		const service = r.name.startsWith('Analytics') ? 'analytics' : 'notifier';
+		const key = controlKey(r);
+		controlling = new Set([...controlling, key]);
+		try {
+			await controlServiceRun(selectedDb.id, service, action);
+		} catch (err: any) {
+			error = err.message || `Failed to ${action} service.`;
+		} finally {
+			const next = new Set(controlling);
+			next.delete(key);
+			controlling = next;
+		}
+	}
+
 	function connectStream(databaseId: string) {
 		if (eventSource) eventSource.close();
 		runs = null;
@@ -115,13 +133,9 @@
 		es.addEventListener('runs', (event) => {
 			try {
 				runs = JSON.parse((event as MessageEvent).data);
-			} catch {
-				
-			}
+			} catch {}
 		});
-		es.onerror = () => {
-			
-		};
+		es.onerror = () => {};
 		eventSource = es;
 	}
 
@@ -169,7 +183,6 @@
 	});
 </script>
 
-
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -188,7 +201,6 @@
 		Refresh
 	</button>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
@@ -232,10 +244,11 @@
 			</p>
 		</div>
 	{:else}
-		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Server</span
+				>
 				<select
 					value={selectedServer}
 					onchange={(event) => selectServer(eventValue(event))}
@@ -248,7 +261,9 @@
 				</select>
 			</label>
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Database</span
+				>
 				<select
 					value={selectedDb?.id ?? ''}
 					onchange={(event) => {
@@ -268,7 +283,6 @@
 			</label>
 		</div>
 
-		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -277,11 +291,16 @@
 					<span class="material-symbols-outlined text-sm text-primary">precision_manufacturing</span
 					>
 					<h2 class="m-0 font-headline-md text-headline-md">Live Runs</h2>
-					<div class="relative">
+					<div
+						class="relative"
+						role="group"
+						onmouseenter={() => (showStatusHelp = true)}
+						onmouseleave={() => (showStatusHelp = false)}
+					>
 						<button
-							onclick={() => (showStatusHelp = !showStatusHelp)}
 							class="text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
 							aria-label="Status help"
+							aria-expanded={showStatusHelp}
 						>
 							<span class="material-symbols-outlined text-[16px]">help_outline</span>
 						</button>
@@ -300,21 +319,20 @@
 										executing right now.
 									</li>
 									<li>
-										<span class="font-bold text-on-surface">Paused:</span> temporarily suspended in
-										settings.
+										<span class="font-bold text-on-surface">Paused:</span> temporarily suspended in settings.
 									</li>
 									<li>
-										<span class="font-bold text-on-surface">Stopped:</span> execution halted for a
-										running collector.
+										<span class="font-bold text-on-surface">Stopped:</span> execution halted for a running
+										collector.
 									</li>
 								</ul>
+								<p class="mt-3 border-t border-outline-variant pt-2 font-code-sm text-[10px] text-on-surface-variant">
+									Live data refreshes through SSE every 2 seconds.
+								</p>
 							</div>
 						{/if}
 					</div>
 				</div>
-				<span class="font-code-sm text-code-sm text-on-surface-variant">
-					SSE updates every 2s
-				</span>
 			</div>
 
 			<div class="overflow-x-auto">
@@ -431,38 +449,70 @@
 										{formatRunningTime(run.next_run_at, run.status)}
 									</td>
 									<td class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant">
-										{formatNextRun(run.next_run_at)}
+										{run.type === 'service' && !run.next_run_at
+											? 'service-managed'
+											: formatNextRun(run.next_run_at)}
 									</td>
 									<td class="px-4 py-3 text-right">
-										<div class="flex items-center justify-end gap-2">
-											<button
-												onclick={() => handleControl(run, 'force_run')}
-												disabled={busy || run.is_paused}
-												class="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 cursor-pointer"
-												title={run.is_paused ? 'Cannot force run while paused' : 'Run now'}
-											>
-												<span class="material-symbols-outlined text-[12px]">bolt</span>
-												Run now
-											</button>
-											<button
-												onclick={() => handleControl(run, 'stop')}
-												disabled={busy || run.status !== 'running'}
-												class="flex items-center gap-1 px-2 py-1 rounded bg-error/10 text-error border border-error/20 text-[10px] font-bold hover:bg-error/20 disabled:opacity-50 cursor-pointer"
-												title={run.status !== 'running'
-													? 'Stop is only available while running'
-													: 'Stop execution'}
-											>
-												<span class="material-symbols-outlined text-[12px]">stop</span>
-												Stop
-											</button>
-											<button
-												onclick={() => handleControl(run, 'delete')}
-												disabled={busy}
-												class="flex items-center gap-1 px-2 py-1 rounded bg-surface-variant text-on-surface-variant border border-outline-variant text-[10px] font-bold hover:bg-error/10 hover:text-error hover:border-error/20 disabled:opacity-50 cursor-pointer"
-											>
-												<span class="material-symbols-outlined text-[12px]">delete</span>
-											</button>
-										</div>
+										{#if run.type === 'service'}
+											<div class="flex items-center justify-end gap-2">
+												<button
+													onclick={() => handleServiceControl(run, 'force_run')}
+													disabled={busy || run.is_paused}
+													class="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 cursor-pointer"
+													title={run.is_paused ? 'Reactivate the service in Services before running it' : 'Run now'}
+												>
+													<span class="material-symbols-outlined text-[12px]">bolt</span>
+													Run now
+												</button>
+												<button
+													onclick={() => handleServiceControl(run, 'stop')}
+													disabled={busy || run.is_paused}
+													class="flex items-center gap-1 px-2 py-1 rounded bg-error/10 text-error border border-error/20 text-[10px] font-bold hover:bg-error/20 disabled:opacity-50 cursor-pointer"
+													title={run.is_paused ? 'Service is already deactivated' : 'Deactivate service'}
+												>
+													<span class="material-symbols-outlined text-[12px]">stop</span>
+													Stop
+												</button>
+												<button
+													disabled
+													class="flex items-center gap-1 px-2 py-1 rounded bg-surface-variant text-on-surface-variant border border-outline-variant text-[10px] font-bold opacity-50 cursor-not-allowed"
+													title="Services cannot be deleted. They can only be deactivated."
+												>
+													<span class="material-symbols-outlined text-[12px]">delete</span>
+												</button>
+											</div>
+										{:else}
+											<div class="flex items-center justify-end gap-2">
+												<button
+													onclick={() => handleControl(run, 'force_run')}
+													disabled={busy || run.is_paused}
+													class="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold hover:bg-primary/20 disabled:opacity-50 cursor-pointer"
+													title={run.is_paused ? 'Cannot force run while paused' : 'Run now'}
+												>
+													<span class="material-symbols-outlined text-[12px]">bolt</span>
+													Run now
+												</button>
+												<button
+													onclick={() => handleControl(run, 'stop')}
+													disabled={busy || run.status !== 'running'}
+													class="flex items-center gap-1 px-2 py-1 rounded bg-error/10 text-error border border-error/20 text-[10px] font-bold hover:bg-error/20 disabled:opacity-50 cursor-pointer"
+													title={run.status !== 'running'
+														? 'Stop is only available while running'
+														: 'Stop execution'}
+												>
+													<span class="material-symbols-outlined text-[12px]">stop</span>
+													Stop
+												</button>
+												<button
+													onclick={() => handleControl(run, 'delete')}
+													disabled={busy}
+													class="flex items-center gap-1 px-2 py-1 rounded bg-surface-variant text-on-surface-variant border border-outline-variant text-[10px] font-bold hover:bg-error/10 hover:text-error hover:border-error/20 disabled:opacity-50 cursor-pointer"
+												>
+													<span class="material-symbols-outlined text-[12px]">delete</span>
+												</button>
+											</div>
+										{/if}
 									</td>
 								</tr>
 							{/each}

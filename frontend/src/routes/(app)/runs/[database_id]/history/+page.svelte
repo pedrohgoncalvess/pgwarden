@@ -14,7 +14,6 @@
 		ServerListItem
 	} from '$lib/api';
 
-	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -34,13 +33,15 @@
 	let orderDir = $state<OrderDir>('desc');
 	const limit = 50;
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
-	
 	function typeBadge(type: RunType | null): string {
 		if (type === 'server') return 'bg-secondary/10 text-secondary border-secondary/20';
 		if (type === 'database') return 'bg-primary/10 text-primary border-primary/20';
+		if (type === 'service') return 'bg-tertiary/10 text-tertiary border-tertiary/20';
 		return 'bg-outline/10 text-on-surface-variant border-outline-variant/30';
 	}
 
@@ -110,13 +111,19 @@
 		const params = $page.url.searchParams;
 		if (params.has('started_from')) filterStartedFrom = params.get('started_from') ?? '';
 		if (params.has('started_to')) filterStartedTo = params.get('started_to') ?? '';
-		if (params.get('run_type') === 'server' || params.get('run_type') === 'database') {
+		if (
+			params.get('run_type') === 'server' ||
+			params.get('run_type') === 'database' ||
+			params.get('run_type') === 'service'
+		) {
 			filterType = params.get('run_type') as RunType;
 		}
 		if (params.has('status')) filterStatus = params.get('status') ?? '';
 		if (params.has('name')) filterName = params.get('name') ?? '';
-		if (params.has('min_duration_seconds')) filterMinDuration = params.get('min_duration_seconds') ?? '';
-		if (params.has('max_duration_seconds')) filterMaxDuration = params.get('max_duration_seconds') ?? '';
+		if (params.has('min_duration_seconds'))
+			filterMinDuration = params.get('min_duration_seconds') ?? '';
+		if (params.has('max_duration_seconds'))
+			filterMaxDuration = params.get('max_duration_seconds') ?? '';
 		const offsetParam = Number(params.get('offset'));
 		if (Number.isInteger(offsetParam) && offsetParam >= 0) offset = offsetParam;
 		const orderParam = params.get('order_by');
@@ -260,7 +267,6 @@
 	onMount(() => load());
 </script>
 
-
 <header
 	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
@@ -279,7 +285,6 @@
 		Refresh
 	</button>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
@@ -323,10 +328,11 @@
 			</p>
 		</div>
 	{:else}
-		
 		<div class="mb-6 flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Server</span
+				>
 				<select
 					value={selectedServer}
 					onchange={(event) => selectServer(eventValue(event))}
@@ -339,7 +345,9 @@
 				</select>
 			</label>
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Database</span
+				>
 				<select
 					value={selectedDb?.id ?? ''}
 					onchange={(event) => {
@@ -362,7 +370,10 @@
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
 				<label class="flex flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">From</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>From</span
+					>
 					<input
 						type="datetime-local"
 						bind:value={filterStartedFrom}
@@ -370,7 +381,10 @@
 					/>
 				</label>
 				<label class="flex flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">To</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>To</span
+					>
 					<input
 						type="datetime-local"
 						bind:value={filterStartedTo}
@@ -378,7 +392,10 @@
 					/>
 				</label>
 				<label class="flex flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Type</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>Type</span
+					>
 					<select
 						bind:value={filterType}
 						class="h-9 cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface outline-none focus:border-primary"
@@ -386,10 +403,14 @@
 						<option value="">All types</option>
 						<option value="server">Server</option>
 						<option value="database">Database</option>
+						<option value="service">Service</option>
 					</select>
 				</label>
 				<label class="flex flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Status</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>Status</span
+					>
 					<select
 						bind:value={filterStatus}
 						class="h-9 cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 text-xs font-bold text-on-surface outline-none focus:border-primary"
@@ -401,7 +422,10 @@
 					</select>
 				</label>
 				<label class="flex min-w-48 flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Name</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>Name</span
+					>
 					<input
 						type="search"
 						bind:value={filterName}
@@ -410,7 +434,10 @@
 					/>
 				</label>
 				<label class="flex w-32 flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Min sec</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>Min sec</span
+					>
 					<input
 						type="number"
 						min="0"
@@ -419,7 +446,10 @@
 					/>
 				</label>
 				<label class="flex w-32 flex-col gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Max sec</span>
+					<span
+						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+						>Max sec</span
+					>
 					<input
 						type="number"
 						min="0"
@@ -445,7 +475,6 @@
 			</div>
 		</section>
 
-		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -463,23 +492,99 @@
 				<table class="w-full text-left border-collapse">
 					<thead class="bg-surface-container-high">
 						<tr>
-							<th aria-sort={orderBy === 'name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">NAME <span class="material-symbols-outlined text-[14px]">{sortIcon('name')}</span></button>
+							<th
+								aria-sort={orderBy === 'name'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('name')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>NAME <span class="material-symbols-outlined text-[14px]">{sortIcon('name')}</span
+									></button
+								>
 							</th>
-							<th aria-sort={orderBy === 'type' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('type')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">TYPE <span class="material-symbols-outlined text-[14px]">{sortIcon('type')}</span></button>
+							<th
+								aria-sort={orderBy === 'type'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('type')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>TYPE <span class="material-symbols-outlined text-[14px]">{sortIcon('type')}</span
+									></button
+								>
 							</th>
-							<th aria-sort={orderBy === 'status' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('status')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">STATUS <span class="material-symbols-outlined text-[14px]">{sortIcon('status')}</span></button>
+							<th
+								aria-sort={orderBy === 'status'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('status')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>STATUS <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('status')}</span
+									></button
+								>
 							</th>
-							<th aria-sort={orderBy === 'started_at' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('started_at')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">STARTED <span class="material-symbols-outlined text-[14px]">{sortIcon('started_at')}</span></button>
+							<th
+								aria-sort={orderBy === 'started_at'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('started_at')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>STARTED <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('started_at')}</span
+									></button
+								>
 							</th>
-							<th aria-sort={orderBy === 'duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('duration')}</span></button>
+							<th
+								aria-sort={orderBy === 'duration'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('duration')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>DURATION <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('duration')}</span
+									></button
+								>
 							</th>
-							<th aria-sort={orderBy === 'errors' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest">
-								<button onclick={() => toggleSort('errors')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">ERRORS <span class="material-symbols-outlined text-[14px]">{sortIcon('errors')}</span></button>
+							<th
+								aria-sort={orderBy === 'errors'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
+								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
+							>
+								<button
+									onclick={() => toggleSort('errors')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>ERRORS <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('errors')}</span
+									></button
+								>
 							</th>
 						</tr>
 					</thead>
@@ -564,7 +669,6 @@
 				</table>
 			</div>
 
-			
 			<div class="flex items-center justify-between border-t border-outline-variant px-4 py-3">
 				<button
 					onclick={() => changePage(-1)}

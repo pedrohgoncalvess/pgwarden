@@ -1,3 +1,5 @@
+import { apiFetch as fetch, authHeaders, getAccessToken } from '$lib/auth';
+
 type DatabaseListItem = {
 	id: string;
 	server_id: string;
@@ -76,7 +78,14 @@ export type DatabaseSchema = {
 	tables: SchemaTable[];
 };
 
-export type SchemaHistoryAction = 'added' | 'removed' | 'altered' | 'created' | 'updated' | 'assigned' | 'unassigned';
+export type SchemaHistoryAction =
+	| 'added'
+	| 'removed'
+	| 'altered'
+	| 'created'
+	| 'updated'
+	| 'assigned'
+	| 'unassigned';
 export type SchemaHistoryType = 'table' | 'column' | 'index' | 'documentation' | 'tag';
 
 export type SchemaHistoryItem = {
@@ -210,10 +219,10 @@ export type NativeQueryMetric = {
 	backend_duration_ms: number | null;
 };
 
-export type RunType = 'server' | 'database';
+export type RunType = 'server' | 'database' | 'service';
 export type RunHistoryOrderBy = 'name' | 'type' | 'status' | 'started_at' | 'duration' | 'errors';
 export type OrderDir = 'asc' | 'desc';
-export type RunStatus = 'idle' | 'running' | 'paused' | 'deleted';
+export type RunStatus = 'idle' | 'running' | 'paused' | 'deleted' | 'unavailable';
 export type RunAction = 'pause' | 'resume' | 'stop' | 'delete' | 'force_run';
 
 export type RunItem = {
@@ -242,24 +251,6 @@ export type RunHistoryItem = {
 	started_at: string | null;
 	finished_at: string | null;
 };
-
-function getToken(): string | null {
-	if (typeof window !== 'undefined') {
-		return localStorage.getItem('token');
-	}
-	return null;
-}
-
-function authHeaders(): Record<string, string> {
-	const token = getToken();
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json'
-	};
-	if (token) {
-		headers['Authorization'] = `Bearer ${token}`;
-	}
-	return headers;
-}
 
 export async function getServiceHealth(): Promise<HealthResponse> {
 	const res = await fetch('/api/v1/health', { headers: authHeaders() });
@@ -664,7 +655,7 @@ export async function listNativeQueries(
 }
 
 export function createTpsEventSource(databaseId: string): EventSource {
-	const token = getToken();
+	const token = getAccessToken();
 	const url = new URL(`/api/v1/databases/${databaseId}/metrics/stream`, window.location.origin);
 	if (token) {
 		url.searchParams.set('token', token);
@@ -673,7 +664,7 @@ export function createTpsEventSource(databaseId: string): EventSource {
 }
 
 function createAuthenticatedEventSource(path: string): EventSource {
-	const token = getToken();
+	const token = getAccessToken();
 	const url = new URL(path, window.location.origin);
 	if (token) {
 		url.searchParams.set('token', token);
@@ -757,6 +748,23 @@ export async function controlRun(
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail || `Failed to control run: ${res.status}`);
+	}
+	return res.json();
+}
+
+export async function controlServiceRun(
+	databaseId: string,
+	service: 'analytics' | 'notifier',
+	action: Extract<RunAction, 'force_run' | 'stop'>
+): Promise<RunItem> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/runs/services/${service}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify({ action })
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail || `Failed to ${action} service: ${res.status}`);
 	}
 	return res.json();
 }
@@ -915,6 +923,39 @@ export type IndexAnalyticsResponse = {
 	items: IndexAnalyticsItem[];
 	tables: IndexAnalyticsTableFilterItem[];
 	indexes: IndexAnalyticsFilterItem[];
+};
+
+export type ServerMetricHistoryPoint = {
+	collected_at: string;
+	cpu_percent: number | null;
+	ram_percent: number | null;
+	disk_percent: number | null;
+	read_bytes: number | null;
+	write_bytes: number | null;
+};
+
+export type ServerMetricsHistoryResponse = {
+	database_id: string;
+	start_at: string;
+	end_at: string;
+	items: ServerMetricHistoryPoint[];
+};
+
+export type TableQueryUsageItem = {
+	query: string;
+	execution_count: number;
+	last_executed_at: string | null;
+	avg_duration_ms: number | null;
+};
+
+export type AnalyticsServiceConfig = {
+	id: number;
+	database_id: string;
+	database_name: string;
+	run_interval: number;
+	query_analytics_enabled: boolean;
+	recommendation_enabled: boolean;
+	last_seen: string | null;
 };
 
 export type TagItem = {
@@ -1181,6 +1222,117 @@ export async function getIndexAnalytics(
 	return res.json();
 }
 
+export async function getServerMetricsHistory(
+	databaseId: string,
+	options: { startDate?: string; endDate?: string } = {}
+): Promise<ServerMetricsHistoryResponse> {
+	const url = new URL(
+		`/api/v1/databases/${databaseId}/analytics/server-metrics`,
+		window.location.origin
+	);
+	if (options.startDate) url.searchParams.set('start_date', options.startDate);
+	if (options.endDate) url.searchParams.set('end_date', options.endDate);
+	const res = await fetch(url.toString(), { headers: authHeaders() });
+	if (!res.ok) throw new Error(`Failed to get server metrics history: ${res.status}`);
+	return res.json();
+}
+
+export async function getTableUsageAvailability(
+	databaseId: string,
+	tableId: string
+): Promise<boolean> {
+	const res = await fetch(
+		`/api/v1/databases/${databaseId}/analytics/table-usage/${tableId}/availability`,
+		{
+			headers: authHeaders()
+		}
+	);
+	if (!res.ok) throw new Error(`Failed to get table usage availability: ${res.status}`);
+	const body = (await res.json()) as { available: boolean };
+	return body.available;
+}
+
+export async function getTableUsage(
+	databaseId: string,
+	tableId: string
+): Promise<TableQueryUsageItem[]> {
+	const res = await fetch(`/api/v1/databases/${databaseId}/analytics/table-usage/${tableId}`, {
+		headers: authHeaders()
+	});
+	if (!res.ok) throw new Error(`Failed to get table usage: ${res.status}`);
+	const body = (await res.json()) as { items: TableQueryUsageItem[] };
+	return body.items;
+}
+
+export async function listAnalyticsServiceConfigs(): Promise<AnalyticsServiceConfig[]> {
+	const res = await fetch('/api/v1/services/analytics/configs', { headers: authHeaders() });
+	if (!res.ok) throw new Error(`Failed to list Analytics configurations: ${res.status}`);
+	return res.json();
+}
+
+export async function patchAnalyticsServiceConfig(
+	configId: number,
+	patch: Partial<
+		Pick<
+			AnalyticsServiceConfig,
+			'run_interval' | 'query_analytics_enabled' | 'recommendation_enabled'
+		>
+	>
+): Promise<AnalyticsServiceConfig> {
+	const res = await fetch(`/api/v1/services/analytics/configs/${configId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) throw new Error(`Failed to update Analytics configuration: ${res.status}`);
+	return res.json();
+}
+
+export type AnalyticsRecommendationStatus = 'open' | 'dismissed' | 'resolved';
+export type AnalyticsRecommendation = {
+	id: number;
+	database_id: string;
+	category: string;
+	severity: 'info' | 'warning' | 'critical';
+	confidence: number;
+	title: string;
+	summary: string;
+	recommendation: string | null;
+	evidence: Record<string, unknown>;
+	status: AnalyticsRecommendationStatus;
+	first_seen_at: string;
+	last_seen_at: string;
+};
+
+export async function getAnalyticsRecommendations(
+	databaseId: string,
+	status: AnalyticsRecommendationStatus | 'all' = 'open'
+): Promise<AnalyticsRecommendation[]> {
+	const url = new URL(
+		`/api/v1/databases/${databaseId}/analytics/recommendations`,
+		window.location.origin
+	);
+	if (status !== 'all') url.searchParams.set('status', status);
+	const res = await fetch(url.toString(), { headers: authHeaders() });
+	if (res.status === 404) return [];
+	if (!res.ok) throw new Error(`Failed to get recommendations: ${res.status}`);
+	const body = (await res.json()) as { items: AnalyticsRecommendation[] };
+	return body.items;
+}
+
+export async function patchAnalyticsRecommendation(
+	databaseId: string,
+	recommendationId: number,
+	status: AnalyticsRecommendationStatus
+): Promise<AnalyticsRecommendation> {
+	const res = await fetch(
+		`/api/v1/databases/${databaseId}/analytics/recommendations/${recommendationId}`,
+		{ method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }) }
+	);
+	if (!res.ok) throw new Error(`Failed to update recommendation: ${res.status}`);
+	return res.json();
+}
+
 export function formatBytes(bytes: number | null): string {
 	if (bytes === null || bytes === undefined) return '-';
 	const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -1198,13 +1350,7 @@ export function formatNumber(n: number | null | undefined): string {
 	return n.toLocaleString();
 }
 
-export type MetadataSearchObjectType =
-	| 'database'
-	| 'schema'
-	| 'table'
-	| 'column'
-	| 'index'
-	| 'tag';
+export type MetadataSearchObjectType = 'database' | 'schema' | 'table' | 'column' | 'index' | 'tag';
 
 export type MetadataSearchResult = {
 	type: MetadataSearchObjectType;
@@ -1388,14 +1534,11 @@ export async function patchNotifierThreshold(
 	thresholdId: number,
 	patch: NotifierThresholdPatch
 ): Promise<NotifierThreshold> {
-	const res = await fetch(
-		`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`,
-		{
-			method: 'PATCH',
-			headers: authHeaders(),
-			body: JSON.stringify(patch)
-		}
-	);
+	const res = await fetch(`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`, {
+		method: 'PATCH',
+		headers: authHeaders(),
+		body: JSON.stringify(patch)
+	});
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail || `Failed to update notifier threshold: ${res.status}`);
@@ -1408,13 +1551,10 @@ export async function deleteNotifierThreshold(
 	scope: NotifierThreshold['scope'],
 	thresholdId: number
 ): Promise<void> {
-	const res = await fetch(
-		`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`,
-		{
-			method: 'DELETE',
-			headers: authHeaders()
-		}
-	);
+	const res = await fetch(`/api/v1/notifier/rules/${ruleId}/thresholds/${scope}/${thresholdId}`, {
+		method: 'DELETE',
+		headers: authHeaders()
+	});
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail || `Failed to delete notifier threshold: ${res.status}`);

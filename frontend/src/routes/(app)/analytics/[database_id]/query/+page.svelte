@@ -31,7 +31,7 @@
 	let selectedApplication = $state('');
 	let selectedState = $state('');
 	let searchTerm = $state('');
-	let excludeTerm = $state('commit, begin');
+	let excludeTerm = $state('rollback, commit, begin');
 	let orderBy = $state<QueryOrderBy>('executions');
 	let orderDir = $state<QueryOrderDir>('desc');
 

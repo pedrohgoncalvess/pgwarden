@@ -4,14 +4,23 @@
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
-	import { getDatabaseSchema, getDatabaseSchemaHistory, listDatabases, listServers } from '$lib/api';
+	import {
+		getDatabaseSchema,
+		getDatabaseSchemaHistory,
+		getServiceHealth,
+		getTableUsage,
+		getTableUsageAvailability,
+		listDatabases,
+		listServers
+	} from '$lib/api';
 	import type {
 		DatabaseListItem,
 		DatabaseSchema,
 		SchemaColumn,
 		SchemaHistoryItem,
 		SchemaTable,
-		ServerListItem
+		ServerListItem,
+		TableQueryUsageItem
 	} from '$lib/api';
 
 	type Position = {
@@ -35,6 +44,8 @@
 		toTable: SchemaTable;
 		toColumn: SchemaColumn | null;
 	};
+
+	type SidebarTab = 'changes' | 'usage';
 
 	const tableWidth = 380;
 	const rowHeight = 36;
@@ -67,6 +78,12 @@
 	let historyItems = $state<SchemaHistoryItem[]>([]);
 	let historyLoading = $state(false);
 	let historyError = $state('');
+	let sidebarTab = $state<SidebarTab>('changes');
+	let usageAvailable = $state(false);
+	let usageItems = $state<TableQueryUsageItem[]>([]);
+	let usageLoading = $state(false);
+	let usageError = $state('');
+	let copiedUsageQuery = $state<string | null>(null);
 	let tooltip = $state<{ text: string; x: number; y: number } | null>(null);
 	let tooltipTimeout: ReturnType<typeof setTimeout> | null = null;
 	let schemaHelpOpen = $state(false);
@@ -450,9 +467,14 @@
 	async function openSidebar(tableId: string) {
 		selectedTableId = tableId;
 		sidebarOpen = true;
+		sidebarTab = 'changes';
 		historyLoading = true;
 		historyError = '';
 		historyItems = [];
+		usageAvailable = false;
+		usageItems = [];
+		usageError = '';
+		copiedUsageQuery = null;
 
 		if (!selectedDb) return;
 
@@ -469,6 +491,41 @@
 		} finally {
 			historyLoading = false;
 		}
+
+		await loadUsageAvailability(tableId);
+	}
+
+	async function loadUsageAvailability(tableId: string) {
+		if (!selectedDb) return;
+		try {
+			const [health, available] = await Promise.all([
+				getServiceHealth(),
+				getTableUsageAvailability(selectedDb.id, tableId)
+			]);
+			if (selectedTableId !== tableId) return;
+			usageAvailable = health.services.analytics.status === 'healthy' && available;
+		} catch {
+			usageAvailable = false;
+		}
+	}
+
+	async function selectSidebarTab(tab: SidebarTab) {
+		if (tab === 'usage' && !usageAvailable) return;
+		sidebarTab = tab;
+		if (tab !== 'usage' || usageItems.length > 0 || usageLoading || !selectedDb || !selectedTableId)
+			return;
+
+		usageLoading = true;
+		usageError = '';
+		try {
+			const tableId = selectedTableId;
+			const items = await getTableUsage(selectedDb.id, tableId);
+			if (selectedTableId === tableId) usageItems = items;
+		} catch (err: any) {
+			usageError = err.message || 'Failed to load table usage.';
+		} finally {
+			usageLoading = false;
+		}
 	}
 
 	function closeSidebar() {
@@ -476,6 +533,22 @@
 		selectedTableId = null;
 		historyItems = [];
 		historyError = '';
+		usageItems = [];
+		usageError = '';
+		usageAvailable = false;
+		copiedUsageQuery = null;
+	}
+
+	async function copyUsageQuery(query: string) {
+		try {
+			await navigator.clipboard.writeText(query);
+			copiedUsageQuery = query;
+			window.setTimeout(() => {
+				if (copiedUsageQuery === query) copiedUsageQuery = null;
+			}, 1600);
+		} catch {
+			usageError = 'Could not copy the query.';
+		}
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -929,7 +1002,7 @@
 
 							{#each visibleTables as table (table.id)}
 								{@const position = positions[table.id] ?? { x: 0, y: 0 }}
-								
+
 								<div
 									class="schema-table {dragState?.tableId === table.id
 										? 'dragging'
@@ -1015,7 +1088,7 @@
 
 {#if sidebarOpen && selectedTable}
 	<div class="fixed inset-0 z-40 bg-black/20" onclick={closeSidebar} aria-hidden="true"></div>
-	
+
 	<div
 		class="fixed top-16 right-0 z-50 flex h-[calc(100%-4rem)] w-96 flex-col border-l border-outline-variant bg-surface-container-low shadow-2xl"
 		role="dialog"
@@ -1045,70 +1118,178 @@
 			</button>
 		</div>
 
+		<div class="flex border-b border-outline-variant bg-surface-container px-3 pt-3">
+			<button
+				onclick={() => selectSidebarTab('changes')}
+				class="flex items-center gap-2 border-b-2 px-3 py-2 text-xs font-bold transition-colors {sidebarTab ===
+				'changes'
+					? 'border-primary text-primary'
+					: 'border-transparent text-on-surface-variant hover:text-on-surface'}"
+			>
+				<span class="material-symbols-outlined text-[16px]">history</span>
+				Modifications
+			</button>
+			<span
+				title={usageAvailable
+					? undefined
+					: 'Start or force-run the Analytics service to enable table usage.'}
+				class="inline-flex"
+			>
+				<button
+					disabled={!usageAvailable}
+					onclick={() => selectSidebarTab('usage')}
+					class="flex items-center gap-2 border-b-2 px-3 py-2 text-xs font-bold transition-colors {sidebarTab ===
+					'usage'
+						? 'border-primary text-primary'
+						: 'border-transparent text-on-surface-variant hover:text-on-surface'} disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					<span class="material-symbols-outlined text-[16px]">query_stats</span>
+					Usage
+				</button>
+			</span>
+		</div>
+
 		<div class="custom-scrollbar flex-1 overflow-y-auto p-4">
-			{#if historyLoading}
-				<div class="flex items-center justify-center py-12">
-					<svg
-						class="h-6 w-6 animate-spin text-primary"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
+			{#if sidebarTab === 'changes'}
+				{#if historyLoading}
+					<div class="flex items-center justify-center py-12">
+						<svg
+							class="h-6 w-6 animate-spin text-primary"
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+						>
+							<circle
+								class="opacity-25"
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="4"
+							></circle>
+							<path
+								class="opacity-75"
+								fill="currentColor"
+								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+							></path>
+						</svg>
+					</div>
+				{:else if historyError}
+					<div
+						class="rounded-lg border border-error/30 bg-error-container/10 p-3 text-xs text-error"
 					>
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
-						></circle>
-						<path
-							class="opacity-75"
-							fill="currentColor"
-							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-						></path>
-					</svg>
-				</div>
-			{:else if historyError}
-				<div class="rounded-lg border border-error/30 bg-error-container/10 p-3 text-xs text-error">
-					{historyError}
-				</div>
-			{:else if historyItems.length === 0}
-				<div class="flex flex-col items-center justify-center py-12 text-center">
-					<span class="material-symbols-outlined mb-2 text-[32px] text-on-surface-variant"
-						>history_toggle_off</span
-					>
-					<p class="text-body-md text-on-surface-variant">No changes recorded for this table.</p>
-				</div>
-			{:else}
-				<ul class="space-y-3">
-					{#each historyItems as item (item.id)}
-						<li class="rounded-lg border border-outline-variant/50 bg-surface-container p-3">
-							<div class="mb-1 flex items-center gap-2">
-								<span class="material-symbols-outlined text-[18px] text-on-surface-variant">
-									{historyTypeIcon(item.type)}
-								</span>
-								<span
-									class="text-[10px] font-label-caps uppercase tracking-wider text-on-surface-variant"
-								>
-									{item.type}
-								</span>
-								<span
-									class="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase {historyActionClass(
-										item.action
-									)}"
-								>
-									{item.action}
-								</span>
-							</div>
-							{#if item.column_name || item.index_name}
-								<div class="mb-1 truncate font-mono text-xs text-on-surface">
-									{item.column_name || item.index_name}
+						{historyError}
+					</div>
+				{:else if historyItems.length === 0}
+					<div class="flex flex-col items-center justify-center py-12 text-center">
+						<span class="material-symbols-outlined mb-2 text-[32px] text-on-surface-variant"
+							>history_toggle_off</span
+						>
+						<p class="text-body-md text-on-surface-variant">No changes recorded for this table.</p>
+					</div>
+				{:else}
+					<ul class="space-y-3">
+						{#each historyItems as item (item.id)}
+							<li class="rounded-lg border border-outline-variant/50 bg-surface-container p-3">
+								<div class="mb-1 flex items-center gap-2">
+									<span class="material-symbols-outlined text-[18px] text-on-surface-variant">
+										{historyTypeIcon(item.type)}
+									</span>
+									<span
+										class="text-[10px] font-label-caps uppercase tracking-wider text-on-surface-variant"
+									>
+										{item.type}
+									</span>
+									<span
+										class="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase {historyActionClass(
+											item.action
+										)}"
+									>
+										{item.action}
+									</span>
 								</div>
-							{/if}
-							<p class="text-body-sm text-body-sm text-on-surface-variant">
-								{item.details}
-							</p>
-							<time class="mt-1 block text-[10px] text-on-surface-variant/70">
-								{formatHistoryDate(item.changed_at)}
-							</time>
-						</li>
-					{/each}
-				</ul>
+								{#if item.column_name || item.index_name}
+									<div class="mb-1 truncate font-mono text-xs text-on-surface">
+										{item.column_name || item.index_name}
+									</div>
+								{/if}
+								<p class="text-body-sm text-body-sm text-on-surface-variant">
+									{item.details}
+								</p>
+								<time class="mt-1 block text-[10px] text-on-surface-variant/70">
+									{formatHistoryDate(item.changed_at)}
+								</time>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{:else}
+				{#if usageLoading}
+					<div class="flex items-center justify-center py-12">
+						<span class="material-symbols-outlined animate-spin text-2xl text-primary"
+							>progress_activity</span
+						>
+					</div>
+				{:else if usageError}
+					<div
+						class="rounded-lg border border-error/30 bg-error-container/10 p-3 text-xs text-error"
+					>
+						{usageError}
+					</div>
+				{:else if usageItems.length === 0}
+					<div class="flex flex-col items-center justify-center py-12 text-center">
+						<span class="material-symbols-outlined mb-2 text-[32px] text-on-surface-variant"
+							>query_stats</span
+						>
+						<p class="text-body-md text-on-surface-variant">
+							Analytics has query data, but no captured query references this table yet.
+						</p>
+					</div>
+				{:else}
+					<ul class="space-y-3">
+						{#each usageItems as item (item.query)}
+							<li class="rounded-lg border border-outline-variant/50 bg-surface-container p-3">
+								<div class="group relative">
+									<pre
+										class="m-0 max-h-24 min-w-0 overflow-auto whitespace-pre-wrap break-words pr-9 font-mono text-xs text-on-surface">{item.query}</pre>
+									<button
+										onclick={() => copyUsageQuery(item.query)}
+										class="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded bg-surface-container text-on-surface-variant/60 opacity-0 shadow-sm transition-opacity hover:bg-surface-variant hover:text-primary focus:opacity-100 group-hover:opacity-100"
+										title={copiedUsageQuery === item.query ? 'Copied' : 'Copy query'}
+										aria-label={copiedUsageQuery === item.query ? 'Query copied' : 'Copy query'}
+									>
+										<span class="material-symbols-outlined text-[13px]">{copiedUsageQuery === item.query ? 'check' : 'content_copy'}</span>
+									</button>
+								</div>
+								<div
+									class="mt-3 grid grid-cols-3 gap-2 border-t border-outline-variant/50 pt-3 text-[10px] text-on-surface-variant"
+								>
+									<div>
+										<span class="block uppercase tracking-wide">Captured</span><strong
+											class="mt-1 block text-xs text-on-surface">{item.execution_count}</strong
+										>
+									</div>
+									<div>
+										<span class="block uppercase tracking-wide">Average</span><strong
+											class="mt-1 block text-xs text-on-surface"
+											>{item.avg_duration_ms === null
+												? '—'
+												: `${Math.round(item.avg_duration_ms)} ms`}</strong
+										>
+									</div>
+									<div>
+										<span class="block uppercase tracking-wide">Last seen</span><strong
+											class="mt-1 block text-xs text-on-surface"
+											>{item.last_executed_at
+												? formatHistoryDate(item.last_executed_at)
+												: '—'}</strong
+										>
+									</div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 		</div>
 	</div>
