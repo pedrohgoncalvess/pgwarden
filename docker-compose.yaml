@@ -46,7 +46,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    command: [ "gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8080", "--timeout", "120" ]
+    command: [ "gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8080", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "--log-level", "info" ]
     container_name: pgwarden_api
     restart: unless-stopped
     depends_on:
