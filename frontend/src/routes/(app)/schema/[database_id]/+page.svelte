@@ -5,6 +5,7 @@
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
 	import {
+		getColumnUsage,
 		getDatabaseSchema,
 		getDatabaseSchemaHistory,
 		getServiceHealth,
@@ -14,6 +15,7 @@
 		listServers
 	} from '$lib/api';
 	import type {
+		ColumnQueryUsageItem,
 		DatabaseListItem,
 		DatabaseSchema,
 		SchemaColumn,
@@ -33,8 +35,6 @@
 		offsetX: number;
 		offsetY: number;
 		pointerId: number;
-		startX: number;
-		startY: number;
 	};
 
 	type ForeignKeyLink = {
@@ -72,15 +72,18 @@
 	let schemaScrollEl = $state<HTMLDivElement | null>(null);
 	let boardViewportWidth = $state(0);
 	let userMovedLayout = $state(false);
-	let dragMoved = $state(false);
 	let selectedTableId = $state<string | null>(null);
+	let selectedColumnId = $state<string | null>(null);
 	let sidebarOpen = $state(false);
 	let historyItems = $state<SchemaHistoryItem[]>([]);
 	let historyLoading = $state(false);
 	let historyError = $state('');
 	let sidebarTab = $state<SidebarTab>('changes');
 	let usageAvailable = $state(false);
-	let usageItems = $state<TableQueryUsageItem[]>([]);
+	let usageAvailabilityLoading = $state(false);
+	let usageFeatureAvailable = $state(false);
+	let usageFeatureLoading = $state(true);
+	let usageItems = $state<(TableQueryUsageItem | ColumnQueryUsageItem)[]>([]);
 	let usageLoading = $state(false);
 	let usageError = $state('');
 	let copiedUsageQuery = $state<string | null>(null);
@@ -107,6 +110,9 @@
 	const selectedTable = $derived(selectedTableId ? (tableById.get(selectedTableId) ?? null) : null);
 	const columnById = $derived(
 		new Map(tables.flatMap((table) => table.columns.map((column) => [column.id, column])))
+	);
+	const selectedColumn = $derived(
+		selectedColumnId ? (columnById.get(selectedColumnId) ?? null) : null
 	);
 	const foreignKeyLinks = $derived(buildForeignKeyLinks(visibleTables));
 	const canvasSize = $derived(getCanvasSize(visibleTables, positions));
@@ -159,6 +165,8 @@
 		selectedServer = database.server_id;
 		selectedServerId.set(database.server_id);
 		schemaLoading = true;
+		usageFeatureAvailable = false;
+		usageFeatureLoading = true;
 		error = '';
 
 		try {
@@ -185,6 +193,7 @@
 			userMovedLayout = false;
 			closeSidebar();
 			positions = createInitialPositions(schema.tables, selectedSchema);
+			void loadUsageFeatureAvailability(database.id, schema.tables[0]?.id);
 			if (requestedTable) {
 				await openSidebar(requestedTable.id);
 				await centerTable(requestedTable.id, 'instant');
@@ -391,11 +400,8 @@
 			tableId,
 			offsetX: (event.clientX - canvasRect.left) / zoom - position.x,
 			offsetY: (event.clientY - canvasRect.top) / zoom - position.y,
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startY: event.clientY
+			pointerId: event.pointerId
 		};
-		dragMoved = false;
 		clearTooltipTimeout();
 		tooltip = null;
 
@@ -407,12 +413,6 @@
 		const canvas = (event.currentTarget as HTMLElement).parentElement;
 		if (!canvas) return;
 		const canvasRect = canvas.getBoundingClientRect();
-
-		const dx = Math.abs(event.clientX - dragState.startX);
-		const dy = Math.abs(event.clientY - dragState.startY);
-		if (dx > 3 || dy > 3) {
-			dragMoved = true;
-		}
 
 		positions = {
 			...positions,
@@ -459,19 +459,20 @@
 		isPanning = false;
 	}
 
-	function handleTableClick(tableId: string) {
-		if (dragMoved) return;
-		openSidebar(tableId);
-	}
-
-	async function openSidebar(tableId: string) {
+	async function openSidebar(
+		tableId: string,
+		tab: SidebarTab = 'changes',
+		columnId: string | null = null
+	) {
 		selectedTableId = tableId;
+		selectedColumnId = columnId;
 		sidebarOpen = true;
-		sidebarTab = 'changes';
+		sidebarTab = tab;
 		historyLoading = true;
 		historyError = '';
 		historyItems = [];
 		usageAvailable = false;
+		usageAvailabilityLoading = true;
 		usageItems = [];
 		usageError = '';
 		copiedUsageQuery = null;
@@ -479,7 +480,13 @@
 		if (!selectedDb) return;
 
 		try {
-			const response = await getDatabaseSchemaHistory(selectedDb.id, tableId, 100, 0);
+			const response = await getDatabaseSchemaHistory(
+				selectedDb.id,
+				tableId,
+				100,
+				0,
+				columnId ?? undefined
+			);
 			historyItems = response.items;
 		} catch (err: any) {
 			if (err.message?.includes('401')) {
@@ -493,6 +500,9 @@
 		}
 
 		await loadUsageAvailability(tableId);
+		if (tab === 'usage' && usageAvailable) {
+			await loadSelectedUsage();
+		}
 	}
 
 	async function loadUsageAvailability(tableId: string) {
@@ -504,25 +514,53 @@
 			]);
 			if (selectedTableId !== tableId) return;
 			usageAvailable = health.services.analytics.status === 'healthy' && available;
+			usageFeatureAvailable = usageAvailable;
 		} catch {
 			usageAvailable = false;
+			usageFeatureAvailable = false;
+		} finally {
+			usageAvailabilityLoading = false;
+		}
+	}
+
+	async function loadUsageFeatureAvailability(databaseId: string, tableId?: string) {
+		if (!tableId) {
+			usageFeatureLoading = false;
+			return;
+		}
+		try {
+			const [health, available] = await Promise.all([
+				getServiceHealth(),
+				getTableUsageAvailability(databaseId, tableId)
+			]);
+			if (selectedDb?.id !== databaseId) return;
+			usageFeatureAvailable = health.services.analytics.status === 'healthy' && available;
+		} catch {
+			usageFeatureAvailable = false;
+		} finally {
+			if (selectedDb?.id === databaseId) usageFeatureLoading = false;
 		}
 	}
 
 	async function selectSidebarTab(tab: SidebarTab) {
 		if (tab === 'usage' && !usageAvailable) return;
 		sidebarTab = tab;
-		if (tab !== 'usage' || usageItems.length > 0 || usageLoading || !selectedDb || !selectedTableId)
-			return;
+		if (tab === 'usage') await loadSelectedUsage();
+	}
 
+	async function loadSelectedUsage() {
+		if (usageItems.length > 0 || usageLoading || !selectedDb || !selectedTableId) return;
 		usageLoading = true;
 		usageError = '';
 		try {
 			const tableId = selectedTableId;
-			const items = await getTableUsage(selectedDb.id, tableId);
-			if (selectedTableId === tableId) usageItems = items;
+			const columnId = selectedColumnId;
+			const items = columnId
+				? await getColumnUsage(selectedDb.id, tableId, columnId)
+				: await getTableUsage(selectedDb.id, tableId);
+			if (selectedTableId === tableId && selectedColumnId === columnId) usageItems = items;
 		} catch (err: any) {
-			usageError = err.message || 'Failed to load table usage.';
+			usageError = err.message || `Failed to load ${selectedColumnId ? 'column' : 'table'} usage.`;
 		} finally {
 			usageLoading = false;
 		}
@@ -531,11 +569,13 @@
 	function closeSidebar() {
 		sidebarOpen = false;
 		selectedTableId = null;
+		selectedColumnId = null;
 		historyItems = [];
 		historyError = '';
 		usageItems = [];
 		usageError = '';
 		usageAvailable = false;
+		usageAvailabilityLoading = false;
 		copiedUsageQuery = null;
 	}
 
@@ -1010,20 +1050,12 @@
 										? 'schema-selected'
 										: ''} {selectedTableId === table.id ? 'table-active' : ''}"
 									style={`transform: translate(${position.x}px, ${position.y}px); width: ${tableWidth}px;`}
-									role="button"
-									tabindex="0"
-									aria-label={`Open details for ${table.schema_name}.${table.name}`}
+									role="group"
+									aria-label={`${table.schema_name}.${table.name} table`}
 									onpointerdown={(event) => beginDrag(event, table.id)}
 									onpointermove={dragTable}
 									onpointerup={endDrag}
 									onpointercancel={endDrag}
-									onclick={() => handleTableClick(table.id)}
-									onkeydown={(event) => {
-										if (event.key === 'Enter' || event.key === ' ') {
-											event.preventDefault();
-											handleTableClick(table.id);
-										}
-									}}
 									onmouseenter={(event) => handleTableMouseEnter(event, table)}
 									onmousemove={handleTableMouseMove}
 									onmouseleave={handleTableMouseLeave}
@@ -1033,12 +1065,67 @@
 											<div class="schema-name">{table.schema_name}</div>
 											<h3 title={`${table.schema_name}.${table.name}`}>{table.name}</h3>
 										</div>
-										<span class="material-symbols-outlined table-grip">drag_indicator</span>
+										<div class="table-actions">
+											<button
+												onpointerdown={(event) => event.stopPropagation()}
+												onclick={(event) => {
+													event.stopPropagation();
+													void openSidebar(table.id, 'changes');
+												}}
+												class="table-action"
+												title="Table changes"
+												aria-label={`Open changes for ${table.name}`}
+											>
+												<span class="material-symbols-outlined">history</span>
+												<span class="table-action-label">Changes</span>
+											</button>
+											<span
+												title={usageFeatureLoading
+													? 'Checking Analytics availability…'
+													: usageFeatureAvailable
+														? 'Table usage'
+														: 'Start or force-run the Analytics service to enable table usage.'}
+											>
+												<button
+													disabled={!usageFeatureAvailable}
+													onpointerdown={(event) => event.stopPropagation()}
+													onclick={(event) => {
+														event.stopPropagation();
+														void openSidebar(table.id, 'usage');
+													}}
+													class="table-action"
+													aria-label={`Open usage for ${table.name}`}
+												>
+													<span class="material-symbols-outlined">query_stats</span>
+													<span class="table-action-label">Usage</span>
+												</button>
+											</span>
+											<span
+												class="material-symbols-outlined table-grip"
+												title="Drag to move table">drag_indicator</span
+											>
+										</div>
 									</div>
 
 									<div class="column-list">
 										{#each table.columns as column (column.id)}
-											<div class="column-row {column.fk_table_id ? 'has-fk' : ''}">
+											<div
+												class="column-row {column.fk_table_id ? 'has-fk' : ''} {selectedColumnId ===
+												column.id
+													? 'column-active'
+													: ''}"
+												role="button"
+												tabindex="0"
+												aria-label={`Open details for column ${column.name}`}
+												onpointerdown={(event) => event.stopPropagation()}
+												onclick={() => void openSidebar(table.id, 'changes', column.id)}
+												onkeydown={(event) => {
+													if (event.key === 'Enter' || event.key === ' ') {
+														event.preventDefault();
+														void openSidebar(table.id, 'changes', column.id);
+													}
+												}}
+											>
 												<div class="min-w-0 flex-1">
 													<div class="flex min-w-0 items-center gap-1.5">
 														<span class="column-name" title={column.name}>{column.name}</span>
@@ -1064,6 +1151,7 @@
 														{column.is_nullable ? 'null' : 'not null'}
 													</strong>
 												</div>
+												<span class="material-symbols-outlined column-details">chevron_right</span>
 											</div>
 										{/each}
 									</div>
@@ -1100,13 +1188,15 @@
 		>
 			<div class="min-w-0 flex-1">
 				<div class="text-[10px] font-label-caps uppercase tracking-widest text-primary">
-					{selectedTable.schema_name}
+					{selectedColumn
+						? `${selectedTable.schema_name}.${selectedTable.name} · column`
+						: `${selectedTable.schema_name} · table`}
 				</div>
 				<h2
 					id="sidebar-title"
 					class="truncate font-headline-md text-headline-md font-bold text-on-surface"
 				>
-					{selectedTable.name}
+					{selectedColumn?.name ?? selectedTable.name}
 				</h2>
 			</div>
 			<button
@@ -1130,13 +1220,13 @@
 				Modifications
 			</button>
 			<span
-				title={usageAvailable
+				title={usageAvailable || usageAvailabilityLoading
 					? undefined
-					: 'Start or force-run the Analytics service to enable table usage.'}
+					: `Start or force-run the Analytics service to enable ${selectedColumn ? 'column' : 'table'} usage.`}
 				class="inline-flex"
 			>
 				<button
-					disabled={!usageAvailable}
+					disabled={!usageAvailable && !usageAvailabilityLoading}
 					onclick={() => selectSidebarTab('usage')}
 					class="flex items-center gap-2 border-b-2 px-3 py-2 text-xs font-bold transition-colors {sidebarTab ===
 					'usage'
@@ -1185,7 +1275,9 @@
 						<span class="material-symbols-outlined mb-2 text-[32px] text-on-surface-variant"
 							>history_toggle_off</span
 						>
-						<p class="text-body-md text-on-surface-variant">No changes recorded for this table.</p>
+						<p class="text-body-md text-on-surface-variant">
+							No changes recorded for this {selectedColumn ? 'column' : 'table'}.
+						</p>
 					</div>
 				{:else}
 					<ul class="space-y-3">
@@ -1224,7 +1316,27 @@
 					</ul>
 				{/if}
 			{:else}
-				{#if usageLoading}
+				{#if usageAvailabilityLoading}
+					<div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
+						<span class="material-symbols-outlined animate-spin text-2xl text-primary"
+							>progress_activity</span
+						>
+						<p class="text-xs text-on-surface-variant">Checking Analytics availability…</p>
+					</div>
+				{:else if !usageAvailable}
+					<div
+						class="rounded-lg border border-outline-variant bg-surface-container p-4 text-center"
+					>
+						<span class="material-symbols-outlined mb-2 text-2xl text-on-surface-variant"
+							>analytics</span
+						>
+						<p class="text-xs text-on-surface-variant">
+							Start or force-run the Analytics service to enable {selectedColumn
+								? 'column'
+								: 'table'} usage.
+						</p>
+					</div>
+				{:else if usageLoading}
 					<div class="flex items-center justify-center py-12">
 						<span class="material-symbols-outlined animate-spin text-2xl text-primary"
 							>progress_activity</span
@@ -1242,7 +1354,9 @@
 							>query_stats</span
 						>
 						<p class="text-body-md text-on-surface-variant">
-							Analytics has query data, but no captured query references this table yet.
+							Analytics has query data, but no captured query references this {selectedColumn
+								? 'column'
+								: 'table'} yet.
 						</p>
 					</div>
 				{:else}
@@ -1286,6 +1400,25 @@
 										>
 									</div>
 								</div>
+								{#if selectedColumn && 'is_selected' in item}
+									<div class="mt-2 flex flex-wrap gap-1.5">
+										{#if item.is_selected}
+											<span class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-primary"
+												>Selected</span
+											>
+										{/if}
+										{#if item.is_condition}
+											<span class="rounded bg-tertiary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tertiary"
+												>Filter</span
+											>
+										{/if}
+										{#if item.is_condition_foreign}
+											<span class="rounded bg-secondary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-secondary"
+												>Join</span
+											>
+										{/if}
+									</div>
+								{/if}
 							</li>
 						{/each}
 					</ul>
@@ -1379,7 +1512,7 @@
 		border: 1px solid var(--color-outline-variant);
 		border-radius: 8px;
 		box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
-		cursor: pointer;
+		cursor: grab;
 		overflow: hidden;
 		position: absolute;
 		touch-action: none;
@@ -1456,6 +1589,53 @@
 		flex: 0 0 auto;
 	}
 
+	.table-actions {
+		align-items: center;
+		display: flex;
+		flex: 0 0 auto;
+		gap: 4px;
+	}
+
+	.table-action {
+		align-items: center;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		color: var(--color-on-surface-variant);
+		cursor: pointer;
+		display: flex;
+		gap: 3px;
+		height: 28px;
+		justify-content: center;
+		padding: 0 6px;
+	}
+
+	.table-action:hover,
+	.table-action:focus-visible {
+		background: rgba(79, 219, 200, 0.1);
+		border-color: rgba(79, 219, 200, 0.25);
+		color: var(--color-primary);
+		outline: none;
+	}
+
+	.table-action:disabled {
+		background: transparent;
+		border-color: transparent;
+		color: var(--color-on-surface-variant);
+		cursor: not-allowed;
+		opacity: 0.35;
+	}
+
+	.table-action .material-symbols-outlined {
+		font-size: 17px;
+	}
+
+	.table-action-label {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+	}
+
 	.column-list {
 		background: var(--color-surface-container);
 	}
@@ -1467,6 +1647,18 @@
 		gap: 8px;
 		min-height: 36px;
 		padding: 6px 12px;
+		cursor: pointer;
+		transition:
+			background-color 120ms ease,
+			box-shadow 120ms ease;
+	}
+
+	.column-row:hover,
+	.column-row:focus-visible,
+	.column-row.column-active {
+		background: rgba(79, 219, 200, 0.08);
+		box-shadow: inset 3px 0 0 var(--color-primary);
+		outline: none;
 	}
 
 	.column-row.has-fk {
@@ -1507,6 +1699,20 @@
 		font-size: 9px;
 		font-weight: 700;
 		text-transform: uppercase;
+	}
+
+	.column-details {
+		color: var(--color-on-surface-variant);
+		flex: 0 0 auto;
+		font-size: 16px;
+		opacity: 0;
+		transition: opacity 120ms ease;
+	}
+
+	.column-row:hover .column-details,
+	.column-row:focus-visible .column-details,
+	.column-row.column-active .column-details {
+		opacity: 1;
 	}
 
 	.nullable {
