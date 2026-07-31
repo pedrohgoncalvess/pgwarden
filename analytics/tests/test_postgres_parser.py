@@ -225,3 +225,166 @@ def test_schema_qualified_without_alias():
     cols = columns(parsed)
     assert cols[("sales", "orders", "id")].is_selected
     assert cols[("sales", "orders", "status")].is_condition
+
+
+def test_insert_into_simple_values():
+    parsed = parse_postgres_query(
+        "INSERT INTO public.users (name, email) VALUES ('Alice', 'alice@example.com')",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    assert ("public", "users") in tbls
+
+
+def test_insert_into_with_returning():
+    parsed = parse_postgres_query(
+        "INSERT INTO sales.orders (user_id, total) VALUES (1, 99.9) RETURNING id, status",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "orders") in tbls
+    assert cols[("sales", "orders", "id")].is_selected
+    assert cols[("sales", "orders", "status")].is_selected
+
+
+def test_insert_select_from_another_table():
+    parsed = parse_postgres_query(
+        "INSERT INTO sales.orders (user_id, total) SELECT u.id, 50.0 FROM public.users u WHERE u.email = 'x@y.com'",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "orders") in tbls
+    assert ("public", "users") in tbls
+    assert cols[("public", "users", "id")].is_selected
+    assert cols[("public", "users", "email")].is_condition
+
+
+def test_update_simple_where():
+    parsed = parse_postgres_query(
+        "UPDATE public.users SET name = 'Johnny' WHERE id = 1",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("public", "users") in tbls
+    assert cols[("public", "users", "id")].is_condition
+
+
+def test_update_with_from_join():
+    parsed = parse_postgres_query(
+        "UPDATE sales.orders o SET status = 'shipped' FROM public.users u WHERE o.user_id = u.id AND u.email LIKE '%@ship.com'",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "orders") in tbls
+    assert ("public", "users") in tbls
+    assert cols[("sales", "orders", "user_id")].is_condition
+    assert cols[("public", "users", "email")].is_condition
+
+
+def test_update_with_subquery():
+    parsed = parse_postgres_query(
+        "UPDATE sales.orders SET total = total + 10 WHERE user_id IN (SELECT id FROM public.users WHERE email IS NOT NULL)",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "orders") in tbls
+    assert ("public", "users") in tbls
+    assert cols[("public", "users", "email")].is_condition
+
+
+def test_delete_simple():
+    parsed = parse_postgres_query(
+        "DELETE FROM public.users WHERE id = 5",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("public", "users") in tbls
+    assert cols[("public", "users", "id")].is_condition
+
+
+def test_delete_with_using_join():
+    parsed = parse_postgres_query(
+        "DELETE FROM sales.order_items oi USING sales.orders o WHERE oi.order_id = o.id AND o.status = 'cancelled'",
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "order_items") in tbls
+    assert ("sales", "orders") in tbls
+    assert cols[("sales", "orders", "status")].is_condition
+
+
+def test_vacuum_and_analyze():
+    parsed_vac = parse_postgres_query("VACUUM ANALYZE public.users", metadata())
+    parsed_vac_opts = parse_postgres_query("VACUUM (FULL, VERBOSE) sales.orders", metadata())
+    parsed_ana = parse_postgres_query("ANALYZE inventory.products", metadata())
+    assert ("public", "users") in tables(parsed_vac)
+    assert ("sales", "orders") in tables(parsed_vac_opts)
+    assert ("inventory", "products") in tables(parsed_ana)
+
+
+def test_truncate_multiple_tables():
+    parsed = parse_postgres_query("TRUNCATE TABLE sales.order_items, sales.orders RESTART IDENTITY", metadata())
+    tbls = tables(parsed)
+    assert ("sales", "order_items") in tbls
+    assert ("sales", "orders") in tbls
+
+
+def test_insert_with_cte_and_returning():
+    parsed = parse_postgres_query(
+        """
+        WITH new_user AS (
+            INSERT INTO public.users (name, email) VALUES ('Jane', 'jane@example.com') RETURNING id
+        )
+        INSERT INTO sales.orders (user_id, total) SELECT id, 100.0 FROM new_user
+        """,
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("public", "users") in tbls
+    assert ("sales", "orders") in tbls
+    assert cols[("public", "users", "id")].is_selected
+
+
+def test_update_with_multiple_tables_in_from_clause():
+    parsed = parse_postgres_query(
+        """
+        UPDATE sales.order_items oi
+        SET qty = oi.qty + 1
+        FROM sales.orders o, public.users u
+        WHERE oi.order_id = o.id AND o.user_id = u.id AND u.email = 'boss@corp.com'
+        """,
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("sales", "order_items") in tbls
+    assert ("sales", "orders") in tbls
+    assert ("public", "users") in tbls
+    assert cols[("public", "users", "email")].is_condition
+
+
+def test_delete_with_exists_subquery():
+    parsed = parse_postgres_query(
+        """
+        DELETE FROM public.users u
+        WHERE EXISTS (
+            SELECT 1 FROM sales.orders o WHERE o.user_id = u.id AND o.status = 'fraud'
+        )
+        """,
+        metadata(),
+    )
+    tbls = tables(parsed)
+    cols = columns(parsed)
+    assert ("public", "users") in tbls
+    assert ("sales", "orders") in tbls
+    assert cols[("sales", "orders", "status")].is_condition
+
+

@@ -11,6 +11,9 @@ from analytics.parser.models import ColumnHit, ColumnMeta, ParsedQuery, TableHit
 
 CLAUSE_END = {
     "WHERE",
+    "SET",
+    "VALUES",
+    "INTO",
     "GROUP BY",
     "HAVING",
     "ORDER BY",
@@ -108,20 +111,153 @@ class QueryParser:
         return parsed
 
     def _parse_statement(self, tokens: list[SqlToken], parsed: ParsedQuery):
-        cte_names = self._parse_ctes(tokens, parsed)
-        select_range = self._clause_range(tokens, "SELECT", {"FROM"})
-        from_range = self._clause_range(tokens, "FROM", CLAUSE_END)
-        if not from_range:
+        if not tokens:
             return
 
-        table_refs = self._parse_table_refs(tokens[from_range[0] : from_range[1]], cte_names, parsed)
-        aliases = self._alias_map(table_refs)
-        table_hits = self._table_hits(table_refs)
-        for key, hit in table_hits.items():
-            self._merge_table(parsed, key, hit)
+        cte_names = self._parse_ctes(tokens, parsed)
+        table_refs: list[TableRef] = []
 
+        main_keyword = None
+        main_idx = -1
+        depth = 0
+        for i, token in enumerate(tokens):
+            depth = self._updated_depth(depth, token, before=True)
+            if depth == 0 and token.upper in {"INSERT", "UPDATE", "DELETE", "VACUUM", "ANALYZE", "TRUNCATE"}:
+                main_keyword = token.upper
+                main_idx = i
+                break
+            depth = self._updated_depth(depth, token, before=False)
+
+        # 1. INSERT INTO <table> ...
+        if main_keyword == "INSERT":
+            i = main_idx + 1
+            if i < len(tokens) and tokens[i].upper == "INTO":
+                i += 1
+            if i < len(tokens):
+                parts, next_i = self._read_identifier(tokens, i)
+                if parts:
+                    table_name = parts[-1]
+                    schema_name = parts[-2] if len(parts) >= 2 else self.default_schema
+                    meta = self._find_table(schema_name, table_name)
+                    if meta:
+                        schema_name, table_name = meta.schema_name, meta.name
+                    ref = TableRef(schema_name=schema_name, table_name=table_name, alias=None, meta=meta)
+                    table_refs.append(ref)
+                    key = (schema_name, table_name, None)
+                    hit = TableHit(schema_name=schema_name, table_name=table_name, alias=None, is_foreign=False)
+                    self._merge_table(parsed, key, hit)
+
+        # 2. UPDATE <table> ...
+        elif main_keyword == "UPDATE":
+            i = main_idx + 1
+            if i < len(tokens) and tokens[i].upper == "ONLY":
+                i += 1
+            if i < len(tokens):
+                parts, next_i = self._read_identifier(tokens, i)
+                if parts:
+                    table_name = parts[-1]
+                    schema_name = parts[-2] if len(parts) >= 2 else self.default_schema
+                    alias, _ = self._read_optional_alias(tokens, next_i)
+                    meta = self._find_table(schema_name, table_name)
+                    if meta:
+                        schema_name, table_name = meta.schema_name, meta.name
+                    ref = TableRef(schema_name=schema_name, table_name=table_name, alias=alias, meta=meta)
+                    table_refs.append(ref)
+                    key = (schema_name, table_name, alias)
+                    hit = TableHit(schema_name=schema_name, table_name=table_name, alias=alias, is_foreign=False)
+                    self._merge_table(parsed, key, hit)
+
+        # 3. DELETE FROM <table> ...
+        elif main_keyword == "DELETE":
+            i = main_idx + 1
+            if i < len(tokens) and tokens[i].upper == "FROM":
+                i += 1
+            if i < len(tokens) and tokens[i].upper == "ONLY":
+                i += 1
+            if i < len(tokens):
+                parts, next_i = self._read_identifier(tokens, i)
+                if parts:
+                    table_name = parts[-1]
+                    schema_name = parts[-2] if len(parts) >= 2 else self.default_schema
+                    alias, _ = self._read_optional_alias(tokens, next_i)
+                    meta = self._find_table(schema_name, table_name)
+                    if meta:
+                        schema_name, table_name = meta.schema_name, meta.name
+                    ref = TableRef(schema_name=schema_name, table_name=table_name, alias=alias, meta=meta)
+                    table_refs.append(ref)
+                    key = (schema_name, table_name, alias)
+                    hit = TableHit(schema_name=schema_name, table_name=table_name, alias=alias, is_foreign=False)
+                    self._merge_table(parsed, key, hit)
+
+        # 4. VACUUM or ANALYZE <table> ...
+        elif main_keyword in {"VACUUM", "ANALYZE"}:
+            i = main_idx + 1
+            while i < len(tokens) and (tokens[i].upper in {"FULL", "FREEZE", "ANALYZE", "VERBOSE", "SKIP_LOCKED"} or tokens[i].value == "("):
+                if tokens[i].value == "(":
+                    _, i = self._read_parenthesized(tokens, i)
+                else:
+                    i += 1
+            if i < len(tokens):
+                parts, _ = self._read_identifier(tokens, i)
+                if parts:
+                    table_name = parts[-1]
+                    schema_name = parts[-2] if len(parts) >= 2 else self.default_schema
+                    meta = self._find_table(schema_name, table_name)
+                    if meta:
+                        schema_name, table_name = meta.schema_name, meta.name
+                    key = (schema_name, table_name, None)
+                    hit = TableHit(schema_name=schema_name, table_name=table_name, alias=None, is_foreign=False)
+                    self._merge_table(parsed, key, hit)
+
+        # 5. TRUNCATE [TABLE] <table>, <table2> ...
+        elif main_keyword == "TRUNCATE":
+            i = main_idx + 1
+            if i < len(tokens) and tokens[i].upper == "TABLE":
+                i += 1
+            if i < len(tokens) and tokens[i].upper == "ONLY":
+                i += 1
+            while i < len(tokens):
+                parts, next_i = self._read_identifier(tokens, i)
+                if parts:
+                    table_name = parts[-1]
+                    schema_name = parts[-2] if len(parts) >= 2 else self.default_schema
+                    meta = self._find_table(schema_name, table_name)
+                    if meta:
+                        schema_name, table_name = meta.schema_name, meta.name
+                    key = (schema_name, table_name, None)
+                    hit = TableHit(schema_name=schema_name, table_name=table_name, alias=None, is_foreign=False)
+                    self._merge_table(parsed, key, hit)
+                    i = next_i
+                    if i < len(tokens) and tokens[i].value == ",":
+                        i += 1
+                        continue
+                break
+
+        # 6. Parse FROM, USING, SELECT, RETURNING, WHERE, and JOIN clauses if present
+        from_range = self._clause_range(tokens, "FROM", CLAUSE_END)
+        if from_range:
+            from_refs = self._parse_table_refs(tokens[from_range[0] : from_range[1]], cte_names, parsed)
+            table_refs.extend(from_refs)
+            table_hits = self._table_hits(from_refs)
+            for key, hit in table_hits.items():
+                self._merge_table(parsed, key, hit)
+
+        using_range = self._clause_range(tokens, "USING", CLAUSE_END)
+        if using_range:
+            using_refs = self._parse_table_refs(tokens[using_range[0] : using_range[1]], cte_names, parsed)
+            table_refs.extend(using_refs)
+            table_hits = self._table_hits(using_refs)
+            for key, hit in table_hits.items():
+                self._merge_table(parsed, key, hit)
+
+        aliases = self._alias_map(table_refs)
+        select_range = self._clause_range(tokens, "SELECT", {"FROM"})
         if select_range:
             self._parse_select_columns(tokens[select_range[0] : select_range[1]], table_refs, aliases, parsed)
+
+        returning_range = self._clause_range(tokens, "RETURNING", CLAUSE_END - {"RETURNING"})
+        if returning_range:
+            self._parse_select_columns(tokens[returning_range[0] : returning_range[1]], table_refs, aliases, parsed)
 
         for start, end in self._condition_ranges(tokens):
             self._mark_condition_columns(tokens[start:end], table_refs, aliases, parsed, is_join=False)
@@ -294,6 +430,17 @@ class QueryParser:
         parsed: ParsedQuery,
         is_join: bool,
     ):
+        # Scan and parse subqueries inside condition expressions (e.g. IN (SELECT...), EXISTS (SELECT...))
+        i = 0
+        while i < len(tokens):
+            if tokens[i].value == "(":
+                sub_tokens, next_i = self._read_parenthesized(tokens, i)
+                if sub_tokens and any(t.upper in {"SELECT", "WITH"} for t in sub_tokens):
+                    self._parse_statement(sub_tokens, parsed)
+                i = next_i
+            else:
+                i += 1
+
         refs = self._column_refs(tokens, table_refs, aliases)
         foreign_refs: set[tuple[str, str, str]] = set()
         foreign_tables: set[tuple[str, str, str | None]] = set()
