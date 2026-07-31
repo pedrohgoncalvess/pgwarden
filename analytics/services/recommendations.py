@@ -62,54 +62,169 @@ async def _find_table_maintenance(session: AsyncSession, database_id: int) -> li
 
 
 async def _find_unused_indexes(session: AsyncSession, database_id: int) -> list[RecommendationDraft]:
+    """
+    Find large non-primary, non-unique indexes with no recorded scans.
+    Escalates severity to 'warning' when the parent table is write-heavy,
+    because unused indexes impose write amplification costs.
+    """
     result = await session.execute(text("""
-        SELECT index_id, schema_name, table_name, index_name, size, scan_qt
+        SELECT
+            index_id, schema_name, table_name, index_name, size, scan_qt,
+            COALESCE(tup_live, 0) + COALESCE(tup_dead, 0) AS write_volume
         FROM (
-            SELECT DISTINCT ON (i.id) i.id AS index_id, t.schema_name, t.name AS table_name,
-                   i.name AS index_name, m.size, m.scan_qt
-            FROM metadata.index i JOIN metadata.table t ON t.id = i.table_id
-            JOIN metric.index m ON m.index_id = i.id
-            WHERE i.database_id = :database_id AND i.deleted_at IS NULL AND t.deleted_at IS NULL
-              AND NOT i.is_primary AND NOT i.is_unique
-            ORDER BY i.id, m.collected_at DESC
+            SELECT DISTINCT ON (i.id)
+                i.id AS index_id,
+                t.schema_name,
+                t.name AS table_name,
+                i.name AS index_name,
+                mi.size,
+                mi.scan_qt,
+                mt.n_live_tup AS tup_live,
+                mt.n_dead_tup AS tup_dead
+            FROM metadata.index i
+            JOIN metadata.table t ON t.id = i.table_id
+            JOIN metric.index mi ON mi.index_id = i.id
+            LEFT JOIN LATERAL (
+                SELECT n_live_tup, n_dead_tup
+                FROM metric.table
+                WHERE table_id = t.id
+                ORDER BY collected_at DESC
+                LIMIT 1
+            ) mt ON TRUE
+            WHERE i.database_id = :database_id
+              AND i.deleted_at IS NULL
+              AND t.deleted_at IS NULL
+              AND NOT i.is_primary
+              AND NOT i.is_unique
+            ORDER BY i.id, mi.collected_at DESC
         ) latest
         WHERE size >= 67108864 AND COALESCE(scan_qt, 0) = 0
     """), {"database_id": database_id})
-    return [
-        RecommendationDraft(
-            fingerprint=f"unused-index:{row.index_id}", category="index", severity="info",
-            confidence=0.72, title=f"Review unused index {row.index_name}",
-            summary="This non-unique index is at least 64 MB and has no recorded scans.",
-            recommendation="Validate workload and retention needs before dropping the index.",
-            evidence={"index_id": row.index_id, "table": f"{row.schema_name}.{row.table_name}",
-                      "index": row.index_name, "size_bytes": row.size, "scan_count": row.scan_qt},
-        ) for row in result.mappings()
-    ]
+
+    drafts = []
+    for row in result.mappings():
+        write_heavy = (row.write_volume or 0) >= 10_000
+        severity = "warning" if write_heavy else "info"
+        confidence = 0.80 if write_heavy else 0.72
+        summary = (
+            "This non-unique index is at least 64 MB, has no recorded scans, and its table has "
+            f"high write volume ({row.write_volume:,} write operations). "
+            "It is adding write overhead with no read benefit."
+            if write_heavy
+            else "This non-unique index is at least 64 MB and has no recorded scans."
+        )
+        recommendation = (
+            "Consider dropping this index to reduce write amplification. "
+            "Validate workload and retention needs before dropping."
+            if write_heavy
+            else "Validate workload and retention needs before dropping the index."
+        )
+        drafts.append(
+            RecommendationDraft(
+                fingerprint=f"unused-index:{row.index_id}", category="index", severity=severity,
+                confidence=confidence, title=f"Review unused index {row.index_name}",
+                summary=summary, recommendation=recommendation,
+                evidence={
+                    "index_id": row.index_id,
+                    "table": f"{row.schema_name}.{row.table_name}",
+                    "index": row.index_name,
+                    "size_bytes": row.size,
+                    "scan_count": row.scan_qt,
+                    "write_volume": row.write_volume,
+                    "write_heavy": write_heavy,
+                },
+            )
+        )
+    return drafts
 
 
 async def _find_missing_indexes(session: AsyncSession, database_id: int) -> list[RecommendationDraft]:
+    """
+    Aggregate per-query missing_index findings across all queries for this database.
+    Groups by (table, column_set) fingerprint so that multiple queries sharing the
+    same missing index are surfaced as a single high-priority recommendation,
+    scored by query_count and average confidence.
+    """
     result = await session.execute(text("""
-        SELECT DISTINCT ON (title) title, confidence, explanation, recommendation, evidence
+        SELECT
+            evidence->>'table'                        AS table_name,
+            evidence->>'suggested_ddl'                AS suggested_ddl,
+            evidence->'missing_prefix_columns'        AS columns_json,
+            COUNT(*)                                  AS query_count,
+            AVG(finding.confidence)                   AS avg_confidence,
+            MAX(finding.confidence)                   AS max_confidence,
+            MAX(evidence->>'n_live_tup')              AS n_live_tup
         FROM analytics.query_analysis_finding finding
         JOIN analytics.query_analysis analysis ON analysis.id = finding.analysis_id
-        WHERE analysis.database_id = :database_id AND finding.type = 'missing_index'
-        ORDER BY title, finding.created_at DESC
-        LIMIT 20
+        WHERE analysis.database_id = :database_id
+          AND finding.type = 'missing_index'
+          AND finding.evidence->>'table' IS NOT NULL
+          AND finding.evidence->'missing_prefix_columns' IS NOT NULL
+        GROUP BY
+            evidence->>'table',
+            evidence->>'suggested_ddl',
+            evidence->'missing_prefix_columns'
+        ORDER BY query_count DESC, avg_confidence DESC
+        LIMIT 30
     """), {"database_id": database_id})
+
     drafts = []
     for row in result.mappings():
-        evidence = row.evidence or {}
-        table = evidence.get("table", "the affected table")
-        columns = evidence.get("missing_prefix_columns", [])
+        columns_raw = row.columns_json
+        if isinstance(columns_raw, str):
+            try:
+                columns = json.loads(columns_raw)
+            except (ValueError, TypeError):
+                columns = []
+        elif isinstance(columns_raw, list):
+            columns = columns_raw
+        else:
+            columns = []
+
         column_text = ", ".join(columns) if columns else "the filtered columns"
+        query_count = int(row.query_count or 0)
+        avg_confidence = float(row.avg_confidence or 0.55)
+        table_name = row.table_name or "unknown"
+
+        # Score higher when more distinct queries suffer from the same missing index
+        if query_count >= 10:
+            confidence = min(avg_confidence + 0.15, 0.92)
+        elif query_count >= 5:
+            confidence = min(avg_confidence + 0.10, 0.88)
+        elif query_count >= 2:
+            confidence = min(avg_confidence + 0.05, 0.85)
+        else:
+            confidence = avg_confidence
+
+        severity = "critical" if query_count >= 5 else "warning"
+
+        recommendation = (
+            f"Validate a matching index with EXPLAIN before applying it in production."
+        )
+        if row.suggested_ddl:
+            recommendation = f"Suggested: {row.suggested_ddl} " + recommendation
+
+        fingerprint = f"missing-index:{table_name}:{column_text}"
         drafts.append(
             RecommendationDraft(
-                fingerprint=f"missing-index:{table}:{column_text}", category="index",
-                severity="warning", confidence=float(row.confidence),
-                title=f"Possible missing index on {table}",
-                summary=f"Queries filter on {column_text}, but no matching index prefix was found.",
-                recommendation="Validate a matching index with EXPLAIN before applying it in production.",
-                evidence=evidence,
+                fingerprint=fingerprint,
+                category="index",
+                severity=severity,
+                confidence=round(confidence, 2),
+                title=f"Missing index on {table_name} affects {query_count} query pattern(s)",
+                summary=(
+                    f"Queries filter on {column_text} in {table_name}, but no matching index prefix was found. "
+                    f"This pattern appears across {query_count} distinct query template(s)."
+                ),
+                recommendation=recommendation,
+                evidence={
+                    "table": table_name,
+                    "missing_columns": columns,
+                    "query_count": query_count,
+                    "avg_confidence": round(avg_confidence, 3),
+                    "suggested_ddl": row.suggested_ddl,
+                    "n_live_tup": row.n_live_tup,
+                },
             )
         )
     return drafts
