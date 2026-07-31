@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from analytics.database import DatabaseConnection
@@ -63,12 +63,35 @@ async def _pending_queries(
     limit: int,
     database_id: int | None,
 ) -> list[NativeQueryMetric]:
-    statement = select(NativeQueryMetric).where(NativeQueryMetric.query.is_not(None))
-    if database_id is not None:
-        statement = statement.where(NativeQueryMetric.database_id == database_id)
-    result = await session.execute(
-        statement.order_by(NativeQueryMetric.collected_at.asc()).limit(limit)
+    # Group distinct queries from NativeQueryMetric to process all distinct query signatures
+    subquery = (
+        select(
+            NativeQueryMetric.database_id,
+            NativeQueryMetric.query_hash,
+            func.max(NativeQueryMetric.collected_at).label("latest_collected"),
+        )
+        .where(NativeQueryMetric.query.is_not(None))
+        .where(NativeQueryMetric.query != "")
     )
+    if database_id is not None:
+        subquery = subquery.where(NativeQueryMetric.database_id == database_id)
+
+    subquery = subquery.group_by(
+        NativeQueryMetric.database_id, NativeQueryMetric.query_hash
+    ).subquery()
+
+    statement = (
+        select(NativeQueryMetric)
+        .join(
+            subquery,
+            (NativeQueryMetric.database_id == subquery.c.database_id)
+            & (NativeQueryMetric.query_hash == subquery.c.query_hash)
+            & (NativeQueryMetric.collected_at == subquery.c.latest_collected),
+        )
+        .order_by(subquery.c.latest_collected.desc())
+        .limit(limit)
+    )
+    result = await session.execute(statement)
     return list(result.scalars().all())
 
 
