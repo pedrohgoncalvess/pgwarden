@@ -41,7 +41,10 @@ class Evaluator:
                         await touch_heartbeat(session)
                         await session.commit()
                         now = time.monotonic()
-                        has_due = any(
+                        force_run = await _consume_force_run(session)
+                        if force_run:
+                            await session.commit()
+                        has_due = force_run or any(
                             now >= self._next_run.get(rid, 0.0)
                             for rid in self._next_run
                         ) or not self._next_run
@@ -56,7 +59,7 @@ class Evaluator:
 
                             due_rules = [
                                 rule for rule in rules
-                                if now >= self._next_run.get(rule.rule_id, 0.0)
+                                if force_run or now >= self._next_run.get(rule.rule_id, 0.0)
                             ]
                             for rule in due_rules:
                                 alerts = await self._evaluate_rule(session, rule)
@@ -250,3 +253,22 @@ class Evaluator:
         can be retried on the next evaluation cycle."""
         cd_key = (alert.entity, alert.severity, alert.rule)
         self._last_sent.pop(cd_key, None)
+
+
+async def _consume_force_run(session: AsyncSession) -> bool:
+    """Consume pending force-run commands requested from the Runs UI."""
+    result = await session.execute(
+        text(
+            """
+            UPDATE base.service_command
+            SET consumed_at = NOW()
+            WHERE id IN (
+                SELECT id FROM base.service_command
+                WHERE service = 'notifier' AND action = 'force_run' AND consumed_at IS NULL
+                ORDER BY id FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id
+            """
+        )
+    )
+    return result.first() is not None
