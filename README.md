@@ -1,7 +1,7 @@
 <div align="center">
   <img src="frontend/static/branding/logo.jpg" alt="PGWarden logo" width="180" />
   <h1>PGWarden</h1>
-  <p><strong>Open-source PostgreSQL observability, schema intelligence, and alerting.</strong></p>
+  <p><strong>Source-available PostgreSQL observability, schema intelligence, and alerting.</strong></p>
   <p>Monitor your PostgreSQL fleet from one place, investigate performance issues, and keep schema changes visible.</p>
 </div>
 
@@ -86,7 +86,7 @@ For a production deployment, set distinct database and administrator credentials
 
 ## Configuration and operations
 
-The root [`config.yaml`](config.yaml) contains collector and notifier configuration. Environment variables are documented in [`.env.example`](.env.example); service-specific example files are also available for deployments that use separate environment files.
+The root [`config.yaml`](config.yaml) contains collector and notifier configuration. All environment variables are documented in [`.env.example`](.env.example). For production, inject the equivalent values through Docker secrets or your deployment platform's secret manager instead of committing a `.env` file.
 
 Useful Compose commands:
 
@@ -111,4 +111,4 @@ Please keep pull requests small and avoid committing secrets, generated local fi
 
 ## License
 
-This repository does not currently include a license file. Add a `LICENSE` before distributing or accepting external contributions so usage and contribution terms are clear.
+PGWarden is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, run, modify, and share it for non-commercial purposes. Commercial use, including monetizing the software or a service based on it, requires separate permission from the copyright holder.
