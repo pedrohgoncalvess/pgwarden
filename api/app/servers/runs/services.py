@@ -272,7 +272,7 @@ async def list_database_run_history(
 
         service_history = await get_service_history(conn, internal_id)
         if not server_config_ids and not db_config_ids:
-            return _filter_service_history(service_history, run_type, status, name, limit, offset)
+            return _filter_service_history(service_history, run_type, status, name, limit, offset, order_by, order_dir)
 
         config_lookup = {
             ("server", cfg_id): {
@@ -299,7 +299,7 @@ async def list_database_run_history(
         if run_type in (None, "database") and db_config_ids:
             type_filters.append(Run.config_database_id.in_(db_config_ids))
         if not type_filters:
-            return _filter_service_history(service_history, run_type, status, name, limit, offset)
+            return _filter_service_history(service_history, run_type, status, name, limit, offset, order_by, order_dir)
 
         query = (
             select(Run)
@@ -325,7 +325,7 @@ async def list_database_run_history(
             if matching_database_ids and run_type in (None, "database"):
                 name_filters.append(Run.config_database_id.in_(matching_database_ids))
             if not name_filters:
-                return _filter_service_history(service_history, run_type, status, name, limit, offset)
+                return _filter_service_history(service_history, run_type, status, name, limit, offset, order_by, order_dir)
             query = query.where(or_(*name_filters))
 
         started_from_dt = _parse_datetime(started_from)
@@ -352,15 +352,30 @@ async def list_database_run_history(
         order_field = order_fields[order_by]
         order_clause = order_field.asc() if order_dir == "asc" else order_field.desc()
         runs_result = await conn.execute(
-            query.order_by(order_clause, desc(Run.id)).offset(offset).limit(limit)
+            query.order_by(order_clause, desc(Run.id)).limit(offset + limit)
         )
         runs = runs_result.scalars().all()
 
         collector_history = [_serialize_run(r, config_lookup) for r in runs]
-        service_history = _filter_service_history(service_history, run_type, status, name, limit, 0)
+        service_history = _filter_service_history(service_history, run_type, status, name, offset + limit, 0, order_by, order_dir)
         combined = collector_history + service_history
-        combined.sort(key=lambda item: item.get("started_at") or "", reverse=order_dir == "desc")
+        combined.sort(key=lambda item: _history_sort_key(item, order_by), reverse=order_dir == "desc")
         return combined[offset:offset + limit]
+
+
+def _history_sort_key(item: dict, order_by: str) -> tuple:
+    """Keep the requested ordering when merging collector and service jobs."""
+    if order_by == "duration":
+        started = _parse_datetime(item.get("started_at"))
+        finished = _parse_datetime(item.get("finished_at"))
+        value = (finished - started).total_seconds() if started and finished else None
+    elif order_by == "errors":
+        value = len(item.get("errors") or [])
+    elif order_by == "started_at":
+        value = _parse_datetime(item.get("started_at"))
+    else:
+        value = item.get(order_by)
+    return value is None, value
 
 
 def _filter_service_history(
@@ -370,6 +385,8 @@ def _filter_service_history(
     name: str | None,
     limit: int,
     offset: int,
+    order_by: str = "started_at",
+    order_dir: str = "desc",
 ) -> List[dict]:
     if run_type not in (None, "service"):
         return []
@@ -378,7 +395,7 @@ def _filter_service_history(
         if (not status or item["status"] == status)
         and (not name or name.lower() in (item["name"] or "").lower())
     ]
-    filtered.sort(key=lambda item: item.get("started_at") or "", reverse=True)
+    filtered.sort(key=lambda item: _history_sort_key(item, order_by), reverse=order_dir == "desc")
     return filtered[offset:offset + limit]
 
 

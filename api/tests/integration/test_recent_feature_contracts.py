@@ -197,6 +197,12 @@ async def test_run_history_filters_and_orders(
         )
         assert ordered.status_code == 200
         assert ordered.json()[0]["name"] == expected
+        second_page = await auth_client.get(
+            f"/v1/databases/{database.public_id}/runs/history",
+            params={"order_by": order_by, "order_dir": order_dir, "offset": 1, "limit": 1},
+        )
+        assert second_page.status_code == 200
+        assert second_page.json() == ordered.json()[1:2]
 
 
 @pytest.mark.asyncio
