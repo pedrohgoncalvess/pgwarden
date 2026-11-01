@@ -1,4 +1,4 @@
--- depends: 
+-- depends:
 
 CREATE TABLE "collector_server" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
