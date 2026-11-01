@@ -106,5 +106,3 @@ async def delete_role(role_id: int) -> Response:
             await conn.rollback()
             raise HTTPException(409, 'This role is assigned to a user')
     return Response(status_code=204)
-
-

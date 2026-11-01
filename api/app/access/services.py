@@ -104,5 +104,3 @@ async def authorize_request(
         yield access
     finally:
         current_access.reset(token)
-
-
