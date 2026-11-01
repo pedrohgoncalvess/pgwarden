@@ -21,3 +21,9 @@ class TableMetric(Base):
     heap_blks_read = Column(BigInteger, nullable=True)
     heap_blks_hit = Column(BigInteger, nullable=True)
     modifications_since_last_analyze = Column(BigInteger, nullable=True)
+
+    n_tup_ins = Column(BigInteger, nullable=True)
+    n_tup_upd = Column(BigInteger, nullable=True)
+    n_tup_del = Column(BigInteger, nullable=True)
+    n_tup_hot_upd = Column(BigInteger, nullable=True)
+    stats_reset = Column(DateTime(timezone=True), nullable=True)

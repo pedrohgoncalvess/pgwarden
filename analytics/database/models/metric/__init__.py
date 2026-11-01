@@ -7,6 +7,7 @@ from analytics.database.models.metric.native_query import NativeQueryMetric
 from analytics.database.models.metric.ram import RamMetric
 from analytics.database.models.metric.session import SessionMetric
 from analytics.database.models.metric.table import TableMetric
+from analytics.database.models.metric.query_workload import QueryWorkloadMetric
 
 __all__ = [
     "ColumnMetric",
@@ -18,4 +19,5 @@ __all__ = [
     "RamMetric",
     "SessionMetric",
     "TableMetric",
+    "QueryWorkloadMetric",
 ]
