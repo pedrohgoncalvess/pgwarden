@@ -52,7 +52,7 @@ async def login(user_auth: UserLogin):
 
         user = await user_repository.find_by_email(user_auth.email)
 
-        if not user or not verify_password(user_auth.password, user.password):
+        if not user or user.deleted_at is not None or not verify_password(user_auth.password, user.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Email or password incorrect.",
@@ -107,7 +107,7 @@ async def refresh_token(payload: RefreshTokenRequest):
 
         user = await user_repository.find_by_id(refresh.user_id)
 
-        if refresh.inserted_at + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES) < datetime.utcnow() or not refresh.used:
+        if not user or user.deleted_at is not None or refresh.inserted_at + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES) < datetime.utcnow() or refresh.used:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token expired.",
@@ -147,3 +147,21 @@ async def refresh_token(payload: RefreshTokenRequest):
             },
             "token_type": "bearer",
         }
+
+
+@router.get('/me')
+async def current_profile(
+    response: Response, user: User = Depends(get_current_user)
+) -> dict:
+    """Return the current account and effective capabilities without credentials."""
+    from app.access.services import load_access
+    response.headers['Cache-Control'] = 'no-store'
+    async with DatabaseConnection() as conn:
+        access = await load_access(user, conn)
+    return {
+        'id': user.id, 'name': user.name, 'email': user.email,
+        'is_admin': user.is_admin, 'role_id': user.role_id,
+        'permissions': sorted(access.permissions),
+        'project_ids': sorted(access.projects),
+        'server_ids': sorted(access.servers), 'database_ids': sorted(access.databases),
+    }
