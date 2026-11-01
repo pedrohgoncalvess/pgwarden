@@ -1,0 +1,6 @@
+[INSERT]
+default = """
+INSERT INTO metric.query_workload (collected_at, database_id, query_id, user_id, is_toplevel, calls, total_exec_time, shared_blks_read, shared_blks_hit, stats_reset, dealloc)
+VALUES (%(collected_at)s, %(database_id)s, %(query_id)s, %(user_id)s, %(is_toplevel)s, %(calls)s, %(total_exec_time)s, %(shared_blks_read)s, %(shared_blks_hit)s, %(stats_reset)s, %(dealloc)s)
+ON CONFLICT (collected_at, database_id, query_id, user_id, is_toplevel) DO NOTHING
+"""

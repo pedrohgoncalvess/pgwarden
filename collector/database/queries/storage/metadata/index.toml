@@ -2,7 +2,7 @@
 with_columns_json = """
 SELECT
     i.id, i.oid, i.name, i.type, i.definition,
-    i.is_unique, i.is_primary,
+    i.is_unique, i.is_primary, i.is_valid,
     COALESCE(json_agg(
         json_build_object('column_attnum', c.ordinal_position, 'ordinal', ic.ordinal_position)
         ORDER BY ic.ordinal_position
@@ -11,7 +11,7 @@ FROM metadata.index i
 LEFT JOIN metadata.index_column ic ON ic.index_id = i.id
 LEFT JOIN metadata.column c ON c.id = ic.column_id
 WHERE i.database_id = %(database_id)s AND i.deleted_at IS NULL
-GROUP BY i.id, i.oid, i.name, i.type, i.definition, i.is_unique, i.is_primary
+GROUP BY i.id, i.oid, i.name, i.type, i.definition, i.is_unique, i.is_primary, i.is_valid
 """
 
 by_oid = """
@@ -27,9 +27,9 @@ WHERE database_id = %(database_id)s AND deleted_at IS NULL
 [INSERT]
 default = """
 INSERT INTO metadata.index (
-    database_id, table_id, oid, name, type, definition, is_unique, is_primary
+    database_id, table_id, oid, name, type, definition, is_unique, is_primary, is_valid
 ) VALUES (
-    %(database_id)s, %(table_id)s, %(index_oid)s, %(index_name)s, %(index_type)s, %(definition)s, %(is_unique)s, %(is_primary)s
+    %(database_id)s, %(table_id)s, %(index_oid)s, %(index_name)s, %(index_type)s, %(definition)s, %(is_unique)s, %(is_primary)s, %(is_valid)s
 )
 """
 
@@ -43,6 +43,7 @@ SET
     definition = %(definition)s,
     is_unique = %(is_unique)s,
     is_primary = %(is_primary)s,
+    is_valid = %(is_valid)s,
     updated_at = now()
 WHERE oid = %(index_oid)s
   AND database_id = %(database_id)s

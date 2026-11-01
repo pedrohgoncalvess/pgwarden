@@ -1,5 +1,7 @@
 SELECT
     s.relid AS table_oid,
+    s.n_tup_ins, s.n_tup_upd, s.n_tup_del, s.n_tup_hot_upd,
+    (SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()) AS stats_reset,
     s.n_live_tup,
     s.n_dead_tup,
     pg_relation_size(s.relid) AS table_size_bytes,
