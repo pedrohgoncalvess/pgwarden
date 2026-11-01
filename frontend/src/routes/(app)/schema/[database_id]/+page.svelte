@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import Select from '$lib/components/Select.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
@@ -102,7 +104,9 @@
 
 	const tables = $derived(schema?.tables ?? []);
 	const serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 	const schemaNames = $derived([...new Set(tables.map((table) => table.schema_name))].sort());
 	const visibleTables = $derived(filterTables(tables, searchTerm, selectedSchema));
@@ -134,7 +138,9 @@
 		try {
 			loading = true;
 			error = '';
-			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
+			const catalog = await Promise.all([listServers(), listDatabases()]);
+			if (disposed) return;
+			[servers, databases] = catalog;
 
 			if (databases.length === 0) {
 				return;
@@ -159,7 +165,16 @@
 		}
 	}
 
+	let schemaRequest: AbortController | null = null;
+	let disposed = false;
+	onDestroy(() => {
+		disposed = true;
+		schemaRequest?.abort();
+	});
 	async function selectDatabase(database: DatabaseListItem) {
+		schemaRequest?.abort();
+		const request = new AbortController();
+		schemaRequest = request;
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
 		selectedServer = database.server_id;
@@ -172,7 +187,8 @@
 		try {
 			const requestedTableId = $page.url.searchParams.get('table');
 			const requestedSchema = $page.url.searchParams.get('schema') ?? '';
-			const nextSchema = await getDatabaseSchema(database.id);
+			const nextSchema = await getDatabaseSchema(database.id, request.signal);
+			if (request.signal.aborted) return;
 			schema = {
 				...nextSchema,
 				tables: nextSchema.tables
@@ -201,6 +217,7 @@
 				await centerBoard();
 			}
 		} catch (err: any) {
+			if (request.signal.aborted) return;
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
 				window.location.href = '/login';
@@ -210,31 +227,7 @@
 			positions = {};
 			error = err.message || 'Failed to load schema.';
 		} finally {
-			schemaLoading = false;
-		}
-	}
-
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
-	}
-
-	function schemaHref(databaseId: string): string {
-		const params = new URLSearchParams();
-		const tableId = $page.url.searchParams.get('table');
-		const schemaName = $page.url.searchParams.get('schema');
-		if (tableId) params.set('table', tableId);
-		if (schemaName) params.set('schema', schemaName);
-		const queryString = params.toString();
-		return `/schema/${databaseId}${queryString ? `?${queryString}` : ''}`;
-	}
-
-	async function selectServer(serverId: string) {
-		selectedServer = serverId;
-		selectedServerId.set(serverId);
-		const database = databases.find((item) => item.server_id === serverId);
-		if (database && database.id !== selectedDb?.id) {
-			await goto(schemaHref(database.id), { replaceState: true });
-			await selectDatabase(database);
+			if (!request.signal.aborted) schemaLoading = false;
 		}
 	}
 
@@ -597,13 +590,6 @@
 		}
 	}
 
-	function resetLayout() {
-		if (!schema) return;
-		userMovedLayout = false;
-		positions = createInitialPositions(schema.tables, selectedSchema);
-		centerBoard();
-	}
-
 	async function applyRouteFocus(tableId: string | null, schemaName: string) {
 		if (!schema) return;
 		const table = tableId ? schema.tables.find((item) => item.id === tableId) : null;
@@ -729,8 +715,10 @@
 	}
 
 	function historyActionClass(action: SchemaHistoryItem['action']): string {
-		if (action === 'added' || action === 'created' || action === 'assigned') return 'bg-success-container text-on-success-container';
-		if (action === 'removed' || action === 'unassigned') return 'bg-error-container text-on-error-container';
+		if (action === 'added' || action === 'created' || action === 'assigned')
+			return 'bg-success-container text-on-success-container';
+		if (action === 'removed' || action === 'unassigned')
+			return 'bg-error-container text-on-error-container';
 		return 'bg-tertiary-container text-on-tertiary-container';
 	}
 
@@ -773,7 +761,7 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 <header
-	class="fixed top-0 right-0 z-40 flex h-16 w-[calc(100%-16rem)] items-center justify-between border-b border-outline-variant bg-surface-dim px-container-padding"
+	class="fixed top-0 right-0 z-40 flex h-16 app-page-header items-center justify-between border-b border-outline-variant bg-surface-dim px-container-padding"
 >
 	<div class="flex items-center gap-4">
 		<span class="material-symbols-outlined text-primary">account_tree</span>
@@ -883,42 +871,7 @@
 			</a>
 		</div>
 	{:else}
-		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-			<div class="flex flex-wrap items-center gap-3">
-				<label class="flex items-center gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-					<select
-						value={selectedServer}
-						onchange={(event) => selectServer(eventValue(event))}
-						disabled={schemaLoading || servers.length <= 1}
-						class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
-					>
-						{#each servers as server}
-							<option value={server.id}>{server.name}</option>
-						{/each}
-					</select>
-				</label>
-				<label class="flex items-center gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-					<select
-						value={selectedDb?.id ?? ''}
-						onchange={(event) => {
-							const database = databases.find((item) => item.id === eventValue(event));
-							if (database) {
-								goto(schemaHref(database.id), { replaceState: true });
-								selectDatabase(database);
-							}
-						}}
-						disabled={schemaLoading || serverDatabases.length <= 1}
-						class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
-					>
-						{#each serverDatabases as db}
-							<option value={db.id}>{db.name}</option>
-						{/each}
-					</select>
-				</label>
-			</div>
-		</div>
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4"></div>
 
 		{#if schema}
 			<div class="mb-6 grid gap-3 lg:grid-cols-[minmax(280px,1fr)_280px]">
@@ -943,16 +896,16 @@
 
 				<label class="control-field">
 					<span class="material-symbols-outlined text-[18px] text-on-surface-variant">segment</span>
-					<select
+					<Select
 						value={selectedSchema}
-						onchange={(event) => selectSchema((event.currentTarget as HTMLSelectElement).value)}
-						class="min-w-0 flex-1 cursor-pointer bg-transparent font-body-md text-body-md text-on-surface outline-none"
-					>
-						<option value="">All schemas</option>
-						{#each schemaNames as schemaName}
-							<option value={schemaName}>{schemaName}</option>
-						{/each}
-					</select>
+						onchange={(value) => selectSchema(value)}
+						class="min-w-0 flex-1"
+						aria-label="Schema"
+						options={[
+							{ value: '', label: 'All schemas' },
+							...schemaNames.map((value) => ({ value, label: value }))
+						]}
+					/>
 				</label>
 			</div>
 		{/if}
@@ -1100,9 +1053,8 @@
 													<span class="table-action-label">Usage</span>
 												</button>
 											</span>
-											<span
-												class="material-symbols-outlined table-grip"
-												title="Drag to move table">drag_indicator</span
+											<span class="material-symbols-outlined table-grip" title="Drag to move table"
+												>drag_indicator</span
 											>
 										</div>
 									</div>
@@ -1178,7 +1130,7 @@
 	<div class="fixed inset-0 z-40 bg-black/20" onclick={closeSidebar} aria-hidden="true"></div>
 
 	<div
-		class="fixed top-16 right-0 z-50 flex h-[calc(100%-4rem)] w-96 flex-col border-l border-outline-variant bg-surface-container-low shadow-2xl"
+		class="schema-details fixed right-0 z-50 flex w-96 flex-col border-l border-outline-variant bg-surface-container-low shadow-2xl"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="sidebar-title"
@@ -1318,9 +1270,7 @@
 			{:else}
 				{#if usageAvailabilityLoading}
 					<div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
-						<span class="material-symbols-outlined animate-spin text-2xl text-primary"
-							>progress_activity</span
-						>
+						<Spinner class="text-2xl text-primary" />
 						<p class="text-xs text-on-surface-variant">Checking Analytics availability…</p>
 					</div>
 				{:else if !usageAvailable}
@@ -1338,9 +1288,7 @@
 					</div>
 				{:else if usageLoading}
 					<div class="flex items-center justify-center py-12">
-						<span class="material-symbols-outlined animate-spin text-2xl text-primary"
-							>progress_activity</span
-						>
+						<Spinner class="text-2xl text-primary" />
 					</div>
 				{:else if usageError}
 					<div
@@ -1372,7 +1320,9 @@
 										title={copiedUsageQuery === item.query ? 'Copied' : 'Copy query'}
 										aria-label={copiedUsageQuery === item.query ? 'Query copied' : 'Copy query'}
 									>
-										<span class="material-symbols-outlined text-[13px]">{copiedUsageQuery === item.query ? 'check' : 'content_copy'}</span>
+										<span class="material-symbols-outlined text-[13px]"
+											>{copiedUsageQuery === item.query ? 'check' : 'content_copy'}</span
+										>
 									</button>
 								</div>
 								<div
@@ -1403,17 +1353,20 @@
 								{#if selectedColumn && 'is_selected' in item}
 									<div class="mt-2 flex flex-wrap gap-1.5">
 										{#if item.is_selected}
-											<span class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-primary"
+											<span
+												class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-primary"
 												>Selected</span
 											>
 										{/if}
 										{#if item.is_condition}
-											<span class="rounded bg-tertiary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tertiary"
+											<span
+												class="rounded bg-tertiary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tertiary"
 												>Filter</span
 											>
 										{/if}
 										{#if item.is_condition_foreign}
-											<span class="rounded bg-secondary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-secondary"
+											<span
+												class="rounded bg-secondary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-secondary"
 												>Join</span
 											>
 										{/if}
@@ -1454,15 +1407,10 @@
 		box-shadow: 0 0 0 2px rgba(79, 219, 200, 0.12);
 	}
 
-	.control-field select option {
-		background: var(--color-surface-container);
-		color: var(--color-on-surface);
-	}
-
 	.schema-scroll {
 		cursor: grab;
-		height: calc(100vh - 190px);
-		min-height: 560px;
+		height: calc(100dvh - 290px);
+		min-height: 360px;
 		overflow: hidden;
 		background:
 			linear-gradient(var(--color-outline-variant) 1px, transparent 1px),
@@ -1478,6 +1426,7 @@
 	}
 
 	.schema-scroll.panning .schema-table {
+		contain: layout style;
 		cursor: grabbing;
 	}
 
@@ -1642,7 +1591,7 @@
 
 	.column-row {
 		align-items: center;
-		border-bottom: 1px solid rgba(60, 73, 71, 0.45);
+		border-bottom: 1px solid var(--color-outline-variant);
 		display: flex;
 		gap: 8px;
 		min-height: 36px;
