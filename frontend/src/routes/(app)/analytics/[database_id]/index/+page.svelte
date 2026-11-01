@@ -1,10 +1,17 @@
 <script lang="ts">
+	import { DEFAULT_ANALYTICS_PRESET } from '$lib/timeRange';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
 	import { selectedServerId } from '$lib/stores/selectedServer';
-	import { listDatabases, listServers, getIndexAnalytics, formatBytes, formatNumber } from '$lib/api';
+	import {
+		listDatabases,
+		listServers,
+		getIndexAnalytics,
+		formatBytes,
+		formatNumber
+	} from '$lib/api';
 	import { sortIndexItems } from '$lib/indexSorting';
 	import type { IndexOrderBy, IndexOrderDir } from '$lib/indexSorting';
 	import type {
@@ -15,7 +22,6 @@
 		ServerListItem
 	} from '$lib/api';
 
-	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -24,7 +30,7 @@
 	let loading = $state(true);
 	let error = $state('');
 
-	let preset = $state<AnalyticsPreset>('1w');
+	let preset = $state<AnalyticsPreset>(DEFAULT_ANALYTICS_PRESET);
 	let startDate = $state('');
 	let endDate = $state('');
 	let selectedTableIds = $state<number[]>([]);
@@ -63,13 +69,6 @@
 		'#84cc16'
 	];
 
-	
-	function toInputDate(iso: string): string {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return '';
-		return d.toISOString().slice(0, 16);
-	}
-
 	function fromInputDate(value: string): string {
 		if (!value) return '';
 		return new Date(value).toISOString();
@@ -89,10 +88,6 @@
 		return table.schema_name === 'public' ? name : `${table.schema_name}.${name}`;
 	}
 
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
-	}
-
 	function toggleSort(field: IndexOrderBy) {
 		if (orderBy === field) {
 			orderDir = orderDir === 'desc' ? 'asc' : 'desc';
@@ -110,7 +105,9 @@
 	}
 
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
 	function buildFiltersQueryString(): string {
@@ -174,16 +171,6 @@
 		return `/analytics/${databaseId}/index${queryString ? `?${queryString}` : ''}`;
 	}
 
-	async function selectServer(serverId: string) {
-		selectedServer = serverId;
-		selectedServerId.set(serverId);
-		const database = databases.find((item) => item.server_id === serverId);
-		if (database && database.id !== selectedDb?.id) {
-			await selectDatabase(database, true);
-		}
-	}
-
-	
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
@@ -295,7 +282,6 @@
 		}
 	}
 
-	
 	let filteredIndexes = $derived.by(() => {
 		const currentData = data;
 		if (!currentData) return [];
@@ -328,7 +314,6 @@
 		);
 	});
 
-	
 	let timelineChartWidth = $state(0);
 	const timelineChartHeight = 260;
 	const padding = { top: 16, right: 48, bottom: 40, left: 56 };
@@ -410,7 +395,6 @@
 		return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 	});
 
-	
 	let sortedItems = $derived.by(() => {
 		const currentData = data;
 		if (!currentData) return [];
@@ -441,9 +425,8 @@
 	}
 </script>
 
-
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">speed</span>
@@ -461,7 +444,6 @@
 		Refresh
 	</button>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
@@ -505,43 +487,8 @@
 			</p>
 		</div>
 	{:else}
-		
-		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-				<select
-					value={selectedServer}
-					onchange={(event) => selectServer(eventValue(event))}
-					disabled={servers.length <= 1}
-					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each servers as server}
-						<option value={server.id}>{server.name}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-				<select
-					value={selectedDb?.id ?? ''}
-					onchange={(event) => {
-						const database = databases.find((item) => item.id === eventValue(event));
-						if (database) selectDatabase(database, true);
-					}}
-					disabled={serverDatabases.length <= 1}
-					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each serverDatabases as db}
-						<option value={db.id}>{db.name}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
-
-		
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
-				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -564,7 +511,6 @@
 					</div>
 				</div>
 
-				
 				{#if preset === 'custom'}
 					<div class="flex flex-col gap-2">
 						<span
@@ -596,7 +542,6 @@
 					</button>
 				{/if}
 
-				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -639,13 +584,13 @@
 										class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface-variant text-xs text-on-surface"
 									>
 										<input
-											type="checkbox"
+											type="checkbox" role="switch"
 											checked={selectedTableIds.includes(table.id)}
 											onchange={() => {
 												toggleTable(table.id);
 												applyFilters();
 											}}
-											class="accent-primary w-3.5 h-3.5"
+											
 										/>
 										<span class="truncate">{displayTableName(table)}</span>
 									</label>
@@ -670,7 +615,6 @@
 					{/if}
 				</div>
 
-				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -713,13 +657,13 @@
 										class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface-variant text-xs text-on-surface"
 									>
 										<input
-											type="checkbox"
+											type="checkbox" role="switch"
 											checked={selectedIndexIds.includes(idx.id)}
 											onchange={() => {
 												toggleIndex(idx.id);
 												applyFilters();
 											}}
-											class="accent-primary w-3.5 h-3.5"
+											
 										/>
 										<span class="truncate"
 											>{idx.index_name}
@@ -752,7 +696,6 @@
 					{/if}
 				</div>
 
-				
 				<div class="flex flex-col gap-2 min-w-[16rem]">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -778,7 +721,6 @@
 				</div>
 			</div>
 
-			
 			{#if selectedTableIds.length > 0 || selectedIndexIds.length > 0}
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					{#each selectedTableIds as tableId}
@@ -821,7 +763,6 @@
 			{/if}
 		</section>
 
-		
 		{#if data}
 			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
 				<div class="rounded-lg border border-outline-variant bg-surface-container p-4">
@@ -875,7 +816,6 @@
 			</div>
 		{/if}
 
-		
 		<section
 			class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden mb-6"
 		>
@@ -962,7 +902,6 @@
 						onmousemove={handleTimelineMouseMove}
 						onmouseleave={handleTimelineMouseLeave}
 					>
-						
 						{#each [0, 0.25, 0.5, 0.75, 1] as tick}
 							{@const y = padding.top + tick * (timelineChartHeight - padding.top - padding.bottom)}
 							<line
@@ -975,7 +914,6 @@
 							/>
 						{/each}
 
-						
 						{#if data.timeline.length > 0}
 							{#each [0, Math.floor((data.timeline.length - 1) / 2), data.timeline.length - 1] as idx}
 								{@const x = xScale(idx, data.timeline.length)}
@@ -989,7 +927,6 @@
 							{/each}
 						{/if}
 
-						
 						{#if timelineSizePoints.length > 0}
 							{@const maxSize = Math.max(...data.timeline.map((p) => p.total_size_bytes), 1)}
 							<text
@@ -1006,7 +943,6 @@
 							>
 						{/if}
 
-						
 						<text
 							x={timelineChartWidth - padding.right + 8}
 							y={padding.top + 4}
@@ -1020,13 +956,11 @@
 							class="text-[10px] fill-amber-500">0%</text
 						>
 
-						
 						<path d={timelineSizePath} fill="none" stroke={colors[0]} stroke-width="2" />
 						{#each timelineSizePoints as pt}
 							<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
 						{/each}
 
-						
 						<path
 							d={timelineHitRatePath}
 							fill="none"
@@ -1038,7 +972,6 @@
 							<circle cx={pt.x} cy={pt.y} r="3" fill="#f59e0b" />
 						{/each}
 
-						
 						{#if timelineHoverIndex !== null}
 							{@const x = xScale(timelineHoverIndex, data.timeline.length)}
 							<line
@@ -1053,7 +986,6 @@
 						{/if}
 					</svg>
 
-					
 					{#if timelineHoverIndex !== null}
 						{@const point = data.timeline[timelineHoverIndex]}
 						<div
@@ -1081,7 +1013,6 @@
 			</div>
 		</section>
 
-		
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -1126,34 +1057,106 @@
 					<table class="w-full text-left text-sm">
 						<thead class="bg-surface-container-high text-on-surface-variant text-xs uppercase">
 							<tr>
-								<th aria-sort={orderBy === 'index_name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('index_name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Index <span class="material-symbols-outlined text-[14px]">{sortIcon('index_name')}</span>
+								<th
+									aria-sort={orderBy === 'index_name'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('index_name')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Index <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('index_name')}</span
+										>
 									</button>
 								</th>
-								<th aria-sort={orderBy === 'table_name' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('table_name')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Table <span class="material-symbols-outlined text-[14px]">{sortIcon('table_name')}</span>
+								<th
+									aria-sort={orderBy === 'table_name'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('table_name')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Table <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('table_name')}</span
+										>
 									</button>
 								</th>
-								<th aria-sort={orderBy === 'index_type' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('index_type')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Type <span class="material-symbols-outlined text-[14px]">{sortIcon('index_type')}</span>
+								<th
+									aria-sort={orderBy === 'index_type'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('index_type')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Type <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('index_type')}</span
+										>
 									</button>
 								</th>
-								<th aria-sort={orderBy === 'size' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('size')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Size <span class="material-symbols-outlined text-[14px]">{sortIcon('size')}</span>
+								<th
+									aria-sort={orderBy === 'size'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('size')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Size <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('size')}</span
+										>
 									</button>
 								</th>
-								<th aria-sort={orderBy === 'scans' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('scans')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Scans <span class="material-symbols-outlined text-[14px]">{sortIcon('scans')}</span>
+								<th
+									aria-sort={orderBy === 'scans'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('scans')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Scans <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('scans')}</span
+										>
 									</button>
 								</th>
-								<th aria-sort={orderBy === 'hit_rate' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'} class="px-4 py-3 font-semibold">
-									<button onclick={() => toggleSort('hit_rate')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-										Hit Rate <span class="material-symbols-outlined text-[14px]">{sortIcon('hit_rate')}</span>
+								<th
+									aria-sort={orderBy === 'hit_rate'
+										? orderDir === 'asc'
+											? 'ascending'
+											: 'descending'
+										: 'none'}
+									class="px-4 py-3 font-semibold"
+								>
+									<button
+										onclick={() => toggleSort('hit_rate')}
+										class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+									>
+										Hit Rate <span class="material-symbols-outlined text-[14px]"
+											>{sortIcon('hit_rate')}</span
+										>
 									</button>
 								</th>
 								<th class="px-4 py-3 font-semibold">Attributes</th>

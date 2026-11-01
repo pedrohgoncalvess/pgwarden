@@ -33,7 +33,9 @@
 	const databaseId = $derived($page.params.database_id ?? '');
 
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
 	const counts = $derived({
@@ -49,26 +51,6 @@
 		{ value: 'resolved', label: 'Resolved' },
 		{ value: 'all', label: 'All' }
 	];
-
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
-	}
-
-	async function selectServer(serverId: string) {
-		selectedServer = serverId;
-		selectedServerId.set(serverId);
-		const database = databases.find((item) => item.server_id === serverId);
-		if (database && database.id !== selectedDb?.id) {
-			await selectDatabase(database, true);
-		}
-	}
-
-	async function selectDatabase(database: DatabaseListItem, replace = false) {
-		if (replace) {
-			await goto(`/analytics/${database.id}/recommendations`, { replaceState: true });
-		}
-		await loadData(database);
-	}
 
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
@@ -156,7 +138,7 @@
 
 <!-- Fixed Header -->
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">tips_and_updates</span>
@@ -218,45 +200,14 @@
 		</div>
 	{:else}
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-			<div class="flex flex-wrap items-center gap-3">
-				<label class="flex items-center gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-					<select
-						value={selectedServer}
-						onchange={(event) => selectServer(eventValue(event))}
-						disabled={servers.length <= 1}
-						class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
-					>
-						{#each servers as server}
-							<option value={server.id}>{server.name}</option>
-						{/each}
-					</select>
-				</label>
-				<label class="flex items-center gap-2">
-					<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-					<select
-						value={selectedDb?.id ?? ''}
-						onchange={(event) => {
-							const database = databases.find((item) => item.id === eventValue(event));
-							if (database) selectDatabase(database, true);
-						}}
-						disabled={serverDatabases.length <= 1}
-						class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
-					>
-						{#each serverDatabases as db}
-							<option value={db.id}>{db.name}</option>
-						{/each}
-					</select>
-				</label>
-			</div>
-
 			<div
 				class="flex max-w-full items-center gap-2 overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-1"
 			>
 				{#each statuses as option}
 					<button
 						onclick={() => selectStatus(option.value)}
-						class="shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition {status === option.value
+						class="shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition {status ===
+						option.value
 							? 'bg-primary text-on-primary shadow-sm'
 							: 'text-on-surface-variant hover:bg-surface-container-highest'}"
 					>
@@ -331,4 +282,3 @@
 		{/if}
 	{/if}
 </div>
-

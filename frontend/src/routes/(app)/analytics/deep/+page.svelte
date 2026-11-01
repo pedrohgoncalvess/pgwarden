@@ -8,7 +8,7 @@
 	onMount(async () => {
 		try {
 			const databases = await listDatabases();
-			await goto(databases.length ? `/analytics/${databases[0].id}/deep` : '/servers', {
+			await goto(databases.length ? `/analytics/${databases[0].id}/deep` : '/settings/servers', {
 				replaceState: true
 			});
 		} catch (err: any) {

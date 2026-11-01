@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { DEFAULT_ANALYTICS_PRESET } from '$lib/timeRange';
+	import Select from '$lib/components/Select.svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { selectedDatabaseId } from '$lib/stores/selectedDatabase';
@@ -15,7 +17,6 @@
 		ServerListItem
 	} from '$lib/api';
 
-	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -23,8 +24,15 @@
 	let data = $state<QueryAnalyticsResponse | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	let activeRequest: AbortController | undefined;
+	let disposed = false;
 
-	let preset = $state<AnalyticsPreset>('1w');
+	onDestroy(() => {
+		disposed = true;
+		activeRequest?.abort();
+	});
+
+	let preset = $state<AnalyticsPreset>(DEFAULT_ANALYTICS_PRESET);
 	let startDate = $state('');
 	let endDate = $state('');
 	let selectedUser = $state('');
@@ -34,8 +42,6 @@
 	let excludeTerm = $state('rollback, commit, begin');
 	let orderBy = $state<QueryOrderBy>('executions');
 	let orderDir = $state<QueryOrderDir>('desc');
-
-
 
 	let expandedQuery = $state<string | null>(null);
 	let pageOffset = $state(0);
@@ -63,13 +69,6 @@
 		'#ec4899',
 		'#84cc16'
 	];
-
-	
-	function toInputDate(iso: string): string {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return '';
-		return d.toISOString().slice(0, 16);
-	}
 
 	function fromInputDate(value: string): string {
 		if (!value) return '';
@@ -161,17 +160,18 @@
 				.join(', ');
 		}
 		const orderParam = params.get('order_by');
-		if (orderParam === 'executions' || orderParam === 'avg_duration' || orderParam === 'max_duration' || orderParam === 'total_duration') {
+		if (
+			orderParam === 'executions' ||
+			orderParam === 'avg_duration' ||
+			orderParam === 'max_duration' ||
+			orderParam === 'total_duration'
+		) {
 			orderBy = orderParam;
 		}
 		const dirParam = params.get('order_dir');
 		if (dirParam === 'asc' || dirParam === 'desc') {
 			orderDir = dirParam;
 		}
-	}
-
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
 	}
 	function toggleSort(field: QueryOrderBy) {
 		if (orderBy === field) {
@@ -188,23 +188,15 @@
 		return orderDir === 'desc' ? 'arrow_downward' : 'arrow_upward';
 	}
 
-
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
 	function analyticsHref(databaseId: string): string {
 		const queryString = buildFiltersQueryString();
 		return `/analytics/${databaseId}/query${queryString ? `?${queryString}` : ''}`;
-	}
-
-	async function selectServer(serverId: string) {
-		selectedServer = serverId;
-		selectedServerId.set(serverId);
-		const database = databases.find((item) => item.server_id === serverId);
-		if (database && database.id !== selectedDb?.id) {
-			await selectDatabase(database, true);
-		}
 	}
 
 	async function copyToClipboard(text: string) {
@@ -259,8 +251,10 @@
 		};
 	}
 
-	
 	async function loadData(database: DatabaseListItem) {
+		if (disposed) return;
+		activeRequest?.abort();
+		const request = (activeRequest = new AbortController());
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
 		selectedServer = database.server_id;
@@ -269,7 +263,7 @@
 		error = '';
 		pageOffset = 0;
 		try {
-			const options: Parameters<typeof getQueryAnalytics>[1] = {};
+			const options: Parameters<typeof getQueryAnalytics>[1] = { signal: request.signal };
 			if (preset === 'custom') {
 				options.startDate = startDate ? fromInputDate(startDate) : undefined;
 				options.endDate = endDate ? fromInputDate(endDate) : undefined;
@@ -286,8 +280,11 @@
 			options.orderDir = orderDir;
 			options.limit = pageLimit;
 
-			data = await getQueryAnalytics(database.id, options);
+			const response = await getQueryAnalytics(database.id, options);
+			if (request.signal.aborted) return;
+			data = response;
 		} catch (err: any) {
+			if (request.signal.aborted) return;
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
 				window.location.href = '/login';
@@ -296,7 +293,7 @@
 			error = err.message || 'Failed to load query analytics.';
 			data = null;
 		} finally {
-			loading = false;
+			if (!request.signal.aborted) loading = false;
 		}
 	}
 
@@ -316,10 +313,7 @@
 
 	async function applyFilters() {
 		if (!selectedDb) return;
-		// Prevent each filter change from becoming a browser-history entry.
-		const queryString = buildFiltersQueryString();
-		const target = `/analytics/${selectedDb.id}/query${queryString ? `?${queryString}` : ''}`;
-		await goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+		void syncFiltersUrl();
 		await loadData(selectedDb);
 	}
 
@@ -329,6 +323,7 @@
 			error = '';
 			readFiltersFromUrl();
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
+			if (disposed) return;
 			if (databases.length === 0) {
 				return;
 			}
@@ -350,13 +345,12 @@
 			}
 			error = err.message || 'Failed to load databases.';
 		} finally {
-			loading = false;
+			if (!activeRequest && !disposed) loading = false;
 		}
 	}
 
 	onMount(() => load());
 
-	
 	let kpis = $derived(computeKpis(data));
 
 	let paginatedItems = $derived.by(() => {
@@ -375,7 +369,6 @@
 		pageOffset = next;
 	}
 
-	
 	let timelineChartWidth = $state(0);
 	const timelineChartHeight = 260;
 	const padding = { top: 16, right: 48, bottom: 40, left: 56 };
@@ -430,7 +423,6 @@
 		timelineHoverIndex = null;
 	}
 
-	
 	let timelineExecutions = $derived.by(() => {
 		const currentData = data;
 		if (!currentData || currentData.timeline.length === 0) return [];
@@ -463,7 +455,6 @@
 		};
 	});
 
-	
 	let topQueries = $derived.by(() => {
 		if (!data) return [];
 		return data.items.slice(0, 5);
@@ -503,7 +494,6 @@
 		}));
 	});
 
-	
 	let userDistribution = $derived.by(() => {
 		if (!data) return [];
 		const dist = new Map<string, number>();
@@ -542,9 +532,8 @@
 	});
 </script>
 
-
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">search</span>
@@ -562,7 +551,6 @@
 		Refresh
 	</button>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
@@ -606,40 +594,6 @@
 			</p>
 		</div>
 	{:else}
-		
-		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-				<select
-					value={selectedServer}
-					onchange={(event) => selectServer(eventValue(event))}
-					disabled={servers.length <= 1}
-					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each servers as server}
-						<option value={server.id}>{server.name}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-				<select
-					value={selectedDb?.id ?? ''}
-					onchange={(event) => {
-						const database = databases.find((item) => item.id === eventValue(event));
-						if (database) selectDatabase(database, true);
-					}}
-					disabled={serverDatabases.length <= 1}
-					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each serverDatabases as db}
-						<option value={db.id}>{db.name}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
-
-		
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
 				<div class="flex flex-col gap-2">
@@ -694,15 +648,18 @@
 							class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
 							>User</span
 						>
-						<select
+						<Select
 							bind:value={selectedUser}
-							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
-						>
-							<option value="">All users</option>
-							{#each data.filters.users as u}
-								<option value={u ?? ''}>{formatFilterLabel(u)}</option>
-							{/each}
-						</select>
+							class="min-w-[8rem]"
+							aria-label="User"
+							options={[
+								{ value: '', label: 'All users' },
+								...data.filters.users.map((item) => ({
+									value: item ?? '',
+									label: formatFilterLabel(item)
+								}))
+							]}
+						/>
 					</div>
 				{/if}
 
@@ -712,15 +669,18 @@
 							class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
 							>Application</span
 						>
-						<select
+						<Select
 							bind:value={selectedApplication}
-							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
-						>
-							<option value="">All apps</option>
-							{#each data.filters.applications as a}
-								<option value={a ?? ''}>{formatFilterLabel(a)}</option>
-							{/each}
-						</select>
+							class="min-w-[8rem]"
+							aria-label="Application"
+							options={[
+								{ value: '', label: 'All apps' },
+								...data.filters.applications.map((item) => ({
+									value: item ?? '',
+									label: formatFilterLabel(item)
+								}))
+							]}
+						/>
 					</div>
 				{/if}
 
@@ -730,15 +690,18 @@
 							class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
 							>State</span
 						>
-						<select
+						<Select
 							bind:value={selectedState}
-							class="bg-surface-container-high border border-outline-variant rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-primary focus:outline-none min-w-[8rem]"
-						>
-							<option value="">All states</option>
-							{#each data.filters.states as s}
-								<option value={s ?? ''}>{formatFilterLabel(s)}</option>
-							{/each}
-						</select>
+							class="min-w-[8rem]"
+							aria-label="Query state"
+							options={[
+								{ value: '', label: 'All states' },
+								...data.filters.states.map((item) => ({
+									value: item ?? '',
+									label: formatFilterLabel(item)
+								}))
+							]}
+						/>
 					</div>
 				{/if}
 
@@ -779,7 +742,6 @@
 			</div>
 		</section>
 
-		
 		<section class="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 			<div class="rounded-lg border border-outline-variant bg-surface-container p-4">
 				<p
@@ -836,9 +798,7 @@
 			</div>
 		</section>
 
-		
 		<div class="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden"
 			>
@@ -889,7 +849,7 @@
 						>
 							{#if data && data.timeline.length > 0}
 								{@const maxExec = Math.max(...data.timeline.map((p) => p.execution_count), 1)}
-								
+
 								{#each [0, 0.25, 0.5, 0.75, 1] as tick}
 									{@const value = Math.round(maxExec * (1 - tick))}
 									{@const y = yScale(value, maxExec)}
@@ -909,7 +869,6 @@
 									>
 								{/each}
 
-								
 								{#each [0, Math.floor((data.timeline.length - 1) / 2), data.timeline.length - 1] as idx}
 									{@const x = xScale(idx, data.timeline.length)}
 									<text
@@ -921,13 +880,13 @@
 									>
 								{/each}
 
-								
 								<path d={timelinePath} fill="none" stroke={colors[0]} stroke-width="2" />
-								{#each timelineExecutions as pt}
-									<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
-								{/each}
+								{#if timelineExecutions.length <= 200}
+									{#each timelineExecutions as pt}
+										<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
+									{/each}
+								{/if}
 
-								
 								{#if timelineHoverIndex !== null && timelineTooltip}
 									<line
 										x1={timelineTooltip.x}
@@ -973,7 +932,6 @@
 				</div>
 			</section>
 
-			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden"
 			>
@@ -1111,7 +1069,6 @@
 				</div>
 			</section>
 
-			
 			<section
 				class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden lg:col-span-2"
 			>
@@ -1200,7 +1157,6 @@
 			</section>
 		</div>
 
-		
 		<section class="overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -1223,35 +1179,71 @@
 								>QUERY</th
 							>
 							<th
-								aria-sort={orderBy === 'executions' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+								aria-sort={orderBy === 'executions'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 							>
-								<button onclick={() => toggleSort('executions')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-									EXECUTIONS <span class="material-symbols-outlined text-[14px]">{sortIcon('executions')}</span>
+								<button
+									onclick={() => toggleSort('executions')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+								>
+									EXECUTIONS <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('executions')}</span
+									>
 								</button>
 							</th>
 							<th
-								aria-sort={orderBy === 'avg_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+								aria-sort={orderBy === 'avg_duration'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 							>
-								<button onclick={() => toggleSort('avg_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-									AVG DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('avg_duration')}</span>
+								<button
+									onclick={() => toggleSort('avg_duration')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+								>
+									AVG DURATION <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('avg_duration')}</span
+									>
 								</button>
 							</th>
 							<th
-								aria-sort={orderBy === 'max_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+								aria-sort={orderBy === 'max_duration'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 							>
-								<button onclick={() => toggleSort('max_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-									MAX DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('max_duration')}</span>
+								<button
+									onclick={() => toggleSort('max_duration')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+								>
+									MAX DURATION <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('max_duration')}</span
+									>
 								</button>
 							</th>
 							<th
-								aria-sort={orderBy === 'total_duration' ? (orderDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+								aria-sort={orderBy === 'total_duration'
+									? orderDir === 'asc'
+										? 'ascending'
+										: 'descending'
+									: 'none'}
 								class="px-4 py-3 font-label-caps text-on-surface-variant text-[10px] tracking-widest"
 							>
-								<button onclick={() => toggleSort('total_duration')} class="inline-flex items-center gap-1 hover:text-primary cursor-pointer">
-									TOTAL DURATION <span class="material-symbols-outlined text-[14px]">{sortIcon('total_duration')}</span>
+								<button
+									onclick={() => toggleSort('total_duration')}
+									class="inline-flex items-center gap-1 hover:text-primary cursor-pointer"
+								>
+									TOTAL DURATION <span class="material-symbols-outlined text-[14px]"
+										>{sortIcon('total_duration')}</span
+									>
 								</button>
 							</th>
 							<th
@@ -1419,7 +1411,6 @@
 				</table>
 			</div>
 
-			
 			{#if data && data.items.length > pageLimit}
 				<div class="flex items-center justify-between border-t border-outline-variant px-4 py-3">
 					<button
