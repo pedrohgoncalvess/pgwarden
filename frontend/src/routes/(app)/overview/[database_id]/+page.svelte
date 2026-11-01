@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Select from '$lib/components/Select.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { page } from '$app/stores';
@@ -52,8 +53,26 @@
 	let serverMetricsEventSource = $state<EventSource | null>(null);
 	let serviceHealth = $state<HealthResponse | null>(null);
 	let quickActionsOpen = $state(false);
+	let lastUpdated = $state<Date | null>(null);
+	let failedStreams = $state<string[]>([]);
+	let unavailableStreams = $state<string[]>([]);
+	let connectedStreams = $state<string[]>([]);
+	const streamError = $derived(failedStreams.length > 0);
+	const streamWarning = $derived(streamError || unavailableStreams.length > 0);
+	let paused = $state(false);
+	let disposed = false;
+	let loadSequence = 0;
+	let loadController: AbortController | null = null;
+	const activeSessionCount = $derived(
+		sessions?.filter((session) => session.state === 'active').length ?? 0
+	);
+	const waitingLockCount = $derived(locks?.filter((lock) => lock.is_granted === false).length ?? 0);
+	const activeQueries = $derived(
+		[...(nativeQueries ?? [])]
+			.filter((query) => query.state === 'active' && Boolean(query.query))
+			.sort((a, b) => (b.query_duration_ms ?? 0) - (a.query_duration_ms ?? 0))
+	);
 
-	
 	let lockTooltip = $state<{ text: string; x: number; y: number } | null>(null);
 
 	function getLockExplanation(mode: string): string {
@@ -90,17 +109,15 @@
 		lockTooltip = null;
 	}
 
-	
 	let showServerModal = $state(false);
 	let showDbModal = $state(false);
 	let overviewHelpOpen = $state(false);
 	let createdServerId = $state<string>('');
 	let servers = $state<ServerListItem[]>([]);
 	const serverName = $derived(
-		selectedDb ? servers.find((s) => s.id === selectedDb!.server_id)?.name ?? '' : ''
+		selectedDb ? (servers.find((s) => s.id === selectedDb!.server_id)?.name ?? '') : ''
 	);
 
-	
 	let srvName = $state('');
 	let srvHost = $state('');
 	let srvPort = $state('5432');
@@ -111,13 +128,14 @@
 	let testing = $state(false);
 	let creatingServer = $state(false);
 
-	
 	let dbServerId = $state('');
 	let dbName = $state('');
 	let creatingDb = $state(false);
 	let dbError = $state('');
 
 	function clearDatabaseContext() {
+		closeStreams();
+		lastUpdated = null;
 		selectedDb = null;
 		stats = null;
 		uptime = null;
@@ -151,10 +169,16 @@
 	}
 
 	async function loadDashboard() {
+		const sequence = ++loadSequence;
+		loadController?.abort();
+		const controller = new AbortController();
+		loadController = controller;
 		try {
-			loading = true;
+			loading = !selectedDb;
 			error = '';
-			[databases, servers] = await Promise.all([listDatabases(), listServers()]);
+			const catalog = await Promise.all([listDatabases(), listServers()]);
+			if (disposed || sequence !== loadSequence) return;
+			[databases, servers] = catalog;
 
 			if (databases.length === 0) {
 				clearDatabaseContext();
@@ -171,23 +195,49 @@
 			const dbId = selectedDb.id;
 
 			const [metricsSummary, health] = await Promise.all([
-				getDatabaseMetricsSummary(dbId),
+				getDatabaseMetricsSummary(dbId, controller.signal),
 				getServiceHealth().catch(() => null)
 			]);
+			if (disposed || sequence !== loadSequence) return;
 			stats = metricsSummary.stats;
 			uptime = metricsSummary.uptime;
 			serviceHealth = health;
-			connectStreams(selectedDb);
+			if (document.visibilityState === 'visible') connectStreams(selectedDb);
 		} catch (err: any) {
+			if (disposed || sequence !== loadSequence) return;
 			if (err.message?.includes('401')) {
 				localStorage.removeItem('token');
 				window.location.href = '/login';
 				return;
 			}
-			clearDatabaseContext();
+			if (!stats) clearDatabaseContext();
 			error = err.message || 'Failed to load dashboard data.';
 		} finally {
-			loading = false;
+			if (!disposed && sequence === loadSequence) loading = false;
+		}
+	}
+
+	function trackStream(source: EventSource, name: string, events: string[]) {
+		const connected = () => {
+			failedStreams = failedStreams.filter((item) => item !== name);
+			connectedStreams = [...new Set([...connectedStreams, name])];
+		};
+		source.onopen = connected;
+		source.onerror = (event) => {
+			// Named API errors report collection failures, not transport disconnects.
+			if (event instanceof MessageEvent) {
+				unavailableStreams = [...new Set([...unavailableStreams, name])];
+			} else {
+				connectedStreams = connectedStreams.filter((item) => item !== name);
+				failedStreams = [...new Set([...failedStreams, name])];
+			}
+		};
+		for (const event of events) {
+			source.addEventListener(event, () => {
+				connected();
+				unavailableStreams = unavailableStreams.filter((item) => item !== name);
+				lastUpdated = new Date();
+			});
 		}
 	}
 
@@ -198,16 +248,13 @@
 			try {
 				const data = JSON.parse((event as MessageEvent).data);
 				if (data.tps !== undefined) tps = data.tps;
-			} catch {
-				
-			}
+			} catch {}
 		});
-		tpsEventSource.onerror = () => {
-			
-		};
+		trackStream(tpsEventSource, 'tps', ['tps']);
 	}
 
 	function connectStreams(db: DatabaseListItem) {
+		closeStreams();
 		connectTpsStream(db.id);
 		connectSessionStream(db.id);
 		connectNativeQueryStream(db.id);
@@ -216,15 +263,12 @@
 	}
 
 	function connectSessionStream(dbId: string) {
-		sessions = null;
 		if (sessionEventSource) sessionEventSource.close();
 		sessionEventSource = createSessionEventSource(dbId);
 		sessionEventSource.addEventListener('sessions', (event) => {
 			sessions = JSON.parse((event as MessageEvent).data);
 		});
-		sessionEventSource.onerror = () => {
-			
-		};
+		trackStream(sessionEventSource, 'session', ['sessions']);
 	}
 
 	function applyNativeQuerySnapshot(rows: NativeQueryMetric[]) {
@@ -234,32 +278,24 @@
 	}
 
 	function connectNativeQueryStream(dbId: string) {
-		nativeQueries = null;
 		if (nativeQueryEventSource) nativeQueryEventSource.close();
 		nativeQueryEventSource = createNativeQueryEventSource(dbId);
 		nativeQueryEventSource.addEventListener('native_query', (event) => {
 			applyNativeQuerySnapshot(JSON.parse((event as MessageEvent).data));
 		});
-		nativeQueryEventSource.onerror = () => {
-			
-		};
+		trackStream(nativeQueryEventSource, 'nativeQuery', ['native_query']);
 	}
 
 	function connectLockStream(dbId: string) {
-		locks = null;
 		if (lockEventSource) lockEventSource.close();
 		lockEventSource = createLockEventSource(dbId);
 		lockEventSource.addEventListener('locks', (event) => {
 			locks = JSON.parse((event as MessageEvent).data);
 		});
-		lockEventSource.onerror = () => {
-			
-		};
+		trackStream(lockEventSource, 'lock', ['locks']);
 	}
 
 	function connectServerMetricsStream(serverId: string) {
-		cpuMetric = null;
-		ramMetric = null;
 		if (serverMetricsEventSource) serverMetricsEventSource.close();
 		serverMetricsEventSource = createServerMetricsEventSource(serverId);
 		serverMetricsEventSource.addEventListener('cpu', (event) => {
@@ -268,9 +304,7 @@
 		serverMetricsEventSource.addEventListener('ram', (event) => {
 			ramMetric = JSON.parse((event as MessageEvent).data);
 		});
-		serverMetricsEventSource.onerror = () => {
-			
-		};
+		trackStream(serverMetricsEventSource, 'serverMetrics', ['cpu', 'ram', 'disk', 'io']);
 	}
 
 	function formatMilliseconds(value: number | null): string {
@@ -280,12 +314,6 @@
 		if (seconds < 60) return `${seconds.toFixed(1)}s`;
 		const minutes = Math.floor(seconds / 60);
 		return `${minutes}m ${Math.round(seconds % 60)}s`;
-	}
-
-	function dashboardQueries(): NativeQueryMetric[] {
-		return [...(nativeQueries ?? [])]
-			.filter((query) => query.state === 'active' && Boolean(query.query))
-			.sort((a, b) => (b.query_duration_ms ?? 0) - (a.query_duration_ms ?? 0));
 	}
 
 	async function handleTestConnection() {
@@ -327,7 +355,7 @@
 			showServerModal = false;
 			showDbModal = true;
 			resetServerForm();
-			
+
 			servers = await listServers();
 			dbServerId = createdServerId;
 		} catch (err: any) {
@@ -380,7 +408,7 @@
 		quickActionsOpen = false;
 		if (action === 'alert') goto('/alerts/configuration');
 		if (action === 'metrics' && selectedDb) goto(`/analytics/${selectedDb.id}/data`);
-		if (action === 'docs' && selectedDb) goto(`/metadata/${selectedDb.id}/documentation`);
+		if (action === 'docs' && selectedDb) goto(`/schema/${selectedDb.id}/documentation`);
 		if (action === 'link') {
 			if (servers.length === 0) {
 				openServerModal();
@@ -403,8 +431,34 @@
 		resetDbForm();
 	}
 
+	function closeStreams() {
+		failedStreams = [];
+		unavailableStreams = [];
+		connectedStreams = [];
+		for (const source of [
+			tpsEventSource,
+			sessionEventSource,
+			nativeQueryEventSource,
+			lockEventSource,
+			serverMetricsEventSource
+		])
+			source?.close();
+	}
 	onMount(() => {
-		loadDashboard();
+		void loadDashboard();
+		const visibility = () => {
+			paused = document.visibilityState !== 'visible';
+			if (paused) closeStreams();
+			else if (selectedDb) connectStreams(selectedDb);
+		};
+		document.addEventListener('visibilitychange', visibility);
+		return () => {
+			disposed = true;
+			loadSequence++;
+			loadController?.abort();
+			document.removeEventListener('visibilitychange', visibility);
+			closeStreams();
+		};
 	});
 
 	onDestroy(() => {
@@ -415,7 +469,6 @@
 		if (serverMetricsEventSource) serverMetricsEventSource.close();
 	});
 </script>
-
 
 {#if showServerModal}
 	<div class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
@@ -540,17 +593,16 @@
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
 						for="srvSsl">SSL Mode</label
 					>
-					<select
+					<Select
 						bind:value={srvSsl}
-						class="input-technical text-code-md px-4 py-2.5 w-full mt-1.5"
+						class="w-full mt-1.5"
 						id="srvSsl"
-					>
-						<option value="prefer">prefer</option>
-						<option value="require">require</option>
-						<option value="disable">disable</option>
-						<option value="verify-ca">verify-ca</option>
-						<option value="verify-full">verify-full</option>
-					</select>
+						aria-label="SSL mode"
+						options={['prefer', 'require', 'disable', 'verify-ca', 'verify-full'].map((value) => ({
+							value,
+							label: value
+						}))}
+					/>
 				</div>
 
 				{#if testResult}
@@ -643,7 +695,6 @@
 	</div>
 {/if}
 
-
 {#if showDbModal}
 	<div class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
 		<div class="glass-panel w-full max-w-md p-8 shadow-floating">
@@ -675,16 +726,16 @@
 						class="text-xs font-bold uppercase tracking-wider text-on-surface-variant"
 						for="dbServer">Server</label
 					>
-					<select
+					<Select
 						bind:value={dbServerId}
-						class="input-technical text-code-md px-4 py-2.5 w-full mt-1.5"
+						class="w-full mt-1.5"
 						id="dbServer"
-					>
-						<option value="">Select a server...</option>
-						{#each servers as s}
-							<option value={s.id}>{s.name}</option>
-						{/each}
-					</select>
+						aria-label="Server"
+						options={[
+							{ value: '', label: 'Select a server…' },
+							...servers.map((item) => ({ value: item.id, label: item.name }))
+						]}
+					/>
 				</div>
 
 				<div>
@@ -760,16 +811,15 @@
 	</div>
 {/if}
 
-
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-4">
 		<span class="material-symbols-outlined text-primary">dns</span>
 		<div class="flex items-center gap-3">
 			<h1 class="font-headline-md text-headline-md text-on-background m-0">
 				{#if selectedDb}
-					Overview: {serverName}-{selectedDb.name}
+					Database overview
 				{:else}
 					Database Cluster
 				{/if}
@@ -790,11 +840,14 @@
 					>
 						<p class="mb-1 font-bold">What is this page?</p>
 						<p class="mb-2 text-on-surface-variant">
-							The Overview dashboard provides real-time monitoring of your PostgreSQL cluster. It displays key performance indicators like TPS (Transactions Per Second), active sessions, locking activity, and active queries.
+							The Overview dashboard provides real-time monitoring of your PostgreSQL cluster. It
+							displays key performance indicators like TPS (Transactions Per Second), active
+							sessions, locking activity, and active queries.
 						</p>
 						<p class="font-bold">Tips</p>
 						<p class="text-on-surface-variant">
-							Hover over lock types in the Activity grid for detailed explanations of what each lock mode means.
+							Hover over lock types in the Activity grid for detailed explanations of what each lock
+							mode means.
 						</p>
 					</div>
 				{/if}
@@ -812,10 +865,18 @@
 		{/if}
 		{#if selectedDb}
 			<span
-				class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-status-healthy/10 text-status-healthy border border-status-healthy/20"
+				class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold {streamWarning
+					? 'bg-status-warning/10 text-status-warning border-status-warning/20'
+					: 'bg-surface-container text-on-surface-variant border-outline-variant'} border"
 			>
-				<span class="w-1.5 h-1.5 rounded-full bg-status-healthy mr-1.5 status-pulse"></span>
-				HEALTHY
+				<span
+					class="w-1.5 h-1.5 rounded-full {streamWarning
+						? 'bg-status-warning'
+						: connectedStreams.length > 0
+							? 'bg-status-healthy'
+							: 'bg-outline'} mr-1.5"
+				></span>
+				{paused ? 'PAUSED' : streamError ? 'RECONNECTING' : unavailableStreams.length ? 'DATA UNAVAILABLE' : connectedStreams.length === 5 ? 'LIVE' : 'CONNECTING'}
 			</span>
 		{/if}
 		{#if databases.length > 0}
@@ -824,14 +885,34 @@
 				class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg font-bold text-sm duration-200 ease-in-out hover:brightness-110 active:scale-95 cursor-pointer"
 			>
 				<span class="material-symbols-outlined text-sm">sync</span>
-				Live Sync
+				Refresh
 			</button>
 		{/if}
 	</div>
 </header>
 
-
 <div class="pt-24 px-container-padding pb-12">
+	<div class="overview-intro">
+		<div>
+			<p class="eyebrow">DATABASE HEALTH</p>
+			<h2>Operational overview</h2>
+			<p>Connections, workload and contention at a glance.</p>
+		</div>
+		<p class="data-freshness" aria-live="polite">
+			{paused
+				? 'Updates paused while this tab is hidden'
+				: streamError
+					? 'Connection interrupted. Reconnecting…'
+					: unavailableStreams.length
+						? 'Some live metrics are unavailable. Retrying…'
+					: lastUpdated
+						? 'Last update ' + lastUpdated.toLocaleTimeString()
+						: 'Waiting for live metrics'}
+		</p>
+	</div>
+	{#if waitingLockCount > 0}<a class="attention-banner" href="/activity"
+			>{waitingLockCount} waiting locks require attention <span>Investigate activity →</span></a
+		>{/if}
 	{#if loading}
 		<div class="flex items-center justify-center py-12">
 			<svg
@@ -850,7 +931,6 @@
 			</svg>
 		</div>
 	{:else if databases.length === 0}
-		
 		<div class="flex flex-col items-center justify-center py-24">
 			<div
 				class="w-20 h-20 rounded-2xl bg-surface-container-high border border-outline-variant flex items-center justify-center mb-6"
@@ -879,9 +959,7 @@
 			</div>
 		{/if}
 
-		
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-panel-gap mb-panel-gap">
-			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -894,7 +972,7 @@
 					>
 					<span class="text-on-surface-variant text-[10px]">
 						{#if sessions}
-							{sessions.filter((session) => session.state === 'active').length} active
+							{activeSessionCount} active
 						{:else}
 							--
 						{/if}
@@ -908,7 +986,6 @@
 				</div>
 			</div>
 
-			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -931,7 +1008,6 @@
 				</div>
 			</div>
 
-			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -956,7 +1032,6 @@
 				</div>
 			</div>
 
-			
 			<div
 				class="bg-surface-container border border-outline-variant p-4 flex flex-col gap-1 rounded-lg"
 			>
@@ -978,9 +1053,7 @@
 			</div>
 		</div>
 
-		
 		<div class="grid grid-cols-12 gap-panel-gap">
-			
 			<div
 				class="col-span-12 lg:col-span-8 bg-surface-container border border-outline-variant rounded-lg flex flex-col overflow-hidden h-[480px]"
 			>
@@ -1041,14 +1114,14 @@
 										></td
 									>
 								</tr>
-							{:else if dashboardQueries().length === 0}
+							{:else if activeQueries.length === 0}
 								<tr>
 									<td colspan="4" class="px-4 py-20 text-center text-on-surface-variant text-sm"
 										>No active queries in the latest collector samples</td
 									>
 								</tr>
 							{:else}
-								{#each dashboardQueries() as query}
+								{#each activeQueries as query}
 									<tr class="h-[72px] hover:bg-surface-variant/20 transition-colors">
 										<td
 											class="px-4 py-3 font-code-sm text-code-sm text-on-surface-variant truncate"
@@ -1092,9 +1165,7 @@
 				</div>
 			</div>
 
-			
 			<div class="col-span-12 lg:col-span-4 h-[480px] grid grid-rows-2 gap-panel-gap">
-				
 				<div
 					class="bg-surface-container border border-outline-variant flex flex-col rounded-lg overflow-hidden"
 				>
@@ -1176,12 +1247,12 @@
 							{#if locks === null}
 								-- locks detected
 							{:else}
-								{locks.filter((lock) => lock.is_granted === false).length} waiting locks detected
+								{waitingLockCount} waiting locks detected
 							{/if}
 						</p>
 					</div>
 				</div>
-				
+
 				<div
 					class="bg-surface-container border border-outline-variant flex flex-col rounded-lg overflow-hidden"
 				>
@@ -1244,8 +1315,9 @@
 			</div>
 		</div>
 
-		
-		<div class="mt-panel-gap rounded-lg border border-outline-variant bg-surface-container-lowest p-4">
+		<div
+			class="mt-panel-gap rounded-lg border border-outline-variant bg-surface-container-lowest p-4"
+		>
 			<h2 class="mb-3 text-sm font-bold text-on-surface">PGWarden services</h2>
 			<div class="grid gap-3 sm:grid-cols-3">
 				{#each ['collector', 'analytics', 'notifier'] as service}
@@ -1253,13 +1325,23 @@
 					<div class="rounded-lg border border-outline-variant bg-surface-container p-3">
 						<div class="flex items-center justify-between gap-2">
 							<span class="capitalize text-sm font-medium text-on-surface">{service}</span>
-							<span class="flex items-center gap-1 text-xs {state?.status === 'healthy' ? 'text-status-healthy' : 'text-status-danger'}">
-								<span class="h-2 w-2 rounded-full {state?.status === 'healthy' ? 'bg-status-healthy' : 'bg-status-danger'}"></span>
+							<span
+								class="flex items-center gap-1 text-xs {state?.status === 'healthy'
+									? 'text-status-healthy'
+									: 'text-status-danger'}"
+							>
+								<span
+									class="h-2 w-2 rounded-full {state?.status === 'healthy'
+										? 'bg-status-healthy'
+										: 'bg-status-danger'}"
+								></span>
 								{state?.status ?? 'unavailable'}
 							</span>
 						</div>
 						<p class="mt-2 text-xs text-on-surface-variant">
-							{state?.updated_at ? `Last heartbeat: ${new Date(state.updated_at).toLocaleTimeString()}` : 'No heartbeat received'}
+							{state?.updated_at
+								? `Last heartbeat: ${new Date(state.updated_at).toLocaleTimeString()}`
+								: 'No heartbeat received'}
 						</p>
 					</div>
 				{/each}
@@ -1280,7 +1362,6 @@
 		{lockTooltip.text}
 	</div>
 {/if}
-
 
 {#if quickActionsOpen}
 	<button
@@ -1318,43 +1399,84 @@
 						onclick={() => runQuickAction('link')}
 						class="quick-action"
 					>
-						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">add_link</span></span>
+						<span class="quick-action-icon text-primary"
+							><span class="material-symbols-outlined">add_link</span></span
+						>
 						<span class="min-w-0 flex-1 text-left">
 							<span class="block text-sm font-semibold text-on-surface">Create link</span>
-							<span class="mt-0.5 block text-xs text-on-surface-variant">Connect your first PostgreSQL server</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant"
+								>Connect your first PostgreSQL server</span
+							>
 						</span>
 						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
 					</button>
 				{:else}
-					<button type="button" role="menuitem" onclick={() => runQuickAction('alert')} class="quick-action">
-						<span class="quick-action-icon text-error"><span class="material-symbols-outlined">add_alert</span></span>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => runQuickAction('alert')}
+						class="quick-action"
+					>
+						<span class="quick-action-icon text-error"
+							><span class="material-symbols-outlined">add_alert</span></span
+						>
 						<span class="min-w-0 flex-1 text-left">
 							<span class="block text-sm font-semibold text-on-surface">Create alert</span>
-							<span class="mt-0.5 block text-xs text-on-surface-variant">Set a monitoring threshold</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant"
+								>Set a monitoring threshold</span
+							>
 						</span>
 						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
 					</button>
-					<button type="button" role="menuitem" onclick={() => runQuickAction('metrics')} class="quick-action">
-						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">insights</span></span>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => runQuickAction('metrics')}
+						class="quick-action"
+					>
+						<span class="quick-action-icon text-primary"
+							><span class="material-symbols-outlined">insights</span></span
+						>
 						<span class="min-w-0 flex-1 text-left">
 							<span class="block text-sm font-semibold text-on-surface">Study metrics</span>
-							<span class="mt-0.5 block text-xs text-on-surface-variant">Explore performance signals</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant"
+								>Explore performance signals</span
+							>
 						</span>
 						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
 					</button>
-					<button type="button" role="menuitem" onclick={() => runQuickAction('docs')} class="quick-action">
-						<span class="quick-action-icon text-tertiary"><span class="material-symbols-outlined">menu_book</span></span>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => runQuickAction('docs')}
+						class="quick-action"
+					>
+						<span class="quick-action-icon text-tertiary"
+							><span class="material-symbols-outlined">menu_book</span></span
+						>
 						<span class="min-w-0 flex-1 text-left">
 							<span class="block text-sm font-semibold text-on-surface">Show documentation</span>
-							<span class="mt-0.5 block text-xs text-on-surface-variant">Review the current schema</span>
+							<span class="mt-0.5 block text-xs text-on-surface-variant"
+								>Review the current schema</span
+							>
 						</span>
 						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
 					</button>
-					<button type="button" role="menuitem" onclick={() => runQuickAction('link')} class="quick-action">
-						<span class="quick-action-icon text-primary"><span class="material-symbols-outlined">database</span></span>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => runQuickAction('link')}
+						class="quick-action"
+					>
+						<span class="quick-action-icon text-primary"
+							><span class="material-symbols-outlined">database</span></span
+						>
 						<span class="min-w-0 flex-1 text-left">
-							<span class="block text-sm font-semibold text-on-surface">Create link / database</span>
-							<span class="mt-0.5 block text-xs text-on-surface-variant">Add another monitored database</span>
+							<span class="block text-sm font-semibold text-on-surface">Create link / database</span
+							>
+							<span class="mt-0.5 block text-xs text-on-surface-variant"
+								>Add another monitored database</span
+							>
 						</span>
 						<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
 					</button>
@@ -1369,67 +1491,16 @@
 			aria-expanded={quickActionsOpen}
 			class="inline-flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl border border-primary/60 bg-primary text-on-primary shadow-floating transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
 		>
-			<span class="material-symbols-outlined text-[28px] transition-transform duration-200 {quickActionsOpen ? 'rotate-45' : ''}">add</span>
+			<span
+				class="material-symbols-outlined text-[28px] transition-transform duration-200 {quickActionsOpen
+					? 'rotate-45'
+					: ''}">add</span
+			>
 		</button>
 	</div>
 </div>
 
 <style>
-	.glass-panel {
-		background-color: rgba(26, 33, 31, 0.95);
-		backdrop-filter: blur(12px);
-		-webkit-backdrop-filter: blur(12px);
-		border: 1px solid rgba(133, 148, 144, 0.15);
-		border-radius: 16px;
-	}
-	.input-technical {
-		background-color: rgba(14, 21, 19, 0.8);
-		border: 1px solid rgba(133, 148, 144, 0.2);
-		color: var(--color-on-surface);
-		font-family: 'JetBrains Mono', monospace;
-		border-radius: 8px;
-		transition: all 0.3s ease;
-	}
-	.input-technical:focus {
-		border-color: var(--color-primary);
-		background-color: var(--color-surface-container-low);
-		outline: none;
-		box-shadow: 0 0 0 3px rgba(79, 219, 200, 0.15);
-	}
-	.btn-primary {
-		background: linear-gradient(
-			135deg,
-			var(--color-primary) 0%,
-			var(--color-primary-container) 100%
-		);
-		color: var(--color-on-primary-container);
-		border-radius: 8px;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow: 0 4px 14px 0 rgba(20, 184, 166, 0.39);
-	}
-	.btn-primary:hover:not(:disabled) {
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(20, 184, 166, 0.5);
-	}
-	.btn-primary:active:not(:disabled) {
-		transform: translateY(0);
-		box-shadow: 0 2px 8px rgba(20, 184, 166, 0.3);
-	}
-	.btn-secondary {
-		background: rgba(60, 73, 71, 0.6);
-		color: var(--color-on-surface);
-		border: 1px solid rgba(133, 148, 144, 0.2);
-		border-radius: 8px;
-		transition: all 0.3s ease;
-	}
-	.btn-secondary:hover:not(:disabled) {
-		background: rgba(60, 73, 71, 0.8);
-		border-color: rgba(133, 148, 144, 0.4);
-	}
-	.modal-overlay {
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(4px);
-	}
 	.quick-action {
 		display: flex;
 		width: 100%;
@@ -1437,7 +1508,9 @@
 		gap: 0.75rem;
 		border-radius: 0.75rem;
 		padding: 0.75rem;
-		transition: background-color 150ms ease, transform 150ms ease;
+		transition:
+			background-color 150ms ease,
+			transform 150ms ease;
 	}
 	.quick-action:hover {
 		background: var(--color-surface-container-highest);
