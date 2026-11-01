@@ -26,6 +26,7 @@ async def lock_stream(database_id: UUID):
     last_ts = None
 
     while True:
+        event = None
         try:
             async with DatabaseConnection() as conn:
                 db_result = await conn.execute(
@@ -33,9 +34,7 @@ async def lock_stream(database_id: UUID):
                 )
                 internal_database_id = db_result.scalar_one_or_none()
                 if internal_database_id is None:
-                    yield {"event": "error", "data": json.dumps({"error": "Database not found"})}
-                    await asyncio.sleep(2)
-                    continue
+                    raise LookupError('Database not found')
 
                 result = await conn.execute(
                     select(LockMetric)
@@ -56,7 +55,10 @@ async def lock_stream(database_id: UUID):
                     )
                     rows = rows_result.scalars().all()
                     payload = [serialize_row(r) for r in rows]
-                    yield {"event": "locks", "data": json.dumps(payload)}
+                    event = {"event": "locks", "data": json.dumps(payload)}
+
+            if event is not None:
+                yield event
 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"error": str(e)})}

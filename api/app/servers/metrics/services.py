@@ -67,9 +67,7 @@ async def server_metrics_stream(server_id: UUID):
                 )
                 internal_server_id = server_result.scalar_one_or_none()
                 if internal_server_id is None:
-                    yield {"event": "error", "data": json.dumps({"error": "Server not found"})}
-                    await asyncio.sleep(2)
-                    continue
+                    raise LookupError('Server not found')
 
                 cpu_data, last_cpu_ts = await _fetch_latest(conn, CpuMetric, internal_server_id, last_cpu_ts)
                 ram_data, last_ram_ts = await _fetch_latest(conn, RamMetric, internal_server_id, last_ram_ts)

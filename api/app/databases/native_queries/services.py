@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 import asyncpg
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select, desc
 
 from database.connection import DatabaseConnection
@@ -56,15 +57,9 @@ WHERE datid = (SELECT oid FROM pg_database WHERE datname = current_database())
 
 
 def serialize_row(row) -> dict:
-    data = {}
-    for key, value in row.__dict__.items():
-        if key.startswith("_"):
-            continue
-        if isinstance(value, datetime):
-            data[key] = value.isoformat()
-        else:
-            data[key] = value
-    return data
+    return jsonable_encoder({
+        key: value for key, value in row.__dict__.items() if not key.startswith("_")
+    })
 
 
 def serialize_record(record) -> dict:
@@ -93,6 +88,11 @@ async def get_monitored_connection_settings(database_id: UUID) -> dict | None:
         if server is None:
             return None
 
+        # Remote collectors intentionally do not send connection credentials.
+        # Their query samples are already available in the central store.
+        if server.ingestion_project_id is not None:
+            return {"snapshot_database_id": database.id}
+
         return {
             "host": decrypt(server.host),
             "port": int(decrypt(server.port)),
@@ -103,10 +103,51 @@ async def get_monitored_connection_settings(database_id: UUID) -> dict | None:
         }
 
 
+async def stored_native_query_stream(database_id: int):
+    while True:
+        try:
+            async with DatabaseConnection() as conn:
+                result = await conn.execute(
+                    select(NativeQueryMetric.collected_at)
+                    .where(NativeQueryMetric.database_id == database_id)
+                    .order_by(desc(NativeQueryMetric.collected_at))
+                    .limit(1)
+                )
+                latest = result.scalar_one_or_none()
+                payload = []
+                if latest is not None:
+                    result = await conn.execute(
+                        select(NativeQueryMetric)
+                        .where(
+                            NativeQueryMetric.database_id == database_id,
+                            NativeQueryMetric.collected_at == latest,
+                        )
+                        .order_by(NativeQueryMetric.pid, NativeQueryMetric.backend_start)
+                    )
+                    payload = [serialize_row(row) for row in result.scalars().all()]
+
+            # Yield after releasing the pooled connection: protect_stream needs
+            # its own session to recheck access before delivering the snapshot.
+            yield {"event": "native_query", "data": json.dumps(payload)}
+        except Exception as error:
+            yield {"event": "error", "data": json.dumps({"error": str(error)})}
+
+        await asyncio.sleep(2)
+
+
 async def native_query_stream(database_id: UUID):
     settings = await get_monitored_connection_settings(database_id)
     if settings is None:
         yield {"event": "error", "data": json.dumps({"error": "Database not found"})}
+        return
+
+    if "snapshot_database_id" in settings:
+        source = stored_native_query_stream(settings["snapshot_database_id"])
+        try:
+            async for event in source:
+                yield event
+        finally:
+            await source.aclose()
         return
 
     monitored_conn = None

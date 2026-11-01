@@ -1,8 +1,8 @@
 import asyncio
 import json
-from datetime import datetime
 from uuid import UUID
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select, desc
 
 from database.connection import DatabaseConnection
@@ -11,21 +11,16 @@ from database.models.metric.session import SessionMetric
 
 
 def serialize_row(row) -> dict:
-    data = {}
-    for key, value in row.__dict__.items():
-        if key.startswith("_"):
-            continue
-        if isinstance(value, datetime):
-            data[key] = value.isoformat()
-        else:
-            data[key] = value
-    return data
+    return jsonable_encoder({
+        key: value for key, value in row.__dict__.items() if not key.startswith("_")
+    })
 
 
 async def session_stream(database_id: UUID):
     last_ts = None
 
     while True:
+        event = None
         try:
             async with DatabaseConnection() as conn:
                 db_result = await conn.execute(
@@ -33,9 +28,7 @@ async def session_stream(database_id: UUID):
                 )
                 internal_database_id = db_result.scalar_one_or_none()
                 if internal_database_id is None:
-                    yield {"event": "error", "data": json.dumps({"error": "Database not found"})}
-                    await asyncio.sleep(2)
-                    continue
+                    raise LookupError('Database not found')
 
                 result = await conn.execute(
                     select(SessionMetric)
@@ -56,7 +49,10 @@ async def session_stream(database_id: UUID):
                     )
                     rows = rows_result.scalars().all()
                     payload = [serialize_row(r) for r in rows]
-                    yield {"event": "sessions", "data": json.dumps(payload)}
+                    event = {"event": "sessions", "data": json.dumps(payload)}
+
+            if event is not None:
+                yield event
 
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"error": str(e)})}
