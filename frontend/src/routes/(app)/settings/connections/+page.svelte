@@ -44,14 +44,12 @@
 	onMount(() => load());
 </script>
 
-
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
 >
 	<span class="material-symbols-outlined text-on-surface-variant">settings</span>
 	<h1 class="font-headline-md text-headline-md text-on-background m-0">Settings</h1>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if loading}
@@ -128,15 +126,3 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	.settings-card {
-		background: rgba(26, 33, 31, 0.95);
-		border: 1px solid rgba(133, 148, 144, 0.15);
-		border-radius: 14px;
-	}
-	.modal-overlay {
-		background: rgba(0, 0, 0, 0.65);
-		backdrop-filter: blur(5px);
-	}
-</style>
