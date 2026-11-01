@@ -190,9 +190,11 @@ async def test_notification_only_after_dispatch(make_alert):
     
     with patch("notifier.services.evaluator.fetch_rules", mock_fetch_rules), \
          patch("notifier.services.evaluator.fetch_channels", mock_fetch_channels), \
+         patch("notifier.services.evaluator.touch_heartbeat", new_callable=AsyncMock), \
+         patch("notifier.services.evaluator._consume_force_run", new_callable=AsyncMock, return_value=False), \
          patch("notifier.services.evaluator.build_channels", return_value=[]), \
          patch("notifier.services.evaluator.insert_notification", new_callable=AsyncMock) as mock_insert:
          
-        await evaluator.run_forever(mock_connect)
+        await asyncio.wait_for(evaluator.run_forever(mock_connect), timeout=5)
         
         mock_insert.assert_called_once_with(ANY, alert1)
