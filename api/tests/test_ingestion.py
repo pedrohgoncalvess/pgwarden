@@ -64,6 +64,7 @@ def _apply_migrations(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]
                 "20260424_01_9UN1w-add-n-mod-since-analyze.sql",
                 "20260623_01_database-stats-metric.sql",
                 "20260624_01_native-query-metric.sql",
+                "20261031_02_index-advisor.sql",
             ]:
                 ddl = (ROOT / "migrations/sql" / filename).read_text()
                 ddl = re.sub(
@@ -522,11 +523,22 @@ async def test_all_metric_types_and_index_relationships(
             )
         if name == "metric_table":
             data["modifications_since_last_analyze"] = 10
+        if name == "metric_query_workload":
+            data.update(
+                query_id=12345,
+                user_id=16384,
+                is_toplevel=True,
+                calls=10,
+                total_exec_time=125.0,
+                shared_blks_read=2,
+                shared_blks_hit=20,
+                dealloc=0,
+            )
         observations.append(item(name, data))
     body = batch(*parents, *observations)
     response = await send(client, key, body)
     assert response.status_code == 200, response.text
-    assert response.json()["accepted"] == len(parents) + 11
+    assert response.json()["accepted"] == len(parents) + len(observations)
     for name, table in TABLES.items():
         if name.startswith("metric_"):
             assert (await db_session.execute(select(table))).first() is not None
