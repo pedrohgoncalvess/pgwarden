@@ -1,8 +1,10 @@
 """Exercise standalone storage without requiring a central PostgreSQL server."""
 
 import asyncio
+import importlib
 import re
 import sqlite3
+import sys
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,13 @@ from database.storage import get_storage_backend, get_storage_connection
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def reload_collector_queries():
+    """Refresh import-time SQL when a test switches the process's backend."""
+    for name, module in list(sys.modules.items()):
+        if name.startswith("collector.collectors.") and hasattr(module, "load_storage_query"):
+            importlib.reload(module)
+
+
 @pytest.fixture
 def storage(tmp_path, monkeypatch):
     path = tmp_path / "collector with spaces.sqlite3"
@@ -28,10 +37,15 @@ def storage(tmp_path, monkeypatch):
         for migration in sorted((ROOT / "migrations/sqlite").glob("*.sql")):
             if not migration.name.endswith(".rollback.sql"):
                 connection.executescript(migration.read_text())
-    monkeypatch.setenv("COLLECTOR_STORAGE_BACKEND", "sqlite")
-    monkeypatch.setenv("COLLECTOR_SQLITE_PATH", str(path))
-    monkeypatch.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
-    return get_storage_connection()
+    try:
+        with monkeypatch.context() as environment:
+            environment.setenv("COLLECTOR_STORAGE_BACKEND", "sqlite")
+            environment.setenv("COLLECTOR_SQLITE_PATH", str(path))
+            environment.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
+            reload_collector_queries()
+            yield get_storage_connection()
+    finally:
+        reload_collector_queries()
 
 
 def test_postgresql_remains_default(monkeypatch):

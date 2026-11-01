@@ -171,7 +171,7 @@ echo ""
 echo -e "${YELLOW}[7/10] Running collector tests...${NC}"
 (
   cd collector
-  PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test "$UV_CMD" run pytest tests/ ../scripts/tests/ -v
+  PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test "$UV_CMD" run pytest -c pyproject.toml tests/ ../scripts/tests/ -v
 )
 COLLECTOR_EXIT=$?
 echo ""
