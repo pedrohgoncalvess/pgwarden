@@ -1,0 +1,89 @@
+/* Keep native form bindings and keyboard behavior consistent across every toggle. */
+input[type='checkbox'] {
+	appearance: none;
+	-webkit-appearance: none;
+	position: relative;
+	display: inline-block;
+	box-sizing: border-box;
+	width: 2.5rem;
+	min-width: 2.5rem;
+	height: 1.5rem;
+	flex-shrink: 0;
+	margin: 0;
+	padding: 0;
+	vertical-align: middle;
+	border: 1px solid var(--color-outline);
+	border-radius: 999px;
+	background: var(--color-surface-container-highest);
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+input[type='checkbox']::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 3px;
+	width: 1rem;
+	height: 1rem;
+	border-radius: 50%;
+	background: var(--color-on-surface-variant);
+	transform: translateY(-50%);
+	transition: transform 180ms ease, background-color 120ms ease;
+}
+
+input[type='checkbox']:checked {
+	border-color: var(--color-primary);
+	background: var(--color-primary);
+}
+
+input[type='checkbox']:checked::before {
+	background: var(--color-on-primary);
+	transform: translate(1rem, -50%);
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+	border-color: var(--color-primary);
+}
+
+input[type='checkbox']:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
+input[type='checkbox']:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	input[type='checkbox'],
+	input[type='checkbox']::before {
+		transition: none;
+	}
+}
+
+@media (forced-colors: active) {
+	input[type='checkbox'] {
+		forced-color-adjust: none;
+		border-color: ButtonText;
+		background: Canvas;
+	}
+
+	input[type='checkbox']::before {
+		background: ButtonText;
+	}
+
+	input[type='checkbox']:checked {
+		border-color: Highlight;
+		background: Highlight;
+	}
+
+	input[type='checkbox']:checked::before {
+		background: HighlightText;
+	}
+
+	input[type='checkbox']:focus-visible {
+		outline-color: Highlight;
+	}
+}

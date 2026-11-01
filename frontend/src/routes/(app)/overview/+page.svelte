@@ -11,7 +11,7 @@
 			if (databases.length > 0) {
 				await goto(`/overview/${databases[0].id}`, { replaceState: true });
 			} else {
-				await goto('/servers', { replaceState: true });
+				await goto('/settings/servers', { replaceState: true });
 			}
 		} catch (err: any) {
 			if (err.message?.includes('401')) {

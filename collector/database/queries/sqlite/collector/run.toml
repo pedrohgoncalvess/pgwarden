@@ -1,0 +1,20 @@
+[INSERT]
+success_database = """
+INSERT INTO "collector_run" (config_database_id, command_id, status, finished_at)
+VALUES (%(config_id)s, %(command_id)s, 'success', strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'))
+"""
+
+error_database = """
+INSERT INTO "collector_run" (config_database_id, command_id, status, errors, finished_at)
+VALUES (%(config_id)s, %(command_id)s, 'error', %(errors)s, strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'))
+"""
+
+success_server = """
+INSERT INTO "collector_run" (config_server_id, command_id, status, finished_at)
+VALUES (%(config_id)s, %(command_id)s, 'success', strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'))
+"""
+
+error_server = """
+INSERT INTO "collector_run" (config_server_id, command_id, status, errors, finished_at)
+VALUES (%(config_id)s, %(command_id)s, 'error', %(errors)s, strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'))
+"""

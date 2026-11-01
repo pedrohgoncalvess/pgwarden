@@ -1,0 +1,27 @@
+[SELECT]
+pending = """
+SELECT id, collector, command, payload
+FROM "collector_command"
+WHERE executed_at IS NULL
+ORDER BY created_at
+"""
+
+[UPDATE]
+executed = """
+UPDATE "collector_command"
+SET
+    executed_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'),
+    error = %(error)s
+WHERE id = %(id)s
+"""
+
+consume_command = """
+UPDATE "collector_command"
+SET executed_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE id = (
+    SELECT id FROM "collector_command"
+    WHERE collector = %(name)s AND executed_at IS NULL
+    ORDER BY created_at LIMIT 1
+)
+RETURNING id, command, payload;
+"""

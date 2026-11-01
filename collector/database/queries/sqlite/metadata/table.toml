@@ -1,0 +1,61 @@
+[SELECT]
+default = """
+SELECT id, oid, schema_name, name, description
+FROM "metadata_table"
+WHERE database_id = %(database_id)s
+  AND deleted_at  IS NULL
+"""
+
+by_database_id_and_active = """
+SELECT id, oid
+FROM "metadata_table"
+WHERE database_id = %(database_id)s
+AND deleted_at IS NULL
+"""
+
+[INSERT]
+default = """
+INSERT INTO "metadata_table" (
+    database_id,
+    oid,
+    schema_name,
+    name,
+    description
+) VALUES (
+    %(database_id)s,
+    %(table_oid)s,
+    %(schema_name)s,
+    %(name)s,
+    %(description)s
+)
+ON CONFLICT (database_id, oid) DO NOTHING;
+"""
+
+[UPDATE]
+default = """
+UPDATE "metadata_table"
+SET
+    schema_name = %(schema_name)s,
+    name = %(name)s,
+    description = %(description)s,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE
+    oid = %(table_oid)s
+    AND database_id = %(database_id)s
+    AND deleted_at IS NULL
+    AND (
+        schema_name IS DISTINCT FROM %(schema_name)s OR
+        name IS DISTINCT FROM %(name)s OR
+        description IS DISTINCT FROM %(description)s
+    );
+"""
+
+soft_delete = """
+UPDATE "metadata_table"
+SET
+    deleted_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE
+    oid   IN (SELECT value FROM json_each(%(removed_oids)s))
+    AND database_id = %(database_id)s
+    AND deleted_at  IS NULL;
+"""

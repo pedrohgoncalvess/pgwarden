@@ -65,6 +65,10 @@ class IndexCollector(BaseCollector):
     ) -> SyncResult:
         result = SyncResult()
 
+        for row in live:
+            row.setdefault("is_valid", None)
+            row["columns_info"] = row.get("columns_info") or []
+
         stored_map = {r["oid"]: r for r in stored}
         live_oids = {r["index_oid"] for r in live}
 
@@ -176,12 +180,10 @@ class IndexCollector(BaseCollector):
     async def _fetch_column_attnum_map(self) -> dict[tuple[int, int], int]:
         async with self.metrics_db as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute("""
-                    SELECT t.oid AS table_oid, c.ordinal_position AS attnum, c.id
-                    FROM metadata.column c
-                    JOIN metadata.table t ON t.id = c.table_id
-                    WHERE t.database_id = %s AND c.deleted_at IS NULL
-                """, (self._db_id,))
+                await cur.execute(
+                    load_storage_query("metadata", "column", "SELECT", "by_database_id_and_active"),
+                    {"database_id": self._db_id},
+                )
                 rows = await cur.fetchall()
                 return {(r["table_oid"], r["attnum"]): r["id"] for r in rows}
 
@@ -193,6 +195,7 @@ def _index_changed(live: dict, stored: dict) -> bool:
         "definition",
         "is_unique",
         "is_primary",
+        "is_valid",
         "columns_info"
     ]
 

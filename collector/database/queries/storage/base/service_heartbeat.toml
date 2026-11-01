@@ -1,0 +1,6 @@
+[INSERT]
+default = """
+INSERT INTO base.service_heartbeat (service)
+VALUES ('collector')
+ON CONFLICT (service) DO UPDATE SET updated_at = now()
+"""

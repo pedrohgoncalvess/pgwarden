@@ -1,10 +1,13 @@
+import { canonicalPath } from './routePaths';
+
 const PAGE_TITLES: Record<string, string> = {
 	'': 'Home',
 	login: 'Login',
 	search: 'Search',
 	overview: 'Overview',
+	activity: 'Activity',
 	schema: 'Schema',
-	servers: 'Servers',
+	'settings/servers': 'Servers',
 	alerts: 'Alerts',
 	'alerts/server': 'Server Alerts',
 	'alerts/database': 'Database Alerts',
@@ -15,49 +18,39 @@ const PAGE_TITLES: Record<string, string> = {
 	'analytics/data': 'Data Analytics',
 	'analytics/query': 'Query Analytics',
 	'analytics/index': 'Index Analytics',
-	runs: 'Runs',
-	'runs/live': 'Live Runs',
-	'runs/history': 'Run History',
-	'runs/settings/server': 'Server Run Settings',
-	'runs/settings/database': 'Database Run Settings',
-	'metadata/search': 'Metadata Search',
-	'metadata/documentation': 'Metadata Documentation',
-	'metadata/tag': 'Metadata Tags',
+	jobs: 'Jobs',
+	'jobs/live': 'Live Runs',
+	'jobs/history': 'Run History',
+	'jobs/server': 'Server Run Settings',
+	'jobs/database': 'Database Run Settings',
+	'schema/documentation': 'Metadata Documentation',
+	'schema/tags': 'Metadata Tags',
 	'settings/account': 'Account Settings',
+	'settings/retention': 'Data Retention',
+	'settings/access': 'Users',
+	'settings/users': 'Users',
+	'settings/roles': 'Roles',
+	'settings/password': 'Change Password',
+	'settings/projects': 'Projects & Ingestion',
 	'settings/connections': 'Connection Settings',
-	'settings/collector': 'Collector Settings',
-	'settings/collector/server': 'Server Collector Settings',
-	'settings/collector/database': 'Database Collector Settings'
+	'jobs/services': 'Services'
 };
 
 function routeKey(pathname: string): string {
-	const segments = pathname.split('/').filter(Boolean);
+	const segments = canonicalPath(pathname).split('/').filter(Boolean);
 	const primary = segments[0];
-
-	if (primary === 'overview' || primary === 'schema') {
-		return primary;
+	if (primary === 'overview') return primary;
+	if (primary === 'schema') {
+		if (segments.at(-1) === 'documentation') return 'schema/documentation';
+		if (segments[1] === 'tags') return 'schema/tags';
+		return 'schema';
 	}
-
-	if ((primary === 'analytics' || primary === 'metadata') && segments.length >= 3) {
-		return `${primary}/${segments.at(-1)}`;
+	if (primary === 'analytics' && segments.length >= 3) return `analytics/${segments.at(-1)}`;
+	if (primary === 'jobs') {
+		if (['live', 'history'].includes(segments.at(-1) ?? '')) return `jobs/${segments.at(-1)}`;
+		return segments.slice(0, 2).join('/');
 	}
-
-	if (primary === 'runs' && segments[1] && !['live', 'history', 'settings'].includes(segments[1])) {
-		segments.splice(1, 1);
-	}
-
-	if (primary === 'settings' && segments[1] === 'connections') {
-		return 'settings/connections';
-	}
-
-	if (
-		primary === 'settings' &&
-		segments[1] === 'collector' &&
-		['server', 'database'].includes(segments[2])
-	) {
-		return segments.slice(0, 3).join('/');
-	}
-
+	if (primary === 'settings') return segments.slice(0, 2).join('/');
 	return segments.join('/');
 }
 

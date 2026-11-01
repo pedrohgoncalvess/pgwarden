@@ -9,3 +9,5 @@ from database.models.metric.disk import DiskMetric
 from database.models.metric.io import IoMetric
 from database.models.metric.database_stat import DatabaseStat
 from database.models.metric.native_query import NativeQueryMetric
+
+from database.models.metric.query_workload import QueryWorkloadMetric

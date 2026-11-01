@@ -89,7 +89,7 @@ services:
       - DB_NAME=${DB_NAME:-postgres}
       - DB_PORT=${DB_PORT:-5432}
     volumes:
-      - ./config.yaml:/etc/pgwarden/config.yaml:ro
+      - ${PGWARDEN_CONFIG_FILE:-./config.yaml}:/etc/pgwarden/config.yaml:ro
       - ./collector/log:/log:rw
     networks:
       - pgwarden_network
@@ -115,7 +115,7 @@ services:
       - DB_PORT=${DB_PORT:-5432}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ${PGWARDEN_CONFIG_FILE:-./config.yaml}:/app/config.yaml:ro
     networks:
       - pgwarden_network
 
@@ -153,7 +153,7 @@ services:
       api:
         condition: service_started
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       - API_URL=http://api:8080
     networks:

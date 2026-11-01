@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { profile, can } from '$lib/access';
+	import Spinner from '$lib/components/Spinner.svelte';
+	import { resolve } from '$app/paths';
+	import { onMount, tick } from 'svelte';
 	import {
 		listNotifications,
 		setNotificationHidden,
@@ -9,12 +12,10 @@
 
 	let {
 		open,
-		collapsed,
 		onClose,
 		onCountChange
 	}: {
 		open: boolean;
-		collapsed: boolean;
 		onClose: () => void;
 		onCountChange: (count: number) => void;
 	} = $props();
@@ -34,18 +35,23 @@
 	let error = $state('');
 	let updatingId = $state<number | null>(null);
 	let requestSequence = 0;
+	let panel = $state<HTMLElement>();
+	let refreshing = false;
 
-	async function loadNotifications() {
+	async function loadNotifications(summaryOnly = false, background = false) {
+		if (background && refreshing) return;
+		refreshing = true;
 		const sequence = ++requestSequence;
-		loading = true;
+		if (!background && !summaryOnly) loading = true;
 		error = '';
 		try {
 			const response = await listNotifications({
-				hidden: visibility === 'hidden',
-				level: level === 'all' ? undefined : level
+				hidden: summaryOnly ? false : visibility === 'hidden',
+				limit: summaryOnly ? 1 : 100,
+				level: summaryOnly || level === 'all' ? undefined : level
 			});
 			if (sequence !== requestSequence) return;
-			notifications = response.items;
+			if (!summaryOnly) notifications = response.items;
 			total = response.total;
 			visibleCount = response.visible_count;
 			hiddenCount = response.hidden_count;
@@ -55,7 +61,10 @@
 			if (sequence !== requestSequence) return;
 			error = loadError instanceof Error ? loadError.message : 'Unable to load notifications.';
 		} finally {
-			if (sequence === requestSequence) loading = false;
+			if (sequence === requestSequence) {
+				loading = false;
+				refreshing = false;
+			}
 		}
 	}
 
@@ -100,7 +109,12 @@
 
 	function notificationPath(notification: NotificationItem): string | null {
 		const path = notification.params.path;
-		return typeof path === 'string' && path.startsWith('/') ? path : null;
+		return typeof path === 'string' &&
+			path.startsWith('/') &&
+			path[1] !== '/' &&
+			path.charCodeAt(1) !== 92
+			? path
+			: null;
 	}
 
 	function formatTimestamp(timestamp: string): string {
@@ -118,25 +132,41 @@
 	}
 
 	onMount(() => {
-		void loadNotifications();
-		const refreshTimer = window.setInterval(() => void loadNotifications(), 30_000);
-		return () => window.clearInterval(refreshTimer);
+		void loadNotifications(!open);
+		const refresh = () => {
+			if (document.visibilityState === 'visible') void loadNotifications(!open, true);
+		};
+		const refreshTimer = window.setInterval(refresh, 30_000);
+		document.addEventListener('visibilitychange', refresh);
+		return () => {
+			window.clearInterval(refreshTimer);
+			document.removeEventListener('visibilitychange', refresh);
+			requestSequence++;
+		};
 	});
 
 	$effect(() => {
-		open;
-		visibility;
-		level;
+		void open;
+		void visibility;
+		void level;
 		if (open) void loadNotifications();
+	});
+	$effect(() => {
+		if (!open) return;
+		const previous = document.activeElement;
+		let active = true;
+		void tick().then(() => {
+			if (active) panel?.querySelector('button')?.focus();
+		});
+		return () => {
+			active = false;
+			if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+		};
 	});
 </script>
 
 {#if open}
-	<section
-		aria-label="Notifications"
-		class="fixed top-0 z-30 flex h-screen w-96 flex-col border-r border-surface-border bg-surface-container-low shadow-2xl transition-[left] duration-300"
-		style:left={collapsed ? '4rem' : '16rem'}
-	>
+	<section aria-label="Notifications" class="notification-panel flex flex-col" bind:this={panel}>
 		<header class="flex items-center justify-between border-b border-surface-border px-5 py-4">
 			<div>
 				<h2 class="m-0 font-headline-md text-lg font-bold text-on-surface">Notifications</h2>
@@ -190,7 +220,7 @@
 				>
 					All {Object.values(levelCounts).reduce((sum, count) => sum + count, 0)}
 				</button>
-				{#each ['critical', 'warning', 'info'] as notificationLevel}
+				{#each ['critical', 'warning', 'info'] as notificationLevel (notificationLevel)}
 					<button
 						type="button"
 						onclick={() => (level = notificationLevel as NotificationLevel)}
@@ -214,7 +244,7 @@
 					<p>{error}</p>
 					<button
 						type="button"
-						onclick={loadNotifications}
+						onclick={() => loadNotifications()}
 						class="mt-2 font-semibold underline underline-offset-2 hover:text-on-error-container"
 					>
 						Try again
@@ -224,7 +254,7 @@
 
 			{#if loading}
 				<div class="flex h-40 items-center justify-center text-on-surface-variant">
-					<span class="material-symbols-outlined animate-spin">progress_activity</span>
+					<Spinner class="" />
 				</div>
 			{:else if notifications.length === 0}
 				<div class="flex h-52 flex-col items-center justify-center px-8 text-center">
@@ -243,7 +273,7 @@
 						{@const itemLevel = notificationLevel(notification)}
 						{@const path = notificationPath(notification)}
 						<article
-							class="group rounded-xl border border-surface-border bg-surface-container p-3 transition-all hover:-translate-y-px hover:border-outline hover:bg-surface-container-high hover:shadow-lg"
+							class="group rounded-xl border border-surface-border bg-surface-container p-3 transition-colors hover:border-outline hover:bg-surface-container-high"
 						>
 							<div class="flex gap-3">
 								<div
@@ -268,25 +298,25 @@
 										<button
 											type="button"
 											onclick={() => toggleHidden(notification)}
-											disabled={updatingId === notification.id}
+											disabled={!can($profile, 'alerts.configure') || updatingId === notification.id}
 											class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-on-surface-variant opacity-0 transition-all hover:bg-surface-variant hover:text-primary focus:opacity-100 disabled:cursor-wait disabled:opacity-50 group-hover:opacity-100"
 											aria-label={notification.hidden
 												? 'Restore notification'
 												: 'Hide notification'}
 											title={notification.hidden ? 'Restore notification' : 'Hide notification'}
 										>
-											<span class="material-symbols-outlined text-[17px]">
-												{updatingId === notification.id
-													? 'progress_activity'
-													: notification.hidden
-														? 'visibility'
-														: 'visibility_off'}
-											</span>
+											{#if updatingId === notification.id}<Spinner
+													class="text-[17px]"
+												/>{:else}<span
+													class="material-symbols-outlined text-[17px]"
+													aria-hidden="true"
+													>{notification.hidden ? 'visibility' : 'visibility_off'}</span
+												>{/if}
 										</button>
 									</div>
 									{#if path}
 										<a
-											href={path}
+											href={resolve(...([path] as Parameters<typeof resolve>))}
 											onclick={onClose}
 											class="block text-sm leading-5 text-on-surface transition-colors hover:text-primary"
 										>

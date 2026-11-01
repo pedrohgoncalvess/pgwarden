@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DEFAULT_ANALYTICS_PRESET } from '$lib/timeRange';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -14,7 +15,6 @@
 		ServerListItem
 	} from '$lib/api';
 
-	
 	let servers = $state<ServerListItem[]>([]);
 	let databases = $state<DatabaseListItem[]>([]);
 	let selectedDb = $state<DatabaseListItem | null>(null);
@@ -23,7 +23,7 @@
 	let loading = $state(true);
 	let error = $state('');
 
-	let preset = $state<AnalyticsPreset>('1w');
+	let preset = $state<AnalyticsPreset>(DEFAULT_ANALYTICS_PRESET);
 	let startDate = $state('');
 	let endDate = $state('');
 	let selectedTableIds = $state<number[]>([]);
@@ -52,13 +52,6 @@
 		'#ec4899',
 		'#84cc16'
 	];
-
-	
-	function toInputDate(iso: string): string {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return '';
-		return d.toISOString().slice(0, 16);
-	}
 
 	function fromInputDate(value: string): string {
 		if (!value) return '';
@@ -151,7 +144,6 @@
 			ticks.push({ value, label: formatBytes(value), y: padding.top + (1 - ratio) * usableHeight });
 		}
 
-		
 		if (ticks.length === 0) {
 			[0, 0.25, 0.5, 0.75, 1].forEach((tick) => {
 				const value = maxBytesValue * (1 - tick);
@@ -205,24 +197,12 @@
 		}
 	}
 
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
-	}
-
 	let serverDatabases = $derived(
-		selectedServer ? databases.filter((database) => database.server_id === selectedServer) : databases
+		selectedServer
+			? databases.filter((database) => database.server_id === selectedServer)
+			: databases
 	);
 
-	async function selectServer(serverId: string) {
-		selectedServer = serverId;
-		selectedServerId.set(serverId);
-		const database = databases.find((item) => item.server_id === serverId);
-		if (database && database.id !== selectedDb?.id) {
-			await selectDatabase(database, true);
-		}
-	}
-
-	
 	async function loadData(database: DatabaseListItem) {
 		selectedDb = database;
 		selectedDatabaseId.set(database.id);
@@ -320,7 +300,6 @@
 
 	onMount(() => load());
 
-	
 	let timestamps = $derived(
 		data
 			? allTimestamps(
@@ -460,9 +439,8 @@
 	});
 </script>
 
-
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">analytics</span>
@@ -480,7 +458,6 @@
 		Refresh
 	</button>
 </header>
-
 
 <div class="pt-24 px-container-padding pb-12">
 	{#if error}
@@ -524,42 +501,8 @@
 			</p>
 		</div>
 	{:else}
-		
-		<div class="mb-6 flex flex-wrap items-center gap-3">
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-				<select
-					value={selectedServer}
-					onchange={(event) => selectServer(eventValue(event))}
-					disabled={servers.length <= 1}
-					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each servers as server}
-						<option value={server.id}>{server.name}</option>
-					{/each}
-				</select>
-			</label>
-			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-				<select
-					value={selectedDb?.id ?? ''}
-					onchange={(event) => {
-						const database = databases.find((item) => item.id === eventValue(event));
-						if (database) selectDatabase(database, true);
-					}}
-					disabled={serverDatabases.length <= 1}
-					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
-				>
-					{#each serverDatabases as db}
-						<option value={db.id}>{db.name}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
-
 		<section class="mb-6 rounded-lg border border-outline-variant bg-surface-container p-4">
 			<div class="flex flex-wrap items-end gap-4">
-				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -579,7 +522,6 @@
 					</div>
 				</div>
 
-				
 				<div class="flex flex-col gap-2">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -588,20 +530,19 @@
 					<div class="flex items-center gap-4">
 						<label class="flex items-center gap-1.5 text-xs text-on-surface cursor-pointer">
 							<input
-								type="checkbox"
+								type="checkbox" role="switch"
 								bind:checked={showDatabase}
-								class="accent-primary w-3.5 h-3.5"
+
 							/>
 							Database
 						</label>
 						<label class="flex items-center gap-1.5 text-xs text-on-surface cursor-pointer">
-							<input type="checkbox" bind:checked={logScale} class="accent-primary w-3.5 h-3.5" />
+							<input type="checkbox" role="switch" bind:checked={logScale}  />
 							Log scale
 						</label>
 					</div>
 				</div>
 
-				
 				{#if preset === 'custom'}
 					<div class="flex flex-col gap-2">
 						<span
@@ -627,7 +568,6 @@
 					</div>
 				{/if}
 
-				
 				<div class="flex flex-col gap-2 min-w-[16rem] relative">
 					<span
 						class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
@@ -670,10 +610,10 @@
 										class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface-variant text-xs text-on-surface"
 									>
 										<input
-											type="checkbox"
+											type="checkbox" role="switch"
 											checked={selectedTableIds.includes(table.id)}
 											onchange={() => toggleTable(table.id)}
-											class="accent-primary w-3.5 h-3.5"
+
 										/>
 										<span class="truncate">{displayTableName(table)}</span>
 									</label>
@@ -701,7 +641,6 @@
 				</button>
 			</div>
 
-			
 			{#if selectedTableIds.length > 0}
 				<div class="mt-3 flex flex-wrap items-center gap-2">
 					{#each selectedTableIds as tableId, i}
@@ -726,7 +665,6 @@
 			{/if}
 		</section>
 
-		
 		<section class="rounded-lg border border-outline-variant bg-surface-container overflow-hidden">
 			<div
 				class="flex items-center justify-between border-b border-outline-variant bg-surface-container-low px-4 py-3"
@@ -796,7 +734,6 @@
 						onmousemove={handleChartMouseMove}
 						onmouseleave={handleChartMouseLeave}
 					>
-						
 						{#each generateYTicks() as tick}
 							<line
 								x1={padding.left}
@@ -814,7 +751,6 @@
 							>
 						{/each}
 
-						
 						{#if timestamps.length > 0}
 							{#each [0, Math.floor((timestamps.length - 1) / 2), timestamps.length - 1] as idx}
 								{@const x = xScale(idx)}
@@ -828,7 +764,6 @@
 							{/each}
 						{/if}
 
-						
 						{#if showDatabase}
 							<path
 								d={pathForSeries(visibleDbValues)}
@@ -841,7 +776,6 @@
 							{/each}
 						{/if}
 
-						
 						{#each visibleTableValues as tv}
 							<path d={pathForSeries(tv.values)} fill="none" stroke={tv.color} stroke-width="2" />
 							{#each circlePoints(tv.values) as pt}
@@ -849,7 +783,6 @@
 							{/each}
 						{/each}
 
-						
 						{#if hoverIndex !== null}
 							{@const x = xScale(hoverIndex)}
 							<line
@@ -864,7 +797,6 @@
 						{/if}
 					</svg>
 
-					
 					{#if tooltip}
 						<div
 							class="mt-2 rounded-lg border border-outline-variant bg-surface-container-high p-3 text-xs"

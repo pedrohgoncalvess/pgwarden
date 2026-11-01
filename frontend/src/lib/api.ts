@@ -1,3 +1,4 @@
+import { DEFAULT_ANALYTICS_PRESET } from './timeRange';
 import { apiFetch as fetch, authHeaders, getAccessToken } from '$lib/auth';
 
 type DatabaseListItem = {
@@ -111,6 +112,7 @@ export type SchemaHistoryResponse = {
 };
 
 export type ServerListItem = {
+	project_id?: string | null;
 	id: string;
 	name: string;
 	status: string;
@@ -439,9 +441,11 @@ export async function getDatabaseUptime(databaseId: string): Promise<UptimeRespo
 }
 
 export async function getDatabaseMetricsSummary(
-	databaseId: string
+	databaseId: string,
+	signal?: AbortSignal
 ): Promise<DatabaseMetricsSummary> {
 	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/summary`, {
+		signal,
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -450,8 +454,12 @@ export async function getDatabaseMetricsSummary(
 	return res.json();
 }
 
-export async function getDatabaseSchema(databaseId: string): Promise<DatabaseSchema> {
+export async function getDatabaseSchema(
+	databaseId: string,
+	signal?: AbortSignal
+): Promise<DatabaseSchema> {
 	const res = await fetch(`/api/v1/databases/${databaseId}/schemas`, {
+		signal,
 		headers: authHeaders()
 	});
 	if (!res.ok) {
@@ -1208,8 +1216,11 @@ export async function getAnalyticsData(
 	} = {}
 ): Promise<AnalyticsDataResponse> {
 	const url = new URL(`/api/v1/databases/${databaseId}/analytics/data`, window.location.origin);
-	if (options.preset && options.preset !== 'custom') {
-		url.searchParams.set('preset', options.preset);
+	const preset =
+		options.preset ??
+		(!options.startDate && !options.endDate ? DEFAULT_ANALYTICS_PRESET : undefined);
+	if (preset && preset !== 'custom') {
+		url.searchParams.set('preset', preset);
 	}
 	if (options.startDate) {
 		url.searchParams.set('start_date', options.startDate);
@@ -1243,11 +1254,15 @@ export async function getQueryAnalytics(
 		orderBy?: QueryOrderBy;
 		orderDir?: QueryOrderDir;
 		limit?: number;
+		signal?: AbortSignal;
 	} = {}
 ): Promise<QueryAnalyticsResponse> {
 	const url = new URL(`/api/v1/databases/${databaseId}/analytics/query`, window.location.origin);
-	if (options.preset && options.preset !== 'custom') {
-		url.searchParams.set('preset', options.preset);
+	const preset =
+		options.preset ??
+		(!options.startDate && !options.endDate ? DEFAULT_ANALYTICS_PRESET : undefined);
+	if (preset && preset !== 'custom') {
+		url.searchParams.set('preset', preset);
 	}
 	if (options.startDate) {
 		url.searchParams.set('start_date', options.startDate);
@@ -1282,7 +1297,8 @@ export async function getQueryAnalytics(
 		url.searchParams.set('order_dir', options.orderDir);
 	}
 	const res = await fetch(url.toString(), {
-		headers: authHeaders()
+		headers: authHeaders(),
+		signal: options.signal
 	});
 	if (!res.ok) {
 		throw new Error(`Failed to get query analytics: ${res.status}`);
@@ -1298,6 +1314,7 @@ export async function getQueryExecutionHistory(
 		startDate?: string;
 		endDate?: string;
 		limit?: number;
+		signal?: AbortSignal;
 	} = {}
 ): Promise<QueryExecutionHistoryResponse> {
 	const url = new URL(
@@ -1305,8 +1322,11 @@ export async function getQueryExecutionHistory(
 		window.location.origin
 	);
 	url.searchParams.set('query_hash', queryHash);
-	if (options.preset && options.preset !== 'custom') {
-		url.searchParams.set('preset', options.preset);
+	const preset =
+		options.preset ??
+		(!options.startDate && !options.endDate ? DEFAULT_ANALYTICS_PRESET : undefined);
+	if (preset && preset !== 'custom') {
+		url.searchParams.set('preset', preset);
 	}
 	if (options.startDate) {
 		url.searchParams.set('start_date', options.startDate);
@@ -1318,7 +1338,8 @@ export async function getQueryExecutionHistory(
 		url.searchParams.set('limit', String(options.limit));
 	}
 	const res = await fetch(url.toString(), {
-		headers: authHeaders()
+		headers: authHeaders(),
+		signal: options.signal
 	});
 	if (!res.ok) {
 		throw new Error(`Failed to get query execution history: ${res.status}`);
@@ -1329,7 +1350,8 @@ export async function getQueryExecutionHistory(
 export async function getQueryContext(
 	databaseId: string,
 	queryHash: string,
-	collectedAt: string
+	collectedAt: string,
+	signal?: AbortSignal
 ): Promise<QueryContextResponse> {
 	const url = new URL(
 		`/api/v1/databases/${databaseId}/analytics/query/context`,
@@ -1338,7 +1360,8 @@ export async function getQueryContext(
 	url.searchParams.set('query_hash', queryHash);
 	url.searchParams.set('collected_at', collectedAt);
 	const res = await fetch(url.toString(), {
-		headers: authHeaders()
+		headers: authHeaders(),
+		signal
 	});
 	if (!res.ok) {
 		throw new Error(`Failed to get query context: ${res.status}`);
@@ -1358,8 +1381,11 @@ export async function getIndexAnalytics(
 	} = {}
 ): Promise<IndexAnalyticsResponse> {
 	const url = new URL(`/api/v1/databases/${databaseId}/analytics/index`, window.location.origin);
-	if (options.preset && options.preset !== 'custom') {
-		url.searchParams.set('preset', options.preset);
+	const preset =
+		options.preset ??
+		(!options.startDate && !options.endDate ? DEFAULT_ANALYTICS_PRESET : undefined);
+	if (preset && preset !== 'custom') {
+		url.searchParams.set('preset', preset);
 	}
 	if (options.startDate) {
 		url.searchParams.set('start_date', options.startDate);

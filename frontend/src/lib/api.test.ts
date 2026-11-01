@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getQueryAnalytics, listRunHistory } from './api';
+import {
+	getAnalyticsData,
+	getIndexAnalytics,
+	getQueryAnalytics,
+	getQueryExecutionHistory,
+	listRunHistory
+} from './api';
 
 const origin = 'http://localhost';
 const jsonResponse = new Response(JSON.stringify([]), {
@@ -13,7 +19,31 @@ describe('API URL contracts', () => {
 		vi.restoreAllMocks();
 		vi.stubGlobal('window', { location: { origin } });
 		vi.stubGlobal('localStorage', { getItem: () => null });
-		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse.clone()));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockImplementation(async () => jsonResponse.clone())
+		);
+	});
+
+	it('defaults every analytics request to the last day', async () => {
+		await getAnalyticsData('db');
+		await getIndexAnalytics('db');
+		await getQueryAnalytics('db');
+		await getQueryExecutionHistory('db', 'hash');
+		expect(fetch).toHaveBeenCalledTimes(4);
+		for (const [url] of vi.mocked(fetch).mock.calls) {
+			expect(new URL(String(url)).searchParams.get('preset')).toBe('1d');
+		}
+	});
+
+	it('preserves explicit date bounds instead of adding a conflicting preset', async () => {
+		await getQueryAnalytics('db', {
+			startDate: '2026-10-01T00:00:00Z',
+			endDate: '2026-10-02T00:00:00Z'
+		});
+		const url = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+		expect(url.searchParams.has('preset')).toBe(false);
+		expect(url.searchParams.get('start_date')).toBe('2026-10-01T00:00:00Z');
 	});
 
 	it('sends every run-history filter and ordering option', async () => {

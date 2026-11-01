@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { profile, can } from '$lib/access';
+	import Select from '$lib/components/Select.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import {
@@ -349,13 +351,12 @@
 
 {#if validScopes.includes(scope)}
 	<header
-		class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
+		class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
 	>
 		<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
 		<h1 class="font-headline-md text-headline-md text-on-background m-0">Alerts</h1>
 		<span class="text-on-surface-variant">/</span>
-		<span
-			class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest"
+		<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest"
 			>{scope}</span
 		>
 	</header>
@@ -393,7 +394,7 @@
 					</button>
 					<button
 						onclick={saveChanges}
-						disabled={!hasChanges || saving || loading}
+						disabled={!can($profile, 'alerts.configure') || !hasChanges || saving || loading}
 						class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
 					>
 						<span class="material-symbols-outlined text-[18px]">save</span>
@@ -422,9 +423,7 @@
 		{:else}
 			{#each scopeRules as rule (rule.id)}
 				{@const draft = ruleDrafts[rule.id] ?? toRuleDraft(rule)}
-				{@const scopedThresholds = rule.thresholds.filter(
-					(threshold) => threshold.scope === scope
-				)}
+				{@const scopedThresholds = rule.thresholds.filter((threshold) => threshold.scope === scope)}
 				<section class="settings-card overflow-hidden">
 					<div class="row-item px-5 py-4 flex flex-wrap items-center justify-between gap-4">
 						<div class="min-w-0">
@@ -436,12 +435,12 @@
 
 						<label class="flex items-center gap-2 text-xs font-bold text-on-surface">
 							<input
-								type="checkbox"
+								type="checkbox" role="switch"
 								checked={draft.enabled}
-								disabled={saving}
+								disabled={!can($profile, 'alerts.configure') || saving}
 								onchange={(event) =>
 									updateRuleDraft(rule.id, { enabled: event.currentTarget.checked })}
-								class="accent-primary"
+
 							/>
 							Active
 						</label>
@@ -458,7 +457,7 @@
 								min="0"
 								step="1"
 								value={draft.interval_seconds}
-								disabled={saving}
+								disabled={!can($profile, 'alerts.configure') || saving}
 								oninput={(event) =>
 									updateRuleDraft(rule.id, {
 										interval_seconds: Number(event.currentTarget.value)
@@ -477,7 +476,7 @@
 								min="0"
 								step="1"
 								value={draft.cooldown_seconds}
-								disabled={saving}
+								disabled={!can($profile, 'alerts.configure') || saving}
 								oninput={(event) =>
 									updateRuleDraft(rule.id, {
 										cooldown_seconds: Number(event.currentTarget.value)
@@ -496,7 +495,7 @@
 								min="0"
 								step="1"
 								value={draft.window_minutes}
-								disabled={saving}
+								disabled={!can($profile, 'alerts.configure') || saving}
 								oninput={(event) =>
 									updateRuleDraft(rule.id, {
 										window_minutes: Number(event.currentTarget.value)
@@ -533,7 +532,7 @@
 										type="number"
 										step="0.1"
 										value={thresholdDraft.warning}
-										disabled={saving}
+										disabled={!can($profile, 'alerts.configure') || saving}
 										oninput={(event) =>
 											updateThresholdDraft(threshold, {
 												warning: Number(event.currentTarget.value)
@@ -551,7 +550,7 @@
 										type="number"
 										step="0.1"
 										value={thresholdDraft.critical}
-										disabled={saving}
+										disabled={!can($profile, 'alerts.configure') || saving}
 										oninput={(event) =>
 											updateThresholdDraft(threshold, {
 												critical: Number(event.currentTarget.value)
@@ -560,18 +559,19 @@
 									/>
 								</div>
 
-								<select
+								<Select
 									value={thresholdDraft.direction}
 									disabled={saving}
-									onchange={(event) =>
+									onchange={(value) =>
 										updateThresholdDraft(threshold, {
-											direction: event.currentTarget.value as 'above' | 'below'
+											direction: value as 'above' | 'below'
 										})}
-									class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
-								>
-									<option value="above">Above</option>
-									<option value="below">Below</option>
-								</select>
+									aria-label="Threshold direction"
+									options={[
+										{ value: 'above', label: 'Above' },
+										{ value: 'below', label: 'Below' }
+									]}
+								/>
 
 								<button
 									onclick={() => removeThreshold(threshold)}
@@ -607,8 +607,8 @@
 							New {scope} rule
 						</h2>
 						<p class="text-[12px] text-on-surface-variant mt-1 leading-relaxed">
-							Create a rule with one or more {scope} thresholds. Leave the entity as "All
-							entities" to target the whole scope.
+							Create a rule with one or more {scope} thresholds. Leave the entity as "All entities" to
+							target the whole scope.
 						</p>
 					</div>
 				</div>
@@ -629,7 +629,7 @@
 							id="create-name"
 							type="text"
 							bind:value={createName}
-							disabled={creating}
+							disabled={!can($profile, 'alerts.configure') || creating}
 							placeholder="e.g. critical_tables"
 							class="mt-1 w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
 						/>
@@ -646,7 +646,7 @@
 								min="0"
 								step="1"
 								bind:value={createInterval}
-								disabled={creating}
+								disabled={!can($profile, 'alerts.configure') || creating}
 								class="mt-1 w-28 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
 							/>
 						</div>
@@ -660,13 +660,12 @@
 								min="0"
 								step="1"
 								bind:value={createCooldown}
-								disabled={creating}
+								disabled={!can($profile, 'alerts.configure') || creating}
 								class="mt-1 w-28 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
 							/>
 						</div>
 						<div>
-							<label class="text-xs text-on-surface-variant" for="create-window"
-								>Window (min)</label
+							<label class="text-xs text-on-surface-variant" for="create-window">Window (min)</label
 							>
 							<input
 								id="create-window"
@@ -674,7 +673,7 @@
 								min="0"
 								step="1"
 								bind:value={createWindow}
-								disabled={creating}
+								disabled={!can($profile, 'alerts.configure') || creating}
 								class="mt-1 w-28 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
 							/>
 						</div>
@@ -685,7 +684,7 @@
 							<p class="text-xs font-bold text-on-surface m-0">Thresholds</p>
 							<button
 								onclick={addCreateRow}
-								disabled={creating}
+								disabled={!can($profile, 'alerts.configure') || creating}
 								class="flex items-center gap-1 text-xs text-primary font-bold hover:underline disabled:opacity-40"
 							>
 								<span class="material-symbols-outlined text-[16px]">add</span>
@@ -697,17 +696,14 @@
 							{#each createRows as row, index (index)}
 								<div class="rounded-lg border border-outline-variant/50 p-3 space-y-3">
 									<div class="flex items-center justify-between gap-3">
-										<select
+										<Select
 											value={row.type}
 											disabled={creating}
-											onchange={(event) =>
-												updateCreateRow(index, { type: event.currentTarget.value })}
-											class="flex-1 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
-										>
-											{#each ruleTypes as type}
-												<option value={type}>{formatName(type)}</option>
-											{/each}
-										</select>
+											onchange={(value) => updateCreateRow(index, { type: value })}
+											class="flex-1"
+											aria-label="Rule type"
+											options={ruleTypes.map((type) => ({ value: type, label: formatName(type) }))}
+										/>
 										<button
 											onclick={() => removeCreateRow(index)}
 											disabled={creating || createRows.length === 1}
@@ -718,20 +714,20 @@
 										</button>
 									</div>
 
-									<select
+									<Select
 										value={row.entity_public_id}
 										disabled={creating}
-										onchange={(event) =>
+										onchange={(value) =>
 											updateCreateRow(index, {
-												entity_public_id: event.currentTarget.value
+												entity_public_id: value
 											})}
-										class="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
-									>
-										<option value="">All entities</option>
-										{#each entityOptions as option}
-											<option value={option.id}>{option.label}</option>
-										{/each}
-									</select>
+										class="w-full"
+										aria-label="Entity"
+										options={[
+											{ value: '', label: 'All entities' },
+											...entityOptions.map((item) => ({ value: item.id, label: item.label }))
+										]}
+									/>
 
 									<div class="flex flex-wrap items-center gap-3">
 										<div class="flex items-center gap-2">
@@ -743,7 +739,7 @@
 												type="number"
 												step="0.1"
 												value={row.warning}
-												disabled={creating}
+												disabled={!can($profile, 'alerts.configure') || creating}
 												oninput={(event) =>
 													updateCreateRow(index, {
 														warning: Number(event.currentTarget.value)
@@ -760,7 +756,7 @@
 												type="number"
 												step="0.1"
 												value={row.critical}
-												disabled={creating}
+												disabled={!can($profile, 'alerts.configure') || creating}
 												oninput={(event) =>
 													updateCreateRow(index, {
 														critical: Number(event.currentTarget.value)
@@ -768,18 +764,19 @@
 												class="w-24 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
 											/>
 										</div>
-										<select
+										<Select
 											value={row.direction}
 											disabled={creating}
-											onchange={(event) =>
+											onchange={(value) =>
 												updateCreateRow(index, {
-													direction: event.currentTarget.value as 'above' | 'below'
+													direction: value as 'above' | 'below'
 												})}
-											class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-on-surface outline-none focus:border-primary"
-										>
-											<option value="above">Above</option>
-											<option value="below">Below</option>
-										</select>
+											aria-label="Threshold direction"
+											options={[
+												{ value: 'above', label: 'Above' },
+												{ value: 'below', label: 'Below' }
+											]}
+										/>
 									</div>
 								</div>
 							{/each}
@@ -810,21 +807,13 @@
 {/if}
 
 <style>
-	.settings-card {
-		background: rgba(26, 33, 31, 0.95);
-		border: 1px solid rgba(133, 148, 144, 0.15);
-		border-radius: 14px;
-	}
 	.row-item {
 		border-bottom: 1px solid rgba(133, 148, 144, 0.08);
 	}
 	.row-item:last-child {
 		border-bottom: none;
 	}
-	.modal-overlay {
-		background: rgba(0, 0, 0, 0.65);
-		backdrop-filter: blur(5px);
-	}
+
 	.skeleton {
 		background: linear-gradient(
 			90deg,

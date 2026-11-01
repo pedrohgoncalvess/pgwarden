@@ -2,6 +2,7 @@ import tomllib
 from pathlib import Path
 
 from utils import project_root
+from database.storage import get_storage_backend
 
 
 def load_monitored_query(query_type: str):
@@ -13,7 +14,8 @@ def load_monitored_query(query_type: str):
 
 def load_storage_query(schema: str, table: str, query_type: str, query_name: str = "default"):
     base_path = Path(project_root) / "database"
-    full_path = base_path / "queries" / "storage" / schema.lower() / f"{table.lower()}.toml"
+    directory = "sqlite" if get_storage_backend() == "sqlite" else "storage"
+    full_path = base_path / "queries" / directory / schema.lower() / f"{table.lower()}.toml"
     with full_path.open("rb") as f:
         data = tomllib.load(f)
 

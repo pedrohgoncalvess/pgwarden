@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { recentRange } from '$lib/timeRange';
+	import Select from '$lib/components/Select.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -42,21 +45,12 @@
 	let indexData = $state<IndexAnalyticsResponse | null>(null);
 	let serverData = $state<ServerMetricsHistoryResponse | null>(null);
 
-	function localDate(value: Date): string {
-		const offset = value.getTimezoneOffset() * 60_000;
-		return new Date(value.getTime() - offset).toISOString().slice(0, 16);
-	}
-
-	const now = new Date();
-	let startDate = $state(localDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)));
-	let endDate = $state(localDate(now));
+	const initialRange = recentRange();
+	let startDate = $state(initialRange.start);
+	let endDate = $state(initialRange.end);
 
 	function toIso(value: string): string | undefined {
 		return value ? new Date(value).toISOString() : undefined;
-	}
-
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLInputElement | HTMLSelectElement).value;
 	}
 
 	function formatDate(value: string | null | undefined): string {
@@ -154,8 +148,9 @@
 	});
 
 	function setRange(days: number) {
-		endDate = localDate(new Date());
-		startDate = localDate(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+		const range = recentRange(days);
+		startDate = range.start;
+		endDate = range.end;
 		void load();
 	}
 
@@ -174,7 +169,7 @@
 </script>
 
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding h-16"
 >
 	<div class="flex items-center gap-3">
 		<span class="material-symbols-outlined text-primary">history_toggle_off</span>
@@ -211,14 +206,16 @@
 			</div>
 			<div class="flex flex-wrap items-end gap-3">
 				<label class="text-xs text-on-surface-variant"
-					>Database<select
+					>Database<Select
 						value={selectedDb?.id ?? ''}
-						onchange={(event) => selectDatabase(eventValue(event))}
-						class="mt-1 block rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm text-on-surface"
-						><option value="" disabled>Select a database</option
-						>{#each databases as database}<option value={database.id}>{database.name}</option
-							>{/each}</select
-					></label
+						onchange={(value) => selectDatabase(value)}
+						class="mt-1"
+						aria-label="Database"
+						options={[
+							{ value: '', label: 'Select a database', disabled: true },
+							...databases.map((item) => ({ value: item.id, label: item.name }))
+						]}
+					/></label
 				>
 				<label class="text-xs text-on-surface-variant"
 					>From<input
@@ -258,9 +255,7 @@
 	</section>
 
 	{#if loading}<div class="flex justify-center py-20">
-			<span class="material-symbols-outlined animate-spin text-3xl text-primary"
-				>progress_activity</span
-			>
+			<Spinner class="text-3xl text-primary" />
 		</div>{:else}
 		<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 			<div class="rounded-xl border border-outline-variant bg-surface-container p-4">

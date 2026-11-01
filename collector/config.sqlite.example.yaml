@@ -1,0 +1,19 @@
+servers:
+  - name: monitored-postgres
+    host: postgres.internal
+    port: 5432
+    username: pgwarden_monitor
+    password: replace-with-monitor-password
+    ssl_mode: require
+    # System metrics describe the collector's host/container, not a remote host.
+    server_metrics_enabled: false
+    databases:
+      - app
+
+collector:
+  database_stat_collector:
+    interval: 3
+    enabled: true
+  native_query_collector:
+    interval: 0.5
+    enabled: true

@@ -58,6 +58,7 @@ class TableMetricCollector(BaseCollector):
                         "collected_at": collected_at,
                         "table_id": tbl_id,
                         "n_live_tup": row["n_live_tup"],
+                        **{key: row[key] for key in ("n_tup_ins", "n_tup_upd", "n_tup_del", "n_tup_hot_upd", "stats_reset")},
                         "n_dead_tup": row["n_dead_tup"],
                         "table_size_bytes": row["table_size_bytes"],
                         "last_vacuum": row["last_vacuum"],

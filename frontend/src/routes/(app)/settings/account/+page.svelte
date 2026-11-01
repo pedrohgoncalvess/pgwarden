@@ -12,11 +12,3 @@
 		</p>
 	</div>
 </div>
-
-<style>
-	.settings-card {
-		background: rgba(26, 33, 31, 0.95);
-		border: 1px solid rgba(133, 148, 144, 0.15);
-		border-radius: 14px;
-	}
-</style>

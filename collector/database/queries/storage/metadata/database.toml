@@ -19,6 +19,7 @@ JOIN "collector"."server" ms ON ms.id = md.server_id
 WHERE md.is_active  = TRUE
   AND md.deleted_at IS NULL
   AND ms.deleted_at IS NULL
+  AND ms.ingestion_project_id IS NULL
 ORDER BY ms.name, md.db_name
 """
 

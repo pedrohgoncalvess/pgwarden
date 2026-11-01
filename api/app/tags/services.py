@@ -1,3 +1,4 @@
+from app.access.policy import access_context
 from uuid import UUID
 from typing import List
 
@@ -66,7 +67,9 @@ async def create_tag(db: AsyncSession, tag_in: TagCreate) -> Tag:
 async def list_tags(db: AsyncSession, server_id: UUID | None = None) -> List[Tag]:
     tag_repo = TagRepository(db)
     if not server_id:
-        return await tag_repo.find_all(limit=1000)
+        access = access_context()
+        tags = await tag_repo.find_all(limit=100000)
+        return [t for t in tags if access.admin or t.server_id in access.servers.values()]
 
     server = await ServerRepository(db).find_one_by(public_id=server_id)
     if not server:
@@ -148,6 +151,12 @@ async def detach_tag(db: AsyncSession, tag_id: UUID, assignment: TagAssignmentDe
 
 
 async def list_assignments(db: AsyncSession, database_id: UUID | None = None) -> list[dict]:
+    access = access_context()
+    if database_id is None and not access.admin:
+        scoped = []
+        for public_id in access.databases:
+            scoped.extend(await list_assignments(db, UUID(public_id)))
+        return scoped
     database = None
     if database_id:
         database = await _get_database(db, database_id)

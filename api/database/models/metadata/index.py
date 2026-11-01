@@ -26,3 +26,5 @@ class Index(Base):
     updated_by  = Column(BigInteger, nullable=True)
     deleted_at  = Column(DateTime(timezone=True), nullable=True)
     deleted_by  = Column(BigInteger, nullable=True)
+
+    is_valid = Column(Boolean, nullable=True)

@@ -1,0 +1,9 @@
+[INSERT]
+default = """
+INSERT INTO "metric_ram" (
+    collected_at, server_id, total_bytes, used_bytes, available_bytes, percent
+) VALUES (
+    %(collected_at)s, %(server_id)s, %(total_bytes)s, %(used_bytes)s, %(available_bytes)s, %(percent)s
+)
+ON CONFLICT (collected_at, server_id) DO NOTHING
+"""

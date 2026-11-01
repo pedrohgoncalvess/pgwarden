@@ -1,39 +1,19 @@
 import os
+import asyncio
+from contextlib import suppress
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from passlib.context import CryptContext
 
-from app.auth.router import router as auth_router
-from app.databases.schemas.router import router as schema_router
-from app.databases.schemas.history.router import router as schema_history_router
-from app.databases.router import router as database_router
-from app.servers.router import router as server_router
-from app.databases.sessions.router import router as sessions_router
-from app.databases.locks.router import router as locks_router
-from app.databases.configs.router import router as db_config_router
-from app.databases.runs.router import router as db_runs_router
-from app.databases.metrics.router import router as db_metrics_router
-from app.databases.native_queries.router import router as db_native_queries_router
-from app.databases.analytics.router import router as db_analytics_router
-from app.databases.analytics.query.router import router as query_analytics_router
-from app.databases.analytics.server_metrics_router import router as server_metrics_analytics_router
-from app.databases.analytics.table_usage_router import router as table_usage_router
-from app.databases.analytics.recommendations_router import router as recommendations_router
-from app.servers.configs.router import router as srv_config_router
-from app.servers.runs.router import router as srv_runs_router
-from app.servers.metrics.router import router as srv_metrics_router
-from app.tags.router import router as tags_router
-from app.databases.docs.router import router as docs_router
-from app.metadata.search.router import router as metadata_search_router
-from app.notifier.router import router as notifier_router
-from app.notifications.router import router as notifications_router
-from app.health.router import router as health_router
-from app.services.router import router as services_router
 from app.security.default_credentials import sync_default_credentials_notification
 from app.databases.schemas.exceptions import BaseAppException
+from app.openapi import tags_metadata
+from app.routes import register_routes
+from app.projects.rotation import run_rotation_worker
 from database.connection import DatabaseConnection
 from database.models.base import User
 from database.operations.base.user import UserRepository
@@ -43,6 +23,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def get_cors_origins() -> list[str]:
+    """Read the configured browser origins."""
     origins = os.getenv(
         "CORS_ALLOWED_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173",
@@ -51,7 +32,8 @@ def get_cors_origins() -> list[str]:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Initialize the administrator and manage the key rotation worker."""
 
     if os.getenv("IS_TESTING") == "1":
         yield
@@ -85,82 +67,16 @@ async def lifespan(app: FastAPI):
             )
     except Exception as e:
         print(f"Failed to initialize admin user: {e}")
-        
+
+    rotation_task = asyncio.create_task(run_rotation_worker())
     try:
         yield
     finally:
+        rotation_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await rotation_task
         await DatabaseConnection.shutdown()
 
-tags_metadata = [
-    {
-        "name": "auth",
-        "description": "Authentication and authorization endpoints. Handles login and JWT token refresh.",
-    },
-    {
-        "name": "servers",
-        "description": "Manage registered PostgreSQL servers. Connection credentials are encrypted and stored securely.",
-    },
-    {
-        "name": "databases",
-        "description": "Manage monitored databases linked to the registered servers. Includes real-time metrics (TPS) via Server-Sent Events.",
-    },
-    {
-        "name": "schemas",
-        "description": "Expose the currently collected schema metadata (tables, columns, indexes).",
-    },
-    {
-        "name": "sessions",
-        "description": "Real-time session monitoring via Server-Sent Events.",
-    },
-    {
-        "name": "locks",
-        "description": "Real-time lock monitoring via Server-Sent Events.",
-    },
-    {
-        "name": "native queries",
-        "description": "Native pg_stat_activity query monitoring and history.",
-    },
-    {
-        "name": "analytics",
-        "description": "Aggregated analytics for database queries, sizes and indexes.",
-    },
-    {
-        "name": "tags",
-        "description": "Manage metadata tags scoped to a server.",
-    },
-    {
-        "name": "database doc",
-        "description": "Documentation for managed databases.",
-    },
-    {
-        "name": "schema doc",
-        "description": "Documentation for PostgreSQL schemas.",
-    },
-    {
-        "name": "table doc",
-        "description": "Documentation for tables.",
-    },
-    {
-        "name": "column doc",
-        "description": "Documentation for columns, including PII markers.",
-    },
-    {
-        "name": "index doc",
-        "description": "Documentation for indexes.",
-    },
-    {
-        "name": "metadata search",
-        "description": "Hybrid search over metadata objects, documentation and tags.",
-    },
-    {
-        "name": "notifier",
-        "description": "Manage alert rules and their scoped thresholds.",
-    },
-    {
-        "name": "notifications",
-        "description": "Consume and manage frontend notifications generated by monitoring services.",
-    },
-]
 
 app = FastAPI(
     title="PGWarden API",
@@ -173,7 +89,7 @@ app = FastAPI(
         "displayRequestDuration": True,
         "defaultModelsExpandDepth": -1,
     },
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -184,39 +100,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.exception_handler(BaseAppException)
-async def app_exception_handler(request: Request, exc: BaseAppException):
+async def app_exception_handler(request: Request, exc: BaseAppException) -> JSONResponse:
+    """Return the existing application error contract."""
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "message": exc.message,
-            "details": exc.details
-        }
+        content={"message": exc.message, "details": exc.details},
     )
 
-app.include_router(auth_router, prefix="/v1")
-app.include_router(schema_router, prefix="/v1")
-app.include_router(schema_history_router, prefix="/v1")
-app.include_router(database_router, prefix="/v1")
-app.include_router(server_router, prefix="/v1")
-app.include_router(sessions_router, prefix="/v1")
-app.include_router(locks_router, prefix="/v1")
-app.include_router(db_config_router, prefix="/v1")
-app.include_router(db_runs_router, prefix="/v1")
-app.include_router(db_metrics_router, prefix="/v1")
-app.include_router(db_native_queries_router, prefix="/v1")
-app.include_router(db_analytics_router, prefix="/v1")
-app.include_router(query_analytics_router, prefix="/v1")
-app.include_router(server_metrics_analytics_router, prefix="/v1")
-app.include_router(table_usage_router, prefix="/v1")
-app.include_router(recommendations_router, prefix="/v1")
-app.include_router(srv_config_router, prefix="/v1")
-app.include_router(srv_runs_router, prefix="/v1")
-app.include_router(srv_metrics_router, prefix="/v1")
-app.include_router(tags_router, prefix="/v1")
-app.include_router(docs_router, prefix="/v1")
-app.include_router(metadata_search_router, prefix="/v1")
-app.include_router(notifier_router, prefix="/v1")
-app.include_router(notifications_router, prefix="/v1")
-app.include_router(health_router, prefix="/v1")
-app.include_router(services_router, prefix="/v1")
+
+register_routes(app)

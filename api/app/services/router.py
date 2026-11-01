@@ -1,3 +1,4 @@
+from app.access.policy import access_context
 """Configuration endpoints for background services."""
 
 from datetime import datetime
@@ -55,7 +56,8 @@ async def list_analytics_configs() -> list[dict]:
                 """
             )
         )
-        return [dict(row) for row in result.mappings()]
+        access = access_context()
+        return [dict(row) for row in result.mappings() if access.admin or row["database_id"] in access.databases]
 
 
 @router.patch("/analytics/configs/{config_id}", response_model=AnalyticsServiceConfig)

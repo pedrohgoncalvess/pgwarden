@@ -16,3 +16,5 @@ class Index(Base):
     is_unique = Column(Boolean, nullable=False, default=False)
     is_primary = Column(Boolean, nullable=False, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    is_valid = Column(Boolean, nullable=True)

@@ -1,75 +1,36 @@
 import re
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-from uuid import UUID
-import re
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
-from uuid import UUID
-
-from sqlalchemy import select, and_, tuple_, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-import re
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, tuple_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.databases.analytics.query.aggregation import fetch_query_groups
+from app.databases.analytics.query.context_tables import get_context_tables
 from app.databases.analytics.query.models import (
     QueryAnalyticsResponse,
-    QueryAnalyticsItem,
-    QueryAnalyticsTimelinePoint,
-    QueryAnalyticsFilters,
-    QueryAnalyticsUserBreakdown,
-    QueryAnalyticsApplicationBreakdown,
+    QueryContextDatabaseConnections,
+    QueryContextExecution,
+    QueryContextLock,
+    QueryContextResponse,
+    QueryContextServerMetrics,
     QueryExecutionHistoryItem,
     QueryExecutionHistoryResponse,
-    QueryContextResponse,
-    QueryContextExecution,
-    QueryContextServerMetrics,
-    QueryContextDatabaseConnections,
-    QueryContextTable,
-    QueryContextIndex,
-    QueryContextColumn,
 )
+from app.databases.analytics.query.summaries import summarize_queries
 from app.databases.schemas.exceptions import DatabaseNotFoundError
+from database.models.analytics.query import Query
 from database.models.metadata.database import Database
 from database.models.metadata.table import Table
-from database.models.metadata.column import ColumnModel
-from database.models.metadata.index import Index
-from database.models.metadata.index_column import IndexColumn
-from database.models.metric.native_query import NativeQueryMetric
 from database.models.metric.cpu import CpuMetric
-from database.models.metric.ram import RamMetric
 from database.models.metric.disk import DiskMetric
 from database.models.metric.io import IoMetric
-from database.models.metric.session import SessionMetric
-from database.models.metric.table import TableMetric
-from database.models.metric.column import ColumnMetric
-from database.models.metric.index import IndexMetric
 from database.models.metric.lock import LockMetric
-from app.databases.analytics.query.models import (
-    QueryAnalyticsResponse,
-    QueryExecutionHistoryResponse,
-    QueryContextResponse,
-    QueryExecutionHistoryItem,
-    QueryContextExecution,
-    QueryContextServerMetrics,
-    QueryContextDatabaseConnections,
-    QueryContextTable,
-    QueryContextIndex,
-    QueryContextColumn,
-    QueryContextLock,
-)
-from database.models.analytics.query_table_hit import QueryTableHit
-from database.models.analytics.query import Query
+from database.models.metric.native_query import NativeQueryMetric
+from database.models.metric.ram import RamMetric
+from database.models.metric.session import SessionMetric
 from utils import decrypt_or_plain
-
 
 PRESET_RANGES = {
     "1d": timedelta(days=1),
@@ -155,98 +116,6 @@ def _normalize_search_terms(search: Optional[List[str]]) -> list[str]:
     return [term for term in terms if term]
 
 
-def _bucket_timestamp(ts: datetime, bucket_minutes: int = 5) -> datetime:
-    return ts.replace(
-        minute=(ts.minute // bucket_minutes) * bucket_minutes,
-        second=0,
-        microsecond=0,
-    )
-
-
-def _avg_duration(durations: list[Optional[float]]) -> Optional[float]:
-    total = 0.0
-    count = 0
-    for d in durations:
-        if d is not None:
-            total += d
-            count += 1
-    if count == 0:
-        return None
-    return total / count
-
-
-def _sort_key(item: tuple, order_by: str) -> float:
-    """Compute a numeric sort key for a (signature, agg) pair."""
-    agg = item[1]
-    if order_by == "executions":
-        return agg["execution_count"]
-    durations = agg["durations"]
-    valid = [d for d in durations if d is not None]
-    if not valid:
-        return 0.0
-    if order_by == "max_duration":
-        return max(valid)
-    if order_by == "total_duration":
-        return sum(valid)
-    return sum(valid) / len(valid)
-
-
-async def _fetch_batch(
-    db: AsyncSession,
-    database_id: int,
-    start_dt: datetime,
-    end_dt: datetime,
-    user_name: Optional[str],
-    application_name: Optional[str],
-    state: Optional[str],
-    cursor: Optional[tuple],
-    batch_size: int,
-):
-    filters = [
-        NativeQueryMetric.database_id == database_id,
-        NativeQueryMetric.collected_at >= start_dt,
-        NativeQueryMetric.collected_at <= end_dt,
-    ]
-
-    if user_name is not None:
-        filters.append(NativeQueryMetric.user_name == user_name)
-    if application_name is not None:
-        filters.append(NativeQueryMetric.application_name == application_name)
-    if state is not None:
-        filters.append(NativeQueryMetric.state == state)
-
-    if cursor:
-        filters.append(
-            tuple_(
-                NativeQueryMetric.collected_at,
-                NativeQueryMetric.pid,
-                NativeQueryMetric.backend_start,
-            ) > cursor
-        )
-
-    return await db.execute(
-        select(
-            NativeQueryMetric.collected_at,
-            NativeQueryMetric.pid,
-            NativeQueryMetric.backend_start,
-            NativeQueryMetric.query_start,
-            NativeQueryMetric.user_name,
-            NativeQueryMetric.application_name,
-            NativeQueryMetric.state,
-            NativeQueryMetric.query,
-            NativeQueryMetric.query_hash,
-            NativeQueryMetric.query_duration_ms,
-        )
-        .where(and_(*filters))
-        .order_by(
-            NativeQueryMetric.collected_at,
-            NativeQueryMetric.pid,
-            NativeQueryMetric.backend_start,
-        )
-        .limit(batch_size)
-    )
-
-
 async def get_query_analytics(
     db: AsyncSession,
     database_id: UUID,
@@ -274,185 +143,19 @@ async def get_query_analytics(
 
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
-    search_terms = _normalize_search_terms(search)
-    exclude_terms = [term.strip().lower() for term in (exclude or []) if term.strip()]
-
-    BATCH_SIZE = 50_000
-    MAX_TOTAL_ROWS = 500_000
-
-    executions: dict[tuple, dict] = {}
-    users_set: set[Optional[str]] = set()
-    applications_set: set[Optional[str]] = set()
-    states_set: set[Optional[str]] = set()
-    signature_cache: dict[Optional[str], str] = {}
-    total_rows = 0
-    truncated = False
-    cursor: Optional[tuple] = None
-
-    while total_rows < MAX_TOTAL_ROWS:
-        rows_result = await _fetch_batch(
-            db, database.id, start_dt, end_dt, user_name, application_name,
-            state, cursor, BATCH_SIZE,
-        )
-        rows = rows_result.all()
-        if not rows:
-            break
-
-        total_rows += len(rows)
-        if total_rows >= MAX_TOTAL_ROWS:
-            truncated = True
-
-        for row in rows:
-            users_set.add(row.user_name)
-            applications_set.add(row.application_name)
-            states_set.add(row.state)
-
-            query_hash = row.query_hash
-            signature = signature_cache.get(query_hash)
-            if signature is None:
-                query_text = row.query or ""
-                signature = _normalize_query(query_text)
-                signature_cache[query_hash] = signature
-
-            if not signature:
-                continue
-
-            if search_terms and not any(term in signature for term in search_terms):
-                continue
-
-            if exclude_terms and any(term in signature for term in exclude_terms):
-                continue
-
-            exec_key = (row.pid, row.backend_start, row.query_start or row.collected_at, query_hash)
-            existing = executions.get(exec_key)
-            if existing is None or row.collected_at < existing["first_seen"]:
-                executions[exec_key] = {
-                    "signature": signature,
-                    "query_hash": query_hash,
-                    "query": row.query or "",
-                    "user_name": row.user_name,
-                    "application_name": row.application_name,
-                    "state": row.state,
-                    "first_seen": row.collected_at,
-                    "last_seen": row.collected_at,
-                    "durations": [],
-                }
-            executions[exec_key]["durations"].append(row.query_duration_ms)
-            if row.collected_at > executions[exec_key]["last_seen"]:
-                executions[exec_key]["last_seen"] = row.collected_at
-
-        last_row = rows[-1]
-        cursor = (last_row.collected_at, last_row.pid, last_row.backend_start)
-
-        if len(rows) < BATCH_SIZE:
-            break
-
-    signatures: dict[str, dict] = defaultdict(
-        lambda: {
-            "query_preview": "",
-            "query_hash": None,
-            "execution_count": 0,
-            "durations": [],
-            "users": defaultdict(int),
-            "applications": defaultdict(int),
-            "first_seen": None,
-            "last_seen": None,
-        }
+    groups, filters = await fetch_query_groups(
+        db, database.id, start_dt, end_dt, user_name, application_name, state,
     )
-
-    timeline_buckets: dict[datetime, list] = defaultdict(list)
-
-    for exec_data in executions.values():
-        signature = exec_data["signature"]
-        agg = signatures[signature]
-        if agg["execution_count"] == 0:
-            agg["query_preview"] = _build_preview(signature)
-            agg["query_hash"] = exec_data["query_hash"]
-
-        exec_avg_duration = _avg_duration(exec_data["durations"])
-
-        agg["execution_count"] += 1
-        if exec_avg_duration is not None:
-            agg["durations"].append(exec_avg_duration)
-        agg["users"][exec_data["user_name"]] += 1
-        agg["applications"][exec_data["application_name"]] += 1
-
-        if agg["first_seen"] is None or exec_data["first_seen"] < agg["first_seen"]:
-            agg["first_seen"] = exec_data["first_seen"]
-        if agg["last_seen"] is None or exec_data["last_seen"] > agg["last_seen"]:
-            agg["last_seen"] = exec_data["last_seen"]
-
-        bucket = _bucket_timestamp(exec_data["first_seen"])
-        timeline_buckets[bucket].append(exec_avg_duration)
-
-    total = len(signatures)
-    sorted_signatures = sorted(
-        signatures.items(),
-        key=lambda item: (_sort_key(item, order_by), item[0]),
-        reverse=order_dir == "desc",
+    items, timeline, total = summarize_queries(
+        groups, _normalize_query, _normalize_search_terms(search),
+        [term.strip().lower() for term in (exclude or []) if term.strip()],
+        limit, order_by, order_dir,
     )
-    page_signatures = sorted_signatures[:limit] if limit else sorted_signatures
-
-    items = []
-    for signature, agg in page_signatures:
-        durations = agg["durations"]
-        avg_duration = sum(durations) / len(durations) if durations else None
-        max_duration = max(durations) if durations else None
-        min_duration = min(durations) if durations else None
-        total_duration = sum(durations) if durations else None
-
-        user_breakdown = [
-            QueryAnalyticsUserBreakdown(user_name=user, execution_count=count)
-            for user, count in sorted(agg["users"].items(), key=lambda x: x[1], reverse=True)
-        ]
-        application_breakdown = [
-            QueryAnalyticsApplicationBreakdown(application_name=app, execution_count=count)
-            for app, count in sorted(agg["applications"].items(), key=lambda x: x[1], reverse=True)
-        ]
-
-        items.append(
-            QueryAnalyticsItem(
-                query_signature=signature,
-                query_preview=agg["query_preview"],
-                query_hash=agg["query_hash"],
-                execution_count=agg["execution_count"],
-                avg_duration_ms=avg_duration,
-                max_duration_ms=max_duration,
-                min_duration_ms=min_duration,
-                total_duration_ms=total_duration,
-                unique_users=len(agg["users"]),
-                user_breakdown=user_breakdown,
-                unique_applications=len(agg["applications"]),
-                application_breakdown=application_breakdown,
-                first_seen=agg["first_seen"],
-                last_seen=agg["last_seen"],
-            )
-        )
-
-    timeline = []
-    for bucket in sorted(timeline_buckets.keys()):
-        bucket_durations = [d for d in timeline_buckets[bucket] if d is not None]
-        timeline.append(
-            QueryAnalyticsTimelinePoint(
-                timestamp=bucket,
-                execution_count=len(timeline_buckets[bucket]),
-                avg_duration_ms=(sum(bucket_durations) / len(bucket_durations)) if bucket_durations else None,
-            )
-        )
-
     return QueryAnalyticsResponse(
         database_id=database_id,
         database_name=decrypt_or_plain(database.db_name),
-        start_at=start_dt,
-        end_at=end_dt,
-        items=items,
-        total=total,
-        timeline=timeline,
-        filters=QueryAnalyticsFilters(
-            users=sorted(users_set, key=lambda x: (x is None, x or "")),
-            applications=sorted(applications_set, key=lambda x: (x is None, x or "")),
-            states=sorted(states_set, key=lambda x: (x is None, x or "")),
-        ),
+        start_at=start_dt, end_at=end_dt, items=items,
+        total=total, timeline=timeline, filters=filters,
     )
 
 
@@ -619,11 +322,7 @@ async def get_query_context(
     )
 
     # 3. Connections
-    sessions = await db.execute(select(SessionMetric.state).where(SessionMetric.database_id == database.id, SessionMetric.collected_at >= window_start, SessionMetric.collected_at <= window_end))
     state_counts = {"active": 0, "idle": 0, "idle in transaction": 0, "waiting": 0}
-    session_rows = sessions.all()
-    # Deduplicate by considering the closest time or just use aggregate if they are all from the same snapshot.
-    # A simple approach is just counting the latest snapshot within the window.
     latest_session_time_result = await db.execute(
         select(SessionMetric.collected_at)
         .where(SessionMetric.database_id == database.id, SessionMetric.collected_at >= window_start, SessionMetric.collected_at <= window_end)
@@ -667,77 +366,11 @@ async def get_query_context(
     )
     query_id = query_row_result.scalar_one_or_none()
     
-    tables_response = []
-    if query_id:
-        table_hits_result = await db.execute(select(QueryTableHit.schema_name, QueryTableHit.table_name).where(QueryTableHit.query_id == query_id).distinct())
-        table_hits = table_hits_result.all()
-        
-        for hit in table_hits:
-            table_obj = await db.execute(select(Table).where(Table.database_id == database.id, Table.schema_name == hit.schema_name, Table.name == hit.table_name, Table.deleted_at.is_(None)).limit(1))
-            t = table_obj.scalar_one_or_none()
-            if not t:
-                continue
-            
-            t_metric = await db.execute(select(TableMetric).where(TableMetric.table_id == t.id, TableMetric.collected_at <= window_end).order_by(TableMetric.collected_at.desc()).limit(1))
-            tm = t_metric.scalar_one_or_none()
-            
-            indexes = []
-            idx_result = await db.execute(select(Index).where(Index.table_id == t.id, Index.deleted_at.is_(None)))
-            for idx in idx_result.scalars().all():
-                idx_metric = await db.execute(select(IndexMetric).where(IndexMetric.index_id == idx.id, IndexMetric.collected_at <= window_end).order_by(IndexMetric.collected_at.desc()).limit(1))
-                im = idx_metric.scalar_one_or_none()
-                
-                # Hit rate calculation: blks_hit / (blks_hit + blks_read)
-                hit_rate = None
-                if im and im.blks_hit is not None and im.blks_read is not None:
-                    total_blks = im.blks_hit + im.blks_read
-                    if total_blks > 0:
-                        hit_rate = im.blks_hit / total_blks
+    tables_response = (
+        await get_context_tables(db, database.id, query_id, window_end)
+        if query_id else []
+    )
 
-                indexes.append(QueryContextIndex(
-                    index_id=idx.id,
-                    index_name=idx.name,
-                    index_type=idx.type,
-                    definition=idx.definition,
-                    is_unique=idx.is_unique,
-                    is_primary=idx.is_primary,
-                    size_bytes=im.size if im else None,
-                    scan_qt=im.scan_qt if im else None,
-                    hit_rate=hit_rate,
-                ))
-            
-            columns = []
-            col_result = await db.execute(select(ColumnModel).where(ColumnModel.table_id == t.id, ColumnModel.deleted_at.is_(None)))
-            for col in col_result.scalars().all():
-                col_metric = await db.execute(select(ColumnMetric).where(ColumnMetric.column_id == col.id, ColumnMetric.collected_at <= window_end).order_by(ColumnMetric.collected_at.desc()).limit(1))
-                cm = col_metric.scalar_one_or_none()
-                columns.append(QueryContextColumn(
-                    column_id=col.id,
-                    name=col.name,
-                    data_type=col.data_type,
-                    is_nullable=col.is_nullable,
-                    n_distinct=cm.n_distinct if cm else None,
-                    null_fraction=cm.null_fraction if cm else None,
-                    avg_width=cm.avg_width if cm else None,
-                ))
-
-            tables_response.append(QueryContextTable(
-                table_id=t.id,
-                schema_name=t.schema_name,
-                table_name=t.name,
-                n_live_tup=tm.n_live_tup if tm else None,
-                n_dead_tup=tm.n_dead_tup if tm else None,
-                seq_scan=tm.seq_scan if tm else None,
-                idx_scan=tm.idx_scan if tm else None,
-                last_vacuum=tm.last_vacuum if tm else None,
-                last_autovacuum=tm.last_autovacuum if tm else None,
-                last_analyze=tm.last_analyze if tm else None,
-                last_autoanalyze=tm.last_autoanalyze if tm else None,
-                size_bytes=tm.table_size_bytes if tm else None,
-                indexes=indexes,
-                columns=columns,
-            ))
-            
     # 5. Locks (filtered to tables accessed by query or execution PID)
     locks_response = []
     related_table_ids = [t.table_id for t in tables_response]

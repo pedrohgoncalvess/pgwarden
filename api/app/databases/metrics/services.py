@@ -71,9 +71,7 @@ async def database_metrics_stream(database_id: UUID):
                 )
                 internal_database_id = db_result.scalar_one_or_none()
                 if internal_database_id is None:
-                    yield {"event": "error", "data": json.dumps({"error": "Database not found"})}
-                    await asyncio.sleep(2)
-                    continue
+                    raise LookupError('Database not found')
 
                 data, last_ts = await _fetch_latest_two(conn, internal_database_id, last_ts)
 

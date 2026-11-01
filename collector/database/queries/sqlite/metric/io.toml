@@ -1,0 +1,9 @@
+[INSERT]
+default = """
+INSERT INTO "metric_io" (
+    collected_at, server_id, read_bytes, write_bytes, read_count, write_count
+) VALUES (
+    %(collected_at)s, %(server_id)s, %(read_bytes)s, %(write_bytes)s, %(read_count)s, %(write_count)s
+)
+ON CONFLICT (collected_at, server_id) DO NOTHING
+"""

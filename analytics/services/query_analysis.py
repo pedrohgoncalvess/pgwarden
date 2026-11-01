@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import mean, median
 from typing import Any
@@ -26,6 +26,8 @@ from analytics.database.models.metric import (
     SessionMetric,
     TableMetric,
 )
+
+from analytics.services.index_advisor import IndexShape, coverage, index_shape, predicate_roles, quote
 
 ANALYSIS_LIMIT = 100
 WINDOW_PADDING_SECONDS = 30
@@ -69,6 +71,7 @@ class TableInsight:
     index_columns: dict[int, list[str]]
     index_names: dict[int, str]
     column_metrics: dict[int, ColumnMetric]
+    index_shapes: list[IndexShape] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -265,7 +268,7 @@ async def _table_insights(
 
         table_metric = await _latest_table_metric(session, table.id, ended_at)
         condition_columns = await _condition_columns(session, table, condition_hits)
-        index_columns, index_names = await _index_columns(session, table.id)
+        index_columns, index_names, index_shapes = await _index_columns(session, table.id)
         column_metrics = await _latest_column_metrics(session, [column.id for column in condition_columns], ended_at)
 
         insights.append(
@@ -275,6 +278,7 @@ async def _table_insights(
                 condition_columns=condition_columns,
                 index_columns=index_columns,
                 index_names=index_names,
+                index_shapes=index_shapes,
                 column_metrics=column_metrics,
             )
         )
@@ -315,21 +319,28 @@ async def _condition_columns(
     return list(result.scalars().all())
 
 
-async def _index_columns(session: AsyncSession, table_id: int) -> tuple[dict[int, list[str]], dict[int, str]]:
+async def _index_columns(session: AsyncSession, table_id: int) -> tuple[dict[int, list[str]], dict[int, str], list[IndexShape]]:
     result = await session.execute(
-        select(Index.id, Index.name, ColumnModel.name)
-        .join(IndexColumn, IndexColumn.index_id == Index.id)
+        select(Index).where(Index.table_id == table_id, Index.deleted_at.is_(None))
+    )
+    indexes = list(result.scalars().all())
+    result = await session.execute(
+        select(IndexColumn.index_id, ColumnModel.name)
         .join(ColumnModel, ColumnModel.id == IndexColumn.column_id)
-        .where(Index.table_id == table_id)
-        .where(Index.deleted_at.is_(None))
-        .order_by(Index.id.asc(), IndexColumn.ordinal_position.asc())
+        .join(Index, Index.id == IndexColumn.index_id)
+        .where(Index.table_id == table_id, Index.deleted_at.is_(None))
+        .order_by(IndexColumn.ordinal_position.asc())
     )
     columns: dict[int, list[str]] = {}
-    names: dict[int, str] = {}
-    for index_id, index_name, column_name in result.all():
+    for index_id, column_name in result.all():
         columns.setdefault(index_id, []).append(column_name)
-        names[index_id] = index_name
-    return columns, names
+    shapes = []
+    for index in indexes:
+        shape = index_shape(index.name, index.definition, index.type)
+        if index.is_valid is not True:
+            shape = IndexShape(shape.name, shape.keys, False)
+        shapes.append(shape)
+    return columns, {index.id: index.name for index in indexes}, shapes
 
 
 async def _latest_column_metrics(
@@ -669,79 +680,42 @@ def _missing_index_findings(context: QueryContext) -> list[FindingDraft]:
     for insight in context.tables:
         if not insight.condition_columns:
             continue
-
-        indexed_prefixes = {
-            columns[0]
-            for columns in insight.index_columns.values()
-            if columns
-        }
-        missing_columns = [column for column in insight.condition_columns if column.name not in indexed_prefixes]
-        if not missing_columns:
+        names = {column.name for column in insight.condition_columns}
+        equality, ranges, understood = predicate_roles(context.query.query, names)
+        shapes = getattr(insight, "index_shapes", [])
+        if not shapes and insight.index_columns:
+            shapes = [IndexShape(insight.index_names.get(key, str(key)), tuple(cols), False)
+                      for key, cols in insight.index_columns.items()]
+        state, matching = coverage(shapes, equality, ranges, understood)
+        if state == "covered":
             continue
-
         metric = insight.metric
-        n_live_tup = metric.n_live_tup if metric else None
-        large_table = bool(metric and (metric.n_live_tup or 0) >= 10_000)
-        seq_scan_heavy = bool(metric and (metric.seq_scan or 0) > max(metric.idx_scan or 0, 1) * 3)
-
-        # Base confidence
-        confidence = 0.55
-        if large_table:
-            confidence += 0.15
-        if seq_scan_heavy:
-            confidence += 0.15
-
-        # Selectivity adjustment: reward highly selective columns, penalise mostly-NULL ones
-        selectivity_scores: list[float] = []
-        high_null_penalty = False
-        for col in missing_columns:
-            col_metric = insight.column_metrics.get(col.id)
-            sel = _estimate_selectivity(col_metric, n_live_tup)
-            if sel is not None:
-                selectivity_scores.append(sel)
-            if col_metric and col_metric.null_fraction is not None and col_metric.null_fraction > 0.5:
-                high_null_penalty = True
-
-        if selectivity_scores:
-            best_selectivity = min(selectivity_scores)  # lowest fraction = most selective
-            if best_selectivity < 0.01:
-                confidence += 0.10  # very high cardinality column → excellent index candidate
-            elif best_selectivity < 0.05:
-                confidence += 0.05
-        if high_null_penalty:
-            confidence -= 0.05
-
-        suggested_ddl = _suggest_index_ddl(
-            insight.table, missing_columns, insight.column_metrics, n_live_tup
-        )
-
-        findings.append(
-            FindingDraft(
-                type="missing_index",
-                severity="warning",
-                confidence=min(confidence, 0.9),
-                title=f"Possible missing index on {insight.table.schema_name}.{insight.table.name}",
-                explanation="The query filters on columns that do not match the leading columns of a known index.",
-                recommendation=(
-                    f"Consider adding: {suggested_ddl} "
-                    "Validate with EXPLAIN (ANALYZE, BUFFERS) before applying to production."
-                ),
-                evidence={
-                    "table": f"{insight.table.schema_name}.{insight.table.name}",
-                    "missing_prefix_columns": [column.name for column in missing_columns],
-                    "existing_index_prefixes": sorted(indexed_prefixes),
-                    "suggested_ddl": suggested_ddl,
-                    "n_live_tup": n_live_tup,
-                    "seq_scan": metric.seq_scan if metric else None,
-                    "idx_scan": metric.idx_scan if metric else None,
-                    "condition_column_stats": {
-                        column.name: _column_metric_evidence(insight.column_metrics.get(column.id))
-                        for column in missing_columns
-                    },
-                },
-            )
-        )
-
+        # Keep the entire predicate instead of indexing only residual columns.
+        columns = sorted(names, key=lambda name: (name not in equality, name))
+        ddl = None
+        if state == "missing" and len(ranges) <= 1:
+            qualified = f"{quote(insight.table.schema_name)}.{quote(insight.table.name)}"
+            ddl = f"CREATE INDEX CONCURRENTLY ON {qualified} ({', '.join(quote(c) for c in columns)});"
+        confidence = 0.5 if ddl else 0.35
+        if metric and (metric.n_live_tup or 0) >= 10_000:
+            confidence += 0.1
+        table_name = f"{insight.table.schema_name}.{insight.table.name}"
+        findings.append(FindingDraft(
+            type="missing_index", severity="info", confidence=confidence,
+            title=f"Review index coverage on {table_name}",
+            explanation=f"Filter index coverage is {state}; execution-plan validation is required.",
+            recommendation=(f"Candidate: {ddl} " if ddl else "Review existing indexes and the execution plan. ")
+                + "Compare read benefit and write overhead before changing indexes.",
+            evidence={
+                "table": table_name, "table_id": insight.table.id,
+                "missing_prefix_columns": columns, "coverage": state,
+                "matching_indexes": matching,
+                "existing_index_prefixes": sorted({shape.keys[0] for shape in shapes if shape.keys}),
+                "suggested_ddl": ddl, "n_live_tup": metric.n_live_tup if metric else None,
+                "equality_columns": sorted(equality), "range_columns": sorted(ranges),
+                "requires_plan_validation": True, "advisor_version": 2,
+            },
+        ))
     return findings
 
 

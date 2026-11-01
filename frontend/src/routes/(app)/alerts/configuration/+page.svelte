@@ -1,10 +1,7 @@
 <script lang="ts">
+	import { profile, can } from '$lib/access';
 	import { onMount } from 'svelte';
-	import {
-		listNotifierChannels,
-		patchNotifierChannel,
-		type NotifierChannel
-	} from '$lib/api';
+	import { listNotifierChannels, patchNotifierChannel, type NotifierChannel } from '$lib/api';
 
 	type CredentialField = {
 		key: string;
@@ -12,7 +9,10 @@
 		type: 'text' | 'password' | 'number';
 	};
 
-	const channelMeta: Record<string, { icon: string; description: string; fields: CredentialField[] }> = {
+	const channelMeta: Record<
+		string,
+		{ icon: string; description: string; fields: CredentialField[] }
+	> = {
 		slack: {
 			icon: 'tag',
 			description: 'Send alerts to a Slack channel via incoming webhook.',
@@ -162,13 +162,12 @@
 </script>
 
 <header
-	class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
+	class="fixed top-0 right-0 app-page-header z-40 bg-surface-dim border-b border-outline-variant flex items-center px-container-padding h-16 gap-3"
 >
 	<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
 	<h1 class="font-headline-md text-headline-md text-on-background m-0">Alerts</h1>
 	<span class="text-on-surface-variant">/</span>
-	<span
-		class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest"
+	<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest"
 		>Configuration</span
 	>
 </header>
@@ -238,12 +237,11 @@
 						{/if}
 						<label class="flex items-center gap-2 text-xs font-bold text-on-surface">
 							<input
-								type="checkbox"
+								type="checkbox" role="switch"
 								checked={draft.enabled}
-								disabled={savingId === channel.id}
-								onchange={(event) =>
-									updateDraftEnabled(channel.id, event.currentTarget.checked)}
-								class="accent-primary"
+								disabled={!can($profile, 'alerts.configure') || savingId === channel.id}
+								onchange={(event) => updateDraftEnabled(channel.id, event.currentTarget.checked)}
+
 							/>
 							Active
 						</label>
@@ -262,7 +260,7 @@
 									id={`channel-${channel.id}-${field.key}`}
 									type={field.type}
 									value={draft.fields[field.key] ?? ''}
-									disabled={savingId === channel.id}
+									disabled={!can($profile, 'alerts.configure') || savingId === channel.id}
 									placeholder={channel.has_credentials ? '••••••••' : ''}
 									oninput={(event) =>
 										updateDraftField(channel.id, field.key, event.currentTarget.value)}
@@ -295,11 +293,6 @@
 </div>
 
 <style>
-	.settings-card {
-		background: rgba(26, 33, 31, 0.95);
-		border: 1px solid rgba(133, 148, 144, 0.15);
-		border-radius: 14px;
-	}
 	.row-item {
 		border-bottom: 1px solid rgba(133, 148, 144, 0.08);
 	}

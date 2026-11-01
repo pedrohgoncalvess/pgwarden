@@ -1,0 +1,55 @@
+[SELECT]
+with_columns_json = """
+SELECT i.id, i.oid, i.name, i.type, i.definition, i.is_unique, i.is_primary, i.is_valid,
+    (SELECT json_group_array(json_object('column_attnum', ordered.attnum, 'ordinal', ordered.ordinal))
+     FROM (SELECT c.ordinal_position AS attnum, ic.ordinal_position AS ordinal
+           FROM metadata_index_column ic
+           JOIN metadata_column c ON c.id = ic.column_id
+           WHERE ic.index_id = i.id ORDER BY ic.ordinal_position) ordered) AS columns_info
+FROM metadata_index i
+WHERE i.database_id = %(database_id)s AND i.deleted_at IS NULL
+"""
+
+by_oid = """
+SELECT id, oid FROM "metadata_index" WHERE oid IN (SELECT value FROM json_each(%(oids)s))
+"""
+
+by_database_id_and_active = """
+SELECT oid, id
+FROM "metadata_index"
+WHERE database_id = %(database_id)s AND deleted_at IS NULL
+"""
+
+[INSERT]
+default = """
+INSERT INTO "metadata_index" (
+    database_id, table_id, oid, name, type, definition, is_unique, is_primary, is_valid
+) VALUES (
+    %(database_id)s, %(table_id)s, %(index_oid)s, %(index_name)s, %(index_type)s, %(definition)s, %(is_unique)s, %(is_primary)s, %(is_valid)s
+)
+"""
+
+[UPDATE]
+default = """
+UPDATE "metadata_index"
+SET
+    table_id = %(table_id)s,
+    name = %(index_name)s,
+    type = %(index_type)s,
+    definition = %(definition)s,
+    is_unique = %(is_unique)s,
+    is_primary = %(is_primary)s,
+    is_valid = %(is_valid)s,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE oid = %(index_oid)s
+  AND database_id = %(database_id)s
+  AND deleted_at IS NULL
+"""
+
+soft_delete = """
+UPDATE "metadata_index"
+SET deleted_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE oid IN (SELECT value FROM json_each(%(removed_oids)s))
+  AND database_id = %(database_id)s
+  AND deleted_at IS NULL
+"""

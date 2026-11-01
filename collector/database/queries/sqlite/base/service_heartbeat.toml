@@ -1,0 +1,6 @@
+[INSERT]
+default = """
+INSERT INTO "base_service_heartbeat" (service)
+VALUES ('collector')
+ON CONFLICT (service) DO UPDATE SET updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+"""

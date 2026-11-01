@@ -1,0 +1,61 @@
+[SELECT]
+default = """
+SELECT
+    md.id,
+    md.oid,
+    md.server_id,
+    ms.name,
+    ms.host,
+    ms.port,
+    ms.username,
+    ms.password,
+    ms.ssl_mode,
+    ms.ignore_patterns,
+    ms.ignore_tables,
+    ms.include_tables,
+    md.db_name
+FROM "metadata_database" md
+JOIN "collector_server" ms ON ms.id = md.server_id
+WHERE md.is_active  = TRUE
+  AND md.deleted_at IS NULL
+  AND ms.deleted_at IS NULL
+ORDER BY ms.name, md.db_name
+"""
+
+by_server_id = """
+SELECT id, db_name FROM "metadata_database"
+WHERE server_id = %(server_id)s
+AND deleted_at IS NULL
+"""
+
+by_id = """
+SELECT * FROM "metadata_database"
+WHERE id = %(database_id)s
+AND deleted_at IS NULL
+"""
+
+[INSERT]
+default = """
+INSERT INTO "metadata_database" (server_id, db_name)
+VALUES (%(server_id)s, %(db_name)s)
+ON CONFLICT (server_id, db_name) DO NOTHING
+RETURNING id
+"""
+
+[UPDATE]
+last_seen = """
+UPDATE "metadata_database"
+SET
+    last_seen_at = CASE WHEN %(error)s IS NULL THEN strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now') ELSE last_seen_at END,
+    last_error   = %(error)s,
+    updated_at   = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE id = %(id)s
+"""
+
+set_oid = """
+UPDATE "metadata_database"
+SET
+    oid = %(database_id)s,
+    updated_at   = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE id = %(id)s
+"""

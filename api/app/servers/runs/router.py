@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from typing import List
 from uuid import UUID
 
@@ -46,7 +47,9 @@ async def stream_server_runs(server_id: str):
     async with DatabaseConnection() as conn:
         await _require_server(conn, server_id)
 
-    return EventSourceResponse(run_services.run_stream(server_id))
+    return EventSourceResponse(protect_stream(
+        run_services.run_stream(server_id), 'server', server_id, 'schedulers.read'
+    ))
 
 
 @router.get(

@@ -37,6 +37,7 @@ class ServerDatabaseItem(BaseModel):
 
 
 class ServerListItem(BaseModel):
+    project_id: UUID | None = None
     id: UUID
     name: str
     status: str

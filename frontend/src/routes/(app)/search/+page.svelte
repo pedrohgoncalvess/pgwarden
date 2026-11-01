@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Select from '$lib/components/Select.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -55,7 +57,8 @@
 	onMount(async () => {
 		try {
 			[servers, databases] = await Promise.all([listServers(), listDatabases()]);
-			const dbId = $page.url.searchParams.get('database_id') ?? $selectedDatabaseId ?? databases[0]?.id;
+			const dbId =
+				$page.url.searchParams.get('database_id') ?? $selectedDatabaseId ?? databases[0]?.id;
 			if (dbId) {
 				await selectDatabase(dbId);
 			} else if (servers.length > 0) {
@@ -77,10 +80,6 @@
 			return;
 		}
 		error = err.message || fallback;
-	}
-
-	function eventValue(event: Event): string {
-		return (event.currentTarget as HTMLSelectElement).value;
 	}
 
 	async function selectServer(serverId: string) {
@@ -191,7 +190,9 @@
 
 	async function loadTagsForResults(newResults: MetadataSearchResult[]) {
 		const databaseIds = [
-			...new Set(newResults.map((result) => result.database_id).filter((id): id is string => Boolean(id)))
+			...new Set(
+				newResults.map((result) => result.database_id).filter((id): id is string => Boolean(id))
+			)
 		];
 		if (databaseIds.length === 0) {
 			assignments = [];
@@ -247,7 +248,9 @@
 	function docHref(result: MetadataSearchResult): string {
 		if (!result.database_id) return '#';
 		const target = targetKey(result);
-		return target ? `/metadata/${result.database_id}/documentation?target=${encodeURIComponent(target)}` : '#';
+		return target
+			? `/schema/${result.database_id}/documentation?target=${encodeURIComponent(target)}`
+			: '#';
 	}
 
 	function schemaViewHref(result: MetadataSearchResult): string {
@@ -263,11 +266,11 @@
 	function hasSchemaView(result: MetadataSearchResult): boolean {
 		return Boolean(
 			result.database_id &&
-				(result.schema_name ||
-					result.table_id ||
-					result.type === 'table' ||
-					result.type === 'column' ||
-					result.type === 'index')
+			(result.schema_name ||
+				result.table_id ||
+				result.type === 'table' ||
+				result.type === 'column' ||
+				result.type === 'index')
 		);
 	}
 
@@ -277,7 +280,8 @@
 	}
 
 	function tableQueryAnalyticsHref(result: MetadataSearchResult): string {
-		if (!result.database_id || result.type !== 'table' || !result.schema_name || !result.table_name) return '#';
+		if (!result.database_id || result.type !== 'table' || !result.schema_name || !result.table_name)
+			return '#';
 		const params = new URLSearchParams();
 		if (result.schema_name === 'public') {
 			params.append('search', `from public.${result.table_name}`);
@@ -293,14 +297,16 @@
 	}
 
 	function typeIcon(type: MetadataSearchResult['type']): string {
-		return {
-			database: 'database',
-			schema: 'schema',
-			table: 'table',
-			column: 'view_column',
-			index: 'planner_review',
-			tag: 'label'
-		}[type] ?? 'search';
+		return (
+			{
+				database: 'database',
+				schema: 'schema',
+				table: 'table',
+				column: 'view_column',
+				index: 'planner_review',
+				tag: 'label'
+			}[type] ?? 'search'
+		);
 	}
 
 	function typeLabel(type: MetadataSearchResult['type']): string {
@@ -333,7 +339,7 @@
 </script>
 
 <header
-	class="fixed top-0 right-0 z-40 flex h-16 w-[calc(100%-16rem)] items-center justify-between border-b border-outline-variant bg-surface-dim px-container-padding"
+	class="fixed top-0 right-0 z-40 flex h-16 app-page-header items-center justify-between border-b border-outline-variant bg-surface-dim px-container-padding"
 >
 	<div class="flex items-center gap-4">
 		<span class="material-symbols-outlined text-primary">search</span>
@@ -392,7 +398,7 @@
 				class="min-w-0 flex-1 bg-transparent text-base text-on-surface outline-none placeholder:text-on-surface-variant/60"
 			/>
 			{#if loading}
-				<span class="material-symbols-outlined animate-spin text-on-surface-variant">progress_activity</span>
+				<Spinner class="text-on-surface-variant" />
 			{/if}
 		</div>
 
@@ -405,43 +411,45 @@
 				<span class="material-symbols-outlined text-[16px]">filter_list</span>
 				Filter
 				{#if selectedTypes.length > 0}
-					<span class="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/20 px-1 text-[10px] font-bold text-primary">
+					<span
+						class="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/20 px-1 text-[10px] font-bold text-primary"
+					>
 						{selectedTypes.length}
 					</span>
 				{/if}
 			</button>
 
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Server</span>
-				<select
-					value={selectedServer}
-					onchange={(event) => selectServer(eventValue(event))}
-					disabled={servers.length <= 1}
-					class="cursor-pointer rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary outline-none transition-all hover:bg-primary/15 focus:border-primary disabled:cursor-default disabled:opacity-80"
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Server</span
 				>
-					{#each servers as server}
-						<option value={server.id}>{server.name}</option>
-					{/each}
-				</select>
+				<Select
+					value={selectedServer}
+					onchange={(value) => selectServer(value)}
+					disabled={servers.length <= 1}
+					aria-label="Server"
+					options={servers.map((item) => ({ value: item.id, label: item.name }))}
+				/>
 			</label>
 			<label class="flex items-center gap-2">
-				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Database</span>
-				<select
-					value={selectedDbId}
-					onchange={(event) => selectDatabase(eventValue(event))}
-					disabled={serverDatabases.length <= 1}
-					class="cursor-pointer rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary outline-none transition-all hover:bg-secondary/15 focus:border-secondary disabled:cursor-default disabled:opacity-80"
+				<span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant"
+					>Database</span
 				>
-					{#each serverDatabases as database}
-						<option value={database.id}>{database.name}</option>
-					{/each}
-				</select>
+				<Select
+					value={selectedDbId}
+					onchange={(value) => selectDatabase(value)}
+					disabled={serverDatabases.length <= 1}
+					aria-label="Database"
+					options={serverDatabases.map((item) => ({ value: item.id, label: item.name }))}
+				/>
 			</label>
 		</div>
 	</section>
 
 	{#if error}
-		<div class="mb-4 rounded-lg border border-error/30 bg-error-container px-4 py-3 text-sm text-on-error-container">
+		<div
+			class="mb-4 rounded-lg border border-error/30 bg-error-container px-4 py-3 text-sm text-on-error-container"
+		>
 			{error}
 		</div>
 	{/if}
@@ -450,9 +458,12 @@
 		{#if searched && filteredResults.length > 0}
 			<div class="flex flex-wrap items-center gap-2">
 				{#each visibleResultCounts as item}
-					<span class={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${typeTone(item.type)}`}>
+					<span
+						class={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${typeTone(item.type)}`}
+					>
 						<span class="material-symbols-outlined text-[14px]">{typeIcon(item.type)}</span>
-						{item.count} {typeLabel(item.type)}
+						{item.count}
+						{typeLabel(item.type)}
 					</span>
 				{/each}
 			</div>
@@ -462,14 +473,21 @@
 			<div class="rounded-lg border border-outline-variant bg-surface-container p-6">
 				<div class="mb-5 flex items-center gap-2">
 					<span class="material-symbols-outlined text-[20px] text-primary">lightbulb</span>
-					<h2 class="m-0 font-headline-md text-base font-bold text-on-surface">Suggested searches</h2>
+					<h2 class="m-0 font-headline-md text-base font-bold text-on-surface">
+						Suggested searches
+					</h2>
 				</div>
-				<p class="mb-4 text-sm text-on-surface-variant">Click a term to start, or type your own query above.</p>
+				<p class="mb-4 text-sm text-on-surface-variant">
+					Click a term to start, or type your own query above.
+				</p>
 				<div class="flex flex-wrap gap-2">
 					{#each ['primary key', 'foreign key', 'timestamp', 'user', 'email', 'uuid', 'jsonb', 'created_at'] as term}
 						<button
 							type="button"
-							onclick={() => { query = term; runSearch(true); }}
+							onclick={() => {
+								query = term;
+								runSearch(true);
+							}}
 							class="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
 						>
 							<span class="material-symbols-outlined mr-1 text-[14px] align-middle">tag</span>
@@ -479,8 +497,12 @@
 				</div>
 			</div>
 		{:else if searched && !loading && filteredResults.length === 0}
-			<div class="rounded-lg border border-outline-variant bg-surface-container px-6 py-16 text-center">
-				<span class="material-symbols-outlined mb-3 text-[40px] text-on-surface-variant">search_off</span>
+			<div
+				class="rounded-lg border border-outline-variant bg-surface-container px-6 py-16 text-center"
+			>
+				<span class="material-symbols-outlined mb-3 text-[40px] text-on-surface-variant"
+					>search_off</span
+				>
 				<p class="font-bold text-on-surface">No results found</p>
 				<p class="text-sm text-on-surface-variant">Try a different term or remove filters.</p>
 			</div>
@@ -489,13 +511,20 @@
 				<div
 					class="group overflow-hidden rounded-lg border border-outline-variant bg-surface-container transition-colors hover:border-primary/30 hover:bg-surface-container-high"
 				>
-					<a href={resultHref(result)} class="grid gap-4 p-4 md:grid-cols-[auto_minmax(0,1fr)_auto]">
-						<div class={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${typeTone(result.type)}`}>
+					<a
+						href={resultHref(result)}
+						class="grid gap-4 p-4 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+					>
+						<div
+							class={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${typeTone(result.type)}`}
+						>
 							<span class="material-symbols-outlined">{typeIcon(result.type)}</span>
 						</div>
 						<div class="min-w-0">
 							<div class="mb-1 flex flex-wrap items-center gap-2">
-								<span class={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${typeTone(result.type)}`}>
+								<span
+									class={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${typeTone(result.type)}`}
+								>
 									{typeLabel(result.type)}
 								</span>
 								{#if result.database_name}
@@ -511,23 +540,34 @@
 									</span>
 								{/if}
 							</div>
-							<p class="mb-0.5 truncate font-bold text-on-surface group-hover:text-primary">{result.name}</p>
+							<p class="mb-0.5 truncate font-bold text-on-surface group-hover:text-primary">
+								{result.name}
+							</p>
 							{#if result.subtitle}
 								<p class="mb-1 truncate text-sm text-on-surface-variant">{result.subtitle}</p>
 							{/if}
 							{#if result.description}
-								<p class="line-clamp-2 text-sm leading-6 text-on-surface/80">{result.description}</p>
+								<p class="line-clamp-2 text-sm leading-6 text-on-surface/80">
+									{result.description}
+								</p>
 							{/if}
 						</div>
 						<div class="flex flex-col items-end gap-1">
-						<div class="flex flex-col items-center gap-0.5">
-							<span class={`rounded-lg border px-2.5 py-1 font-mono text-sm font-bold tabular-nums ${scoreTone(result)}`}>
-								{resultScore(result)}%
-							</span>
-							<span class="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">Match</span>
+							<div class="flex flex-col items-center gap-0.5">
+								<span
+									class={`rounded-lg border px-2.5 py-1 font-mono text-sm font-bold tabular-nums ${scoreTone(result)}`}
+								>
+									{resultScore(result)}%
+								</span>
+								<span class="text-[9px] font-bold uppercase tracking-wider text-on-surface-variant"
+									>Match</span
+								>
+							</div>
+							<span
+								class="material-symbols-outlined text-on-surface-variant group-hover:text-primary"
+								>arrow_forward</span
+							>
 						</div>
-						<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">arrow_forward</span>
-					</div>
 					</a>
 
 					<div class="flex flex-wrap items-center gap-2 border-t border-outline-variant px-4 py-3">
@@ -572,7 +612,9 @@
 						{#each resultTags(result) as assignment}
 							<span
 								class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
-								style="background-color: {assignment.tag.color || '#6366f1'}20; color: {assignment.tag.color || '#6366f1'}; border: 1px solid {assignment.tag.color || '#6366f1'}40;"
+								style="background-color: {assignment.tag.color || '#6366f1'}20; color: {assignment
+									.tag.color || '#6366f1'}; border: 1px solid {assignment.tag.color ||
+									'#6366f1'}40;"
 							>
 								<span class="material-symbols-outlined text-[14px]">label</span>
 								{assignment.tag.name}
@@ -592,10 +634,14 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-sm"
-		onclick={(e) => { if (e.target === e.currentTarget) filterModalOpen = false; }}
+		class="modal-overlay fixed inset-0 flex items-center justify-center px-4"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) filterModalOpen = false;
+		}}
 	>
-		<div class="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-6 shadow-xl">
+		<div
+			class="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-6 shadow-xl"
+		>
 			<div class="mb-6 flex items-center justify-between">
 				<h2 class="m-0 font-headline-sm text-on-surface">Filter by type</h2>
 				<button
@@ -609,15 +655,20 @@
 
 			<div class="mb-6 grid grid-cols-2 gap-3">
 				{#each availableTypes as type}
-					<label class="flex cursor-pointer items-center gap-3 rounded-lg border border-outline-variant bg-surface-container p-3 transition-colors hover:border-primary/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+					<label
+						class="flex cursor-pointer items-center gap-3 rounded-lg border border-outline-variant bg-surface-container p-3 transition-colors hover:border-primary/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+					>
 						<input
-							type="checkbox"
+							type="checkbox" role="switch"
 							bind:group={selectedTypes}
 							value={type}
-							class="h-4 w-4 cursor-pointer rounded border-outline-variant text-primary focus:ring-primary focus:ring-offset-surface-container"
+
 						/>
 						<div class="flex items-center gap-2">
-							<span class={`material-symbols-outlined text-[18px] ${typeTone(type as any).split(' ')[1]}`}>{typeIcon(type as any)}</span>
+							<span
+								class={`material-symbols-outlined text-[18px] ${typeTone(type as any).split(' ')[1]}`}
+								>{typeIcon(type as any)}</span
+							>
 							<span class="text-sm font-medium text-on-surface">{typeLabel(type as any)}</span>
 						</div>
 					</label>
@@ -628,7 +679,9 @@
 				<button
 					type="button"
 					class="cursor-pointer rounded-lg px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-					onclick={() => { selectedTypes = []; }}
+					onclick={() => {
+						selectedTypes = [];
+					}}
 				>
 					Clear All
 				</button>
