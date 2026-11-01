@@ -23,6 +23,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+@router.post("/", response_model=TagResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post(
     "",
     response_model=TagResponse,
@@ -39,6 +40,7 @@ async def create_tag(tag_in: TagCreate):
     async with DatabaseConnection() as conn:
         return await services.create_tag(conn, tag_in)
 
+@router.get("/", response_model=List[TagResponse], include_in_schema=False)
 @router.get(
     "",
     response_model=List[TagResponse],
