@@ -215,7 +215,7 @@
 										'query_analytics_enabled',
 										event.currentTarget.checked
 									)}
-								
+
 							/>Query parsing</label
 						><label class="flex items-center gap-2 text-xs text-on-surface"
 							><input
@@ -223,7 +223,7 @@
 								checked={draft.recommendation_enabled}
 								onchange={(event) =>
 									updateAnalytics(config.id, 'recommendation_enabled', event.currentTarget.checked)}
-								
+
 							/>Recommendations</label
 						><button
 							onclick={() => saveAnalytics(config)}
@@ -274,7 +274,7 @@
 								checked={draft.enabled}
 								onchange={(event) =>
 									updateNotifier(rule.id, 'enabled', event.currentTarget.checked)}
-								
+
 							/>Active</label
 						><button
 							onclick={() => saveNotifier(rule)}

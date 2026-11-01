@@ -590,7 +590,7 @@
 												toggleTable(table.id);
 												applyFilters();
 											}}
-											
+
 										/>
 										<span class="truncate">{displayTableName(table)}</span>
 									</label>
@@ -663,7 +663,7 @@
 												toggleIndex(idx.id);
 												applyFilters();
 											}}
-											
+
 										/>
 										<span class="truncate"
 											>{idx.index_name}

@@ -532,7 +532,7 @@
 							<input
 								type="checkbox" role="switch"
 								bind:checked={showDatabase}
-								
+
 							/>
 							Database
 						</label>
@@ -613,7 +613,7 @@
 											type="checkbox" role="switch"
 											checked={selectedTableIds.includes(table.id)}
 											onchange={() => toggleTable(table.id)}
-											
+
 										/>
 										<span class="truncate">{displayTableName(table)}</span>
 									</label>

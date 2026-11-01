@@ -440,7 +440,7 @@
 								disabled={!can($profile, 'alerts.configure') || saving}
 								onchange={(event) =>
 									updateRuleDraft(rule.id, { enabled: event.currentTarget.checked })}
-								
+
 							/>
 							Active
 						</label>

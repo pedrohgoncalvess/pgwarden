@@ -241,7 +241,7 @@
 								checked={draft.enabled}
 								disabled={!can($profile, 'alerts.configure') || savingId === channel.id}
 								onchange={(event) => updateDraftEnabled(channel.id, event.currentTarget.checked)}
-								
+
 							/>
 							Active
 						</label>

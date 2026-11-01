@@ -288,7 +288,7 @@
 								checked={draft.is_active}
 								disabled={!can($profile, 'schedulers.configure') || savingIntervals}
 								onchange={(event) => updateDraftActive(config.id, event.currentTarget.checked)}
-								
+
 							/>
 							Active
 						</label>

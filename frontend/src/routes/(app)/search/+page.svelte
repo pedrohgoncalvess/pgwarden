@@ -662,7 +662,7 @@
 							type="checkbox" role="switch"
 							bind:group={selectedTypes}
 							value={type}
-							
+
 						/>
 						<div class="flex items-center gap-2">
 							<span
