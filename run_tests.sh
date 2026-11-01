@@ -83,7 +83,7 @@ sync_api_environment() {
 cleanup() {
   echo ""
   echo -e "${YELLOW}Cleaning up test database and volumes...${NC}"
-  docker compose -f docker-compose.test.yaml down --volumes --remove-orphans 2>/dev/null || true
+  docker compose -p pgwarden-test -f docker/docker-compose.test.yaml down --volumes --remove-orphans 2>/dev/null || true
   echo -e "${GREEN}Done. Virtual environments were preserved.${NC}"
 }
 trap cleanup EXIT
@@ -107,7 +107,7 @@ echo -e "${CYAN}  PGWarden Test Suite${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}[1/10] Starting test database on port $TEST_DB_PORT...${NC}"
-docker compose -f docker-compose.test.yaml up -d --wait || exit 1
+docker compose -p pgwarden-test -f docker/docker-compose.test.yaml up -d --wait || exit 1
 echo -e "${GREEN}Database is ready.${NC}"
 echo ""
 
@@ -170,7 +170,7 @@ echo ""
 echo -e "${YELLOW}[7/10] Running collector tests...${NC}"
 (
   cd collector
-  PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test "$UV_CMD" run pytest tests/ -v
+  PYTHONPATH="." UV_PROJECT_ENVIRONMENT=.venv.test "$UV_CMD" run pytest tests/ ../scripts/tests/ -v
 )
 COLLECTOR_EXIT=$?
 echo ""

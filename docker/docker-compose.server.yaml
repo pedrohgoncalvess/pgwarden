@@ -1,0 +1,137 @@
+# Central receiver: docker compose -p pgwarden -f docker/docker-compose.server.yaml up -d --build
+# The collector and HTTP sender run separately.
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    command: ["postgres", "-c", "timescaledb.enable_chunk_skipping=on"]
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    volumes:
+      - pgwarden_data:/var/lib/postgresql/data
+    networks:
+      - pgwarden_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}" ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  migrations:
+    build:
+      context: ../migrations
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      - COLLECTOR_STORAGE_BACKEND=postgresql
+      - DB_HOST=db
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=5432
+    networks:
+      - pgwarden_network
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    command: [ "gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8080", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "--log-level", "info" ]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=5432
+      - PGWARDEN_EMAIL=${PGWARDEN_EMAIL:-admin@pgwarden.com}
+      - PGWARDEN_PASSWORD=${PGWARDEN_PASSWORD:-admin}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    networks:
+      - pgwarden_network
+
+  notifier:
+    build:
+      context: ..
+      dockerfile: notifier/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=5432
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    volumes:
+      - ../config.yaml:/app/config.yaml:ro
+    networks:
+      - pgwarden_network
+
+  analytics:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_PORT=5432
+    volumes:
+      - ../analytics/config.yaml:/app/analytics/config.yaml:ro
+    networks:
+      - pgwarden_network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - API_URL=http://api:8080
+    networks:
+      - pgwarden_network
+
+networks:
+  pgwarden_network:
+    driver: bridge
+
+volumes:
+  pgwarden_data:

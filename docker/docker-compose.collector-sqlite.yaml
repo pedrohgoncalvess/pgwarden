@@ -1,0 +1,53 @@
+services:
+  migrations:
+    build:
+      context: ../migrations
+    env_file:
+      - ../.env.sqlite
+    environment: &sqlite
+      COLLECTOR_STORAGE_BACKEND: sqlite
+      COLLECTOR_SQLITE_PATH: /var/lib/pgwarden/collector.sqlite3
+    volumes:
+      - collector_sqlite:/var/lib/pgwarden
+
+  sender-init:
+    build: &collector-build
+      context: ../collector
+    command: ["python", "sender.py", "--init-only"]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env.sqlite
+    environment: *sqlite
+    volumes:
+      - collector_sqlite:/var/lib/pgwarden
+
+  collector:
+    build: *collector-build
+    restart: unless-stopped
+    depends_on:
+      sender-init:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env.sqlite
+    environment: *sqlite
+    volumes:
+      - collector_sqlite:/var/lib/pgwarden
+      - ../config.sqlite.yaml:/etc/pgwarden/config.yaml:ro
+
+  sender:
+    build: *collector-build
+    command: ["python", "sender.py"]
+    restart: unless-stopped
+    depends_on:
+      sender-init:
+        condition: service_completed_successfully
+    env_file:
+      - ../.env.sqlite
+    environment: *sqlite
+    volumes:
+      - collector_sqlite:/var/lib/pgwarden
+
+volumes:
+  collector_sqlite:
