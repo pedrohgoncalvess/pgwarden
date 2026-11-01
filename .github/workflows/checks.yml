@@ -11,6 +11,8 @@ jobs:
     name: Tests and static checks
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6

@@ -14,7 +14,7 @@ commit SHAs. PRs have read-only repository permissions and do not publish images
 Test reports are retained as workflow artifacts for 14 days.
 
 The existing `npm run lint` command also checks full frontend formatting and
-ESLint conventions. It currently reports formatting debt and is not a required
+ESLint conventions. It currently reports formatting and ESLint debt and is not a required
 CI step; frontend static validation runs through `npm run check` instead.
 
 ## Publish a version
