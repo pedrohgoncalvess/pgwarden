@@ -1,0 +1,18 @@
+# Root build context: include only workspace manifests and this service.
+**
+!pyproject.toml
+!uv.lock
+!analytics/
+!analytics/pyproject.toml
+!notifier/
+!notifier/pyproject.toml
+!analytics/**
+analytics/.venv*
+analytics/**/__pycache__
+analytics/**/*.py[cod]
+analytics/**/.pytest_cache
+analytics/tests
+analytics/.env*
+analytics/**/*.log
+analytics/log
+analytics/logs
