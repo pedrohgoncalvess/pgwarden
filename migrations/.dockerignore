@@ -14,3 +14,16 @@ tests/
 makefile
 .idea
 .vscode
+.uv-cache
+.pytest_cache
+.mypy_cache
+.ruff_cache
+**/.pytest_cache
+**/*.log
+log/
+logs/
+coverage/
+.coverage
+htmlcov/
+*.sqlite3
+*.sqlite3-*
