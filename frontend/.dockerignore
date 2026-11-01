@@ -1,0 +1,14 @@
+.git
+.vscode
+node_modules
+.svelte-kit
+build
+dist
+coverage
+test-results
+playwright-report
+.env
+.env.*
+*.log
+*.tsbuildinfo
+prototype
