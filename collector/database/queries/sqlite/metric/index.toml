@@ -1,0 +1,9 @@
+[INSERT]
+default = """
+INSERT INTO "metric_index" (
+    collected_at, index_id, size, scan_qt, tup_read_qt, tup_fetch_qt, blks_read, blks_hit
+) VALUES (
+    %(collected_at)s, %(index_id)s, %(size)s, %(scan_qt)s, %(tup_read_qt)s, %(tup_fetch_qt)s, %(blks_read)s, %(blks_hit)s
+)
+ON CONFLICT (collected_at, index_id) DO NOTHING
+"""

@@ -1,0 +1,67 @@
+[SELECT]
+by_id = """
+SELECT id, server_id, name, interval, is_paused, next_run_at
+FROM "collector_config_server"
+WHERE id = %(id)s
+"""
+
+by_server_id = """
+SELECT id, server_id, name, interval, is_paused, next_run_at
+FROM "collector_config_server"
+WHERE server_id = %(server_id)s
+"""
+
+all = """
+SELECT id, server_id, name, interval, is_paused, next_run_at
+FROM "collector_config_server"
+"""
+
+[UPDATE]
+running = """
+UPDATE "collector_config_server"
+SET next_run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || interval || ' seconds')
+WHERE id = %(id)s
+"""
+
+success = """
+UPDATE "collector_config_server"
+SET next_run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || interval || ' seconds')
+WHERE id = %(id)s
+"""
+
+error = """
+UPDATE "collector_config_server"
+SET next_run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || interval || ' seconds')
+WHERE id = %(id)s
+"""
+
+paused = """
+UPDATE "collector_config_server"
+SET is_paused = %(is_paused)s
+WHERE id = %(id)s
+"""
+
+set_next_run_on_force = """
+UPDATE "collector_config_server"
+SET next_run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE id = %(id)s
+"""
+
+set_interval = """
+UPDATE "collector_config_server"
+SET interval = %(interval)s
+WHERE id = %(id)s
+"""
+
+set_settings = """
+UPDATE "collector_config_server"
+SET interval = %(interval)s,
+    is_paused = %(is_paused)s
+WHERE id = %(id)s
+"""
+
+[DELETE]
+by_server_id = """
+DELETE FROM "collector_config_server"
+WHERE server_id = %(server_id)s
+"""

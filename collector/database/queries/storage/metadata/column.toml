@@ -73,7 +73,7 @@ SET
     updated_at = now()
 WHERE
     table_id   = %(table_id)s
-    AND name = %(column_name)s
+    AND name = %(name)s
     AND deleted_at  IS NULL
     AND (
         data_type IS DISTINCT FROM %(data_type)s OR

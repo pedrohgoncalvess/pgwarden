@@ -1,0 +1,11 @@
+[INSERT]
+default = """
+INSERT INTO "metric_session" (
+    collected_at, database_id, pid, backend_start, user_name, application_name,
+    client_addr, state, wait_event_type, wait_event, query_start, state_change, query_preview
+) VALUES (
+    %(collected_at)s, %(database_id)s, %(pid)s, %(backend_start)s, %(user_name)s, %(application_name)s,
+    %(client_addr)s, %(state)s, %(wait_event_type)s, %(wait_event)s, %(query_start)s, %(state_change)s, %(query_preview)s
+)
+ON CONFLICT (collected_at, database_id, pid, backend_start) DO NOTHING
+"""

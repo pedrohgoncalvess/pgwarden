@@ -1,0 +1,44 @@
+[INSERT]
+default = """
+INSERT INTO "collector_server" (
+    name, host, port, username, password, ssl_mode,
+    ignore_patterns, ignore_tables, include_tables
+) VALUES (
+    %(name)s, %(host)s, %(port)s, %(username)s, %(password)s, %(ssl_mode)s,
+    %(ignore_patterns)s, %(ignore_tables)s, %(include_tables)s
+) ON CONFLICT (name) DO UPDATE SET
+    host = EXCLUDED.host,
+    port = EXCLUDED.port,
+    username = EXCLUDED.username,
+    password = EXCLUDED.password,
+    ssl_mode = EXCLUDED.ssl_mode,
+    ignore_patterns = EXCLUDED.ignore_patterns,
+    ignore_tables = EXCLUDED.ignore_tables,
+    include_tables = EXCLUDED.include_tables
+RETURNING id
+"""
+
+[SELECT]
+by_name = """
+SELECT 
+    id, ignore_patterns, ignore_tables, include_tables 
+FROM "collector_server"
+WHERE  name       = %(name)s
+  AND  deleted_at IS NULL
+"""
+
+by_server_id = """
+SELECT id FROM "collector_server"
+WHERE id = %(server_id)s
+AND deleted_at IS NULL
+"""
+
+[UPDATE]
+last_seen = """
+UPDATE "collector_server"
+SET
+    last_seen_at = CASE WHEN %(error)s IS NULL THEN strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now') ELSE last_seen_at END,
+    last_error   = %(error)s,
+    updated_at   = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE id = %(server_id)s
+"""

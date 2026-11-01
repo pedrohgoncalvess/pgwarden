@@ -1,0 +1,96 @@
+[SELECT]
+with_table_metadata = """
+SELECT
+    tc.id,
+    tc.table_id,
+    tt.oid AS table_oid,
+    tt.database_id,
+    tc.name,
+    tc.data_type,
+    tc.is_nullable,
+    tc.default_value,
+    tc.is_unique,
+    tc.ordinal_position,
+    tc.fk_table_id,
+    tc.fk_column_id,
+    fk_tt.oid AS foreign_table_oid,
+    tc.description
+FROM  "metadata_column"  tc
+JOIN  "metadata_table"   tt ON tt.id = tc.table_id
+LEFT JOIN "metadata_table" fk_tt ON fk_tt.id = tc.fk_table_id
+WHERE tc.deleted_at  IS NULL
+  AND tt.database_id = %(database_id)s
+  AND tt.deleted_at  IS NULL
+"""
+
+by_database_id_and_active = """
+SELECT t.oid AS table_oid, c.ordinal_position AS attnum, c.id
+FROM "metadata_column" c
+JOIN "metadata_table" t ON t.id = c.table_id
+WHERE t.database_id = %(database_id)s AND c.deleted_at IS NULL
+"""
+
+[INSERT]
+default = """
+INSERT INTO "metadata_column" (
+    table_id,
+    name,
+    description,
+    data_type,
+    is_nullable,
+    default_value,
+    is_unique,
+    ordinal_position,
+    fk_table_id,
+    fk_column_id
+)
+VALUES (
+    %(table_id)s,
+    %(name)s,
+    %(description)s,
+    %(data_type)s,
+    %(is_nullable)s,
+    %(default_value)s,
+    %(is_unique)s,
+    %(ordinal_position)s,
+    %(fk_table_id)s,
+    %(fk_column_id)s
+)
+ON CONFLICT (table_id, name) DO NOTHING;
+"""
+
+[UPDATE]
+default = """
+UPDATE "metadata_column"
+SET
+    data_type = %(data_type)s,
+    is_nullable = %(is_nullable)s,
+    default_value = %(default_value)s,
+    is_unique = %(is_unique)s,
+    ordinal_position = %(ordinal_position)s,
+    fk_table_id = %(fk_table_id)s,
+    fk_column_id = %(fk_column_id)s,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE
+    table_id   = %(table_id)s
+    AND name = %(name)s
+    AND deleted_at  IS NULL
+    AND (
+        data_type IS DISTINCT FROM %(data_type)s OR
+        is_nullable IS DISTINCT FROM %(is_nullable)s OR
+        default_value IS DISTINCT FROM %(default_value)s OR
+        is_unique IS DISTINCT FROM %(is_unique)s OR
+        ordinal_position IS DISTINCT FROM %(ordinal_position)s OR
+        fk_table_id IS DISTINCT FROM %(fk_table_id)s OR
+        fk_column_id IS DISTINCT FROM %(fk_column_id)s
+    );
+"""
+
+soft_delete = """
+UPDATE "metadata_column"
+SET
+    deleted_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now')
+WHERE
+    id    IN (SELECT value FROM json_each(%(removed_ids)s))
+    AND deleted_at IS NULL;
+"""

@@ -1,0 +1,10 @@
+[INSERT]
+default = """
+INSERT INTO "metadata_index_column" (index_id, column_id, ordinal_position)
+VALUES (%(index_id)s, %(column_id)s, %(ordinal_position)s)
+"""
+
+[DELETE]
+by_index_id = """
+DELETE FROM "metadata_index_column" WHERE index_id IN (SELECT value FROM json_each(%(ids)s))
+"""

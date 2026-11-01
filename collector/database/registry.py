@@ -8,9 +8,6 @@ from utils import decrypt, decrypt_or_plain
 from log import logger
 
 
-_SELECT_DATABASES = load_storage_query(schema="metadata", table="database", query_type="SELECT", query_name="default")
-_UPDATE_LAST_SEEN = load_storage_query(schema="metadata", table="database", query_type="UPDATE", query_name="last_seen")
-
 @dataclass
 class MonitoredDatabase:
     id:              int
@@ -52,7 +49,7 @@ class DatabaseRegistry:
     async def sync(self) -> None:
         async with self._metrics_db as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(_SELECT_DATABASES)
+                await cur.execute(load_storage_query("metadata", "database", "SELECT"))
                 rows = await cur.fetchall()
 
         fresh: dict[int, MonitoredDatabase] = {}
@@ -137,7 +134,10 @@ class DatabaseRegistry:
     async def update_last_seen(self, db_id: int, error: str | None = None) -> None:
         async with self._metrics_db as conn:
             async with conn.cursor() as cur:
-                await cur.execute(_UPDATE_LAST_SEEN, {"id": db_id, "error": error})
+                await cur.execute(
+                    load_storage_query("metadata", "database", "UPDATE", "last_seen"),
+                    {"id": db_id, "error": error},
+                )
             await conn.commit()
 
     def all(self) -> list[MonitoredDatabase]:

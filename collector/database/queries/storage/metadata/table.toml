@@ -36,7 +36,7 @@ default = """
 UPDATE "metadata"."table"
 SET
     schema_name = %(schema_name)s,
-    name = %(table_name)s,
+    name = %(name)s,
     description = %(description)s,
     updated_at = now()
 WHERE
@@ -45,7 +45,7 @@ WHERE
     AND deleted_at IS NULL
     AND (
         schema_name IS DISTINCT FROM %(schema_name)s OR
-        name IS DISTINCT FROM %(table_name)s OR
+        name IS DISTINCT FROM %(name)s OR
         description IS DISTINCT FROM %(description)s
     );
 """

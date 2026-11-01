@@ -1,0 +1,9 @@
+[INSERT]
+default = """
+INSERT INTO "metric_lock" (
+    collected_at, database_id, holder_pid, type, mode, is_granted, table_id, query_preview
+) VALUES (
+    %(collected_at)s, %(database_id)s, %(holder_pid)s, %(type)s, %(mode)s, %(is_granted)s, %(table_id)s, %(query_preview)s
+)
+ON CONFLICT (collected_at, database_id, holder_pid, type, mode, table_id) DO NOTHING
+"""
