@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String,
-    Boolean, DateTime, func, Text
+    Boolean, DateTime, func, Text, BigInteger
 )
 from sqlalchemy.orm import relationship
 
@@ -16,6 +16,7 @@ class User(Base):
     email = Column(String(100), nullable=False, unique=True, index=True)
     password = Column(Text, nullable=False)
     is_admin = Column(Boolean, nullable=False, default=False)
+    role_id = Column(BigInteger, nullable=True)
     inserted_at = Column(DateTime, nullable=False, default=func.now())
     deleted_at = Column(DateTime, nullable=True)
 

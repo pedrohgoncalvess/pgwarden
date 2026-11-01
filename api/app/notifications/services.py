@@ -1,5 +1,6 @@
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_, and_
+from app.access.policy import access_context
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -20,7 +21,19 @@ async def list_notifications(
 ) -> NotificationListResponse:
     """Return notifications matching the requested visibility and level."""
     level_expression = _level_expression()
-    filters = [Notification.hidden.is_(hidden)]
+    access = access_context()
+    scope = True
+    if not access.admin:
+        db_ids = list(access.databases) + [str(v) for v in access.databases.values()]
+        server_ids = list(access.servers) + [str(v) for v in access.servers.values()]
+        scope = or_(
+            Notification.params['database_id'].astext.in_(db_ids),
+            and_(Notification.params['database_id'].astext.is_(None),
+                 or_(Notification.params['server_id'].astext.in_(server_ids),
+                     and_(Notification.params['scope'].astext == 'server',
+                          Notification.params['entity_id'].astext.in_(server_ids)))),
+        )
+    filters = [scope, Notification.hidden.is_(hidden)]
     if level:
         filters.append(level_expression == level)
 
@@ -35,15 +48,15 @@ async def list_notifications(
 
     total = await db.scalar(select(func.count()).select_from(Notification).where(*filters))
     visible_count = await db.scalar(
-        select(func.count()).select_from(Notification).where(Notification.hidden.is_(False))
+        select(func.count()).select_from(Notification).where(scope, Notification.hidden.is_(False))
     )
     hidden_count = await db.scalar(
-        select(func.count()).select_from(Notification).where(Notification.hidden.is_(True))
+        select(func.count()).select_from(Notification).where(scope, Notification.hidden.is_(True))
     )
 
     level_query = (
         select(level_expression, func.count(Notification.id))
-        .where(Notification.hidden.is_(hidden))
+        .where(scope, Notification.hidden.is_(hidden))
         .group_by(level_expression)
     )
     level_rows = (await db.execute(level_query)).all()

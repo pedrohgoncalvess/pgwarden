@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
+from app.access.policy import access_context
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String
 
@@ -101,7 +103,11 @@ async def search_metadata(
 
     sql = text(
         f"""
-        WITH candidates AS (
+        WITH scoped_database AS (
+            SELECT * FROM metadata.database WHERE :unrestricted OR public_id::text = ANY(:allowed_databases)
+        ), scoped_server AS (
+            SELECT * FROM collector.server WHERE :unrestricted OR public_id::text = ANY(:allowed_servers)
+        ), candidates AS (
             SELECT
                 'database' AS type,
                 db.public_id::text AS id,
@@ -116,8 +122,8 @@ async def search_metadata(
                 {db_exact} AS exact_score,
                 {db_fuzzy} AS fuzzy_score,
                 {_vector_score("db_doc.embedding", has_embedding)} AS vector_score
-            FROM metadata.database db
-            JOIN collector.server srv ON srv.id = db.server_id
+            FROM scoped_database db
+            JOIN scoped_server srv ON srv.id = db.server_id
             LEFT JOIN doc.database db_doc ON db_doc.database_id = db.id
             WHERE (:database_id IS NULL OR db.public_id::text = :database_id)
               AND (:server_id IS NULL OR srv.public_id::text = :server_id)
@@ -146,11 +152,11 @@ async def search_metadata(
                     tbl.schema_name,
                     db.server_id
                 FROM metadata."table" tbl
-                JOIN metadata.database db ON db.id = tbl.database_id
+                JOIN scoped_database db ON db.id = tbl.database_id
                 WHERE tbl.deleted_at IS NULL
                 GROUP BY db.id, db.public_id, db.db_name, tbl.schema_name, db.server_id
             ) schema_meta
-            JOIN collector.server srv ON srv.id = schema_meta.server_id
+            JOIN scoped_server srv ON srv.id = schema_meta.server_id
             LEFT JOIN doc.schema schema_doc
                 ON schema_doc.database_id = schema_meta.database_internal_id
                AND schema_doc.schema_name = schema_meta.schema_name
@@ -174,8 +180,8 @@ async def search_metadata(
                 {table_fuzzy} AS fuzzy_score,
                 {_vector_score("table_doc.embedding", has_embedding)} AS vector_score
             FROM metadata."table" tbl
-            JOIN metadata.database db ON db.id = tbl.database_id
-            JOIN collector.server srv ON srv.id = db.server_id
+            JOIN scoped_database db ON db.id = tbl.database_id
+            JOIN scoped_server srv ON srv.id = db.server_id
             LEFT JOIN doc."table" table_doc ON table_doc.table_id = tbl.id
             WHERE (:database_id IS NULL OR db.public_id::text = :database_id)
               AND (:server_id IS NULL OR srv.public_id::text = :server_id)
@@ -199,8 +205,8 @@ async def search_metadata(
                 {_vector_score("column_doc.embedding", has_embedding)} AS vector_score
             FROM metadata."column" col
             JOIN metadata."table" tbl ON tbl.id = col.table_id
-            JOIN metadata.database db ON db.id = tbl.database_id
-            JOIN collector.server srv ON srv.id = db.server_id
+            JOIN scoped_database db ON db.id = tbl.database_id
+            JOIN scoped_server srv ON srv.id = db.server_id
             LEFT JOIN doc."column" column_doc ON column_doc.column_id = col.id
             WHERE (:database_id IS NULL OR db.public_id::text = :database_id)
               AND (:server_id IS NULL OR srv.public_id::text = :server_id)
@@ -225,8 +231,8 @@ async def search_metadata(
                 {_vector_score("index_doc.embedding", has_embedding)} AS vector_score
             FROM metadata."index" idx
             JOIN metadata."table" tbl ON tbl.id = idx.table_id
-            JOIN metadata.database db ON db.id = idx.database_id
-            JOIN collector.server srv ON srv.id = db.server_id
+            JOIN scoped_database db ON db.id = idx.database_id
+            JOIN scoped_server srv ON srv.id = db.server_id
             LEFT JOIN doc."index" index_doc ON index_doc.index_id = idx.id
             WHERE (:database_id IS NULL OR db.public_id::text = :database_id)
               AND (:server_id IS NULL OR srv.public_id::text = :server_id)
@@ -250,12 +256,12 @@ async def search_metadata(
                 {tag_fuzzy} AS fuzzy_score,
                 {_vector_score("tag.embedding", has_embedding)} AS vector_score
             FROM doc.tag tag
-            JOIN collector.server srv ON srv.id = tag.server_id
+            JOIN scoped_server srv ON srv.id = tag.server_id
             WHERE (:server_id IS NULL OR srv.public_id::text = :server_id)
               AND (
                 :database_id IS NULL OR tag.server_id = (
                     SELECT filtered_db.server_id
-                    FROM metadata.database filtered_db
+                    FROM scoped_database filtered_db
                     WHERE filtered_db.public_id::text = :database_id
                     LIMIT 1
                 )
@@ -270,11 +276,16 @@ async def search_metadata(
         LIMIT :limit
         """
     ).bindparams(
+        bindparam("allowed_databases", type_=ARRAY(String)),
+        bindparam("allowed_servers", type_=ARRAY(String)),
         bindparam("database_id", type_=String),
         bindparam("server_id", type_=String)
     )
 
     params: dict[str, Any] = {
+        "unrestricted": access_context().admin,
+        "allowed_databases": list(access_context().databases),
+        "allowed_servers": list(access_context().servers),
         "query_lower": term.lower(),
         "query_like": f"%{term.lower()}%",
         "query_embedding": embedding_literal,

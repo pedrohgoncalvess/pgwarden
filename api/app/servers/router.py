@@ -1,3 +1,4 @@
+from app.access.policy import access_context
 from typing import List, Union
 import asyncio
 import ssl
@@ -62,11 +63,15 @@ async def list_servers():
         server_repo = ServerRepository(conn)
         db_repo = DatabaseRepository(conn)
 
-        servers = await server_repo.find_all()
+        access = access_context()
+        servers = await server_repo.find_by(deleted_at=None)
+        servers = [s for s in servers if access.admin or str(s.public_id) in access.servers]
         databases = await db_repo.find_by(deleted_at=None)
 
         db_map = {}
         for db in databases:
+            if not access.admin and str(db.public_id) not in access.databases:
+                continue
             if db.server_id not in db_map:
                 db_map[db.server_id] = []
             db_map[db.server_id].append(ServerDatabaseItem(id=db.public_id))
@@ -80,6 +85,7 @@ async def list_servers():
             result.append(ServerListItem(
                 id=s.public_id,
                 name=s.name,
+                project_id=s.ingestion_project_id,
                 status=status,
                 databases=db_map.get(s.id, [])
             ))

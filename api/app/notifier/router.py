@@ -1,3 +1,5 @@
+from app.access.policy import access_context
+from app.access.targets import threshold_visible
 import json
 from typing import Dict, List, Optional
 from uuid import UUID
@@ -120,6 +122,8 @@ async def _load_thresholds(conn, rule_id: int) -> List[ThresholdResponse]:
         repo = threshold_repository(scope, conn)
         rows = await repo.find_by(rule_id=rule_id)
         for row in rows:
+            if not await threshold_visible(conn, access_context(), scope, row):
+                continue
             thresholds.append(await _threshold_response(conn, scope, row))
     return thresholds
 

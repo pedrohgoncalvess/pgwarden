@@ -1,3 +1,4 @@
+from app.access.policy import access_context
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 
@@ -60,7 +61,9 @@ async def list_databases():
     async with DatabaseConnection() as conn:
         db_repo = DatabaseRepository(conn)
         server_repo = ServerRepository(conn)
-        databases = await db_repo.find_all()
+        access = access_context()
+        databases = await db_repo.find_all(limit=100000)
+        databases = [d for d in databases if access.admin or str(d.public_id) in access.databases]
 
         result = []
         for db in databases:

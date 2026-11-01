@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from typing import List, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -37,7 +38,9 @@ async def stream_database_runs(database_id: str):
         if not database:
             raise HTTPException(status_code=404, detail="Database not found")
 
-    return EventSourceResponse(run_services.database_run_stream(database_id))
+    return EventSourceResponse(protect_stream(
+        run_services.database_run_stream(database_id), 'database', database_id, 'schedulers.read'
+    ))
 
 
 @router.get(

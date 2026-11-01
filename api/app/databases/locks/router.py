@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -22,4 +23,6 @@ router = APIRouter(
     responses=COMMON_RESPONSES
 )
 async def stream_locks(database_id: UUID):
-    return EventSourceResponse(lock_stream(database_id))
+    return EventSourceResponse(protect_stream(
+        lock_stream(database_id), 'database', database_id
+    ))

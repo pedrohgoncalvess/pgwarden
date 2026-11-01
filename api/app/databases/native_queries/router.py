@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -32,4 +33,6 @@ async def list_recent_native_queries(database_id: UUID, limit: int = Query(defau
     responses=COMMON_RESPONSES,
 )
 async def stream_native_queries(database_id: UUID):
-    return EventSourceResponse(native_query_stream(database_id))
+    return EventSourceResponse(protect_stream(
+        native_query_stream(database_id), 'database', database_id
+    ))

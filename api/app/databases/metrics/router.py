@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -32,7 +33,9 @@ router = APIRouter(
     responses=COMMON_RESPONSES
 )
 async def stream_database_metrics(database_id: UUID):
-    return EventSourceResponse(database_metrics_stream(database_id))
+    return EventSourceResponse(protect_stream(
+        database_metrics_stream(database_id), 'database', database_id
+    ))
 
 
 @router.get(

@@ -1,3 +1,4 @@
+from app.access.streams import protect_stream
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -24,4 +25,6 @@ router = APIRouter(
     responses=COMMON_RESPONSES
 )
 async def stream_server_metrics(server_id: UUID):
-    return EventSourceResponse(server_metrics_stream(server_id))
+    return EventSourceResponse(protect_stream(
+        server_metrics_stream(server_id), 'server', server_id
+    ))
