@@ -1,4 +1,14 @@
+import { createCatalogCache } from './catalogCache';
+
 export type SessionValidation = 'valid' | 'invalid' | 'unavailable';
+
+const catalogCache = createCatalogCache();
+
+export function invalidateCatalog(): void {
+    catalogCache.clear();
+    if (typeof window !== 'undefined')
+        window.dispatchEvent?.(new Event('pgwarden:catalog-invalidated'));
+}
 
 let redirecting = false;
 
@@ -18,14 +28,27 @@ export function authHeaders(): Record<string, string> {
 export function redirectToLogin(): void {
 	if (typeof window === 'undefined') return;
 	localStorage.removeItem('token');
+	catalogCache.clear();
 	if (window.location.pathname === '/login' || redirecting) return;
 	redirecting = true;
 	window.location.replace('/login');
 }
 
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	const response = await globalThis.fetch(input, init);
+	const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+	const url = String(input);
+	const catalog = /^\/api\/v1\/(servers|databases)\/?$/.test(url);
+	const load = () => globalThis.fetch(input, init);
+	const response =
+		typeof window !== 'undefined' && catalog && method === 'GET' && !init?.signal
+			? await catalogCache.read(url, getAccessToken(), load)
+			: await load();
 	if (response.status === 401) redirectToLogin();
+	if (response.ok && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+		catalogCache.clear();
+		if (typeof window !== 'undefined')
+			window.dispatchEvent?.(new Event('pgwarden:catalog-invalidated'));
+	}
 	return response;
 }
 
