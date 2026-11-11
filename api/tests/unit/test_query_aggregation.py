@@ -27,7 +27,7 @@ def samples_session() -> Iterator[Session]:
                 database_id INTEGER, collected_at DATETIME, pid INTEGER,
                 backend_start DATETIME, query_start DATETIME, query_hash TEXT,
                 query TEXT, query_duration_ms FLOAT, user_name TEXT,
-                application_name TEXT, state TEXT,
+                application_name TEXT, state TEXT, query_id BIGINT,
                 PRIMARY KEY (collected_at, database_id, pid, backend_start)
             )
         """)

@@ -17,6 +17,23 @@ FROM "collector_config_database"
 """
 
 [UPDATE]
+workload_unavailable = """
+UPDATE collector_config_database
+SET consecutive_errors = min(consecutive_errors + 1, 3),
+    is_paused = is_paused OR consecutive_errors + 1 >= 3,
+    warning = CASE WHEN consecutive_errors + 1 >= 3 THEN
+        'pg_stat_statements collection automatically disabled after 3 consecutive failures: extension or view unavailable. Install/configure the extension, then enable this collector again.'
+        ELSE warning END
+WHERE database_id = %(database_id)s AND name = 'query_workload_collector'
+RETURNING consecutive_errors, warning
+"""
+
+workload_reset = """
+UPDATE collector_config_database SET consecutive_errors = 0,
+    warning = CASE WHEN %(clear_warning)s THEN NULL ELSE warning END
+WHERE database_id = %(database_id)s AND name = 'query_workload_collector'
+"""
+
 running = """
 UPDATE "collector_config_database"
 SET next_run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || interval || ' seconds')
@@ -56,6 +73,6 @@ WHERE id = %(id)s
 set_settings = """
 UPDATE "collector_config_database"
 SET interval = %(interval)s,
-    is_paused = %(is_paused)s
+    is_paused = CASE WHEN name = 'query_workload_collector' AND warning IS NOT NULL THEN TRUE ELSE %(is_paused)s END
 WHERE id = %(id)s
 """

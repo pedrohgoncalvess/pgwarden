@@ -73,7 +73,9 @@ async def test_workload_snapshot_persists_and_deduplicates(storage):
     now = datetime.now(timezone.utc)
     values = dict(collected_at=now, database_id=database_id, query_id=-123, user_id=10,
                   is_toplevel=True, calls=200, total_exec_time=1234.5, shared_blks_read=5,
-                  shared_blks_hit=30, stats_reset=now, dealloc=2)
+                  shared_blks_hit=30, stats_reset=now, dealloc=2,
+                  query='SELECT $1', query_hash='abc', user_name='alice',
+                  statement_data='{"wal_bytes": 100, "rows": 200}')
     query = load_storage_query('metric', 'query_workload', 'INSERT')
     async with storage as connection:
         async with connection.cursor(row_factory=dict_row) as cursor:
@@ -85,6 +87,8 @@ async def test_workload_snapshot_persists_and_deduplicates(storage):
     assert rows[0]['stats_reset'] == now
     assert rows[0]['total_exec_time'] == 1234.5
     assert rows[0]['query_id'] == -123
+    assert rows[0]['query'] == 'SELECT $1'
+    assert rows[0]['statement_data'] == '{"wal_bytes": 100, "rows": 200}'
 
 
 def test_all_sqlite_queries_match_schema(storage):
@@ -153,7 +157,10 @@ async def test_bootstrap_registry_and_scheduling(storage):
                 {"database_id": database_id},
             )
             configs = await cursor.fetchall()
-            assert len(configs) == 10
+            assert len(configs) == 11
+            workload = next(c for c in configs if c['name'] == 'query_workload_collector')
+            assert workload['interval'] == 60
+            assert workload['is_paused']
             config = next(c for c in configs if c["name"] == "native_query_collector")
             assert config["interval"] == 0.5
             before = datetime.now(timezone.utc)
@@ -367,7 +374,8 @@ async def test_bootstrap_local_settings_and_restart(storage, monkeypatch):
                 }
             ],
             "collector": {
-                "native_query_collector": {"interval": 2.5, "enabled": False}
+                "native_query_collector": {"interval": 2.5, "enabled": False},
+                "query_workload_collector": {"interval": 3600, "enabled": True},
             },
         },
     )
@@ -386,3 +394,70 @@ async def test_bootstrap_local_settings_and_restart(storage, monkeypatch):
             )
             config = await cursor.fetchone()
             assert config == {"interval": 2.5, "is_paused": 1}
+            await cursor.execute(
+                "SELECT interval, is_paused FROM collector_config_database WHERE name='query_workload_collector'"
+            )
+            assert await cursor.fetchone() == {"interval": 3600, "is_paused": 0}
+
+
+@pytest.mark.asyncio
+async def test_missing_statements_auto_pauses_after_three_failures_and_survives_restart(storage, monkeypatch):
+    from unittest.mock import AsyncMock
+    from collector.collectors.metric import query_workload as workload
+    from config import main as configuration
+
+    _, database_id = await register_target(storage)
+    async with storage as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE collector_config_database SET is_paused=0 WHERE name='query_workload_collector'")
+    monkeypatch.setattr(workload, 'collect_query_workload', AsyncMock(side_effect=workload.StatementSourceUnavailable('missing extension')))
+    warning_log = AsyncMock()
+    monkeypatch.setattr(workload.logger, 'warn', warning_log)
+    for attempt in range(1, 4):
+        # A fresh instance models process restart; count is stored, not in RAM.
+        collector = workload.QueryWorkloadMetricCollector(None, storage, database_id)
+        with pytest.raises(workload.StatementSourceUnavailable):
+            await collector.collect()
+        async with storage as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT consecutive_errors, is_paused, warning FROM collector_config_database WHERE name='query_workload_collector'")
+                state = await cur.fetchone()
+        assert state['consecutive_errors'] == attempt
+        assert bool(state['is_paused']) == (attempt == 3)
+        assert bool(state['warning']) == (attempt == 3)
+    warning_log.assert_awaited_once()
+    monkeypatch.setattr(configuration, '_load_config', lambda: {'collector': {'query_workload_collector': {'interval': 60, 'enabled': True}}})
+    await configuration._apply_collector_settings(storage)
+    async with storage as conn:
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute("SELECT is_paused, warning FROM collector_config_database WHERE name='query_workload_collector'")
+            state = await cur.fetchone()
+    assert state['is_paused'] and state['warning']
+
+
+@pytest.mark.asyncio
+async def test_success_and_other_errors_interrupt_missing_source_streak(storage, monkeypatch):
+    from unittest.mock import AsyncMock
+    from collector.collectors.metric import query_workload as workload
+
+    _, database_id = await register_target(storage)
+    collector = workload.QueryWorkloadMetricCollector(None, storage, database_id)
+    collect = AsyncMock(side_effect=[
+        workload.StatementSourceUnavailable('missing view'), 0,
+        workload.StatementSourceUnavailable('missing view'), RuntimeError('permission denied'),
+        workload.StatementSourceUnavailable('missing view'),
+    ])
+    monkeypatch.setattr(workload, 'collect_query_workload', collect)
+    for error, count in [(workload.StatementSourceUnavailable, 1), (None, 0),
+                         (workload.StatementSourceUnavailable, 1), (RuntimeError, 0),
+                         (workload.StatementSourceUnavailable, 1)]:
+        if error:
+            with pytest.raises(error):
+                await collector.collect()
+        else:
+            await collector.collect()
+        async with storage as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT consecutive_errors, warning FROM collector_config_database WHERE name='query_workload_collector'")
+                state = await cur.fetchone()
+        assert state['consecutive_errors'] == count and state['warning'] is None

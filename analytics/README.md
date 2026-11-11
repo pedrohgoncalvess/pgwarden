@@ -24,11 +24,14 @@ descartados. Quantidade/tamanho dos índices e proporção de HOT updates aparec
 nas evidências. Essas métricas indicam pressão de escrita, não um custo exato
 de manutenção do índice candidato.
 
-Quando `pg_stat_statements` estiver disponível, o coletor de consultas nativas
-também grava snapshots opcionais de chamadas, tempo de execução e blocos
+Quando `pg_stat_statements` estiver disponível, o coletor de workload
+grava snapshots opcionais de chamadas, tempo de execução e blocos
 lidos/acessados, identificados por query ID, usuário e nível de execução.
-Essa coleta faz no máximo uma tentativa por minuto por banco, independentemente
-da frequência da amostragem de consultas ativas.
+O `query_workload_collector` tem agendamento próprio (padrão: 60 segundos por banco),
+vem desativado por padrão e pausa automaticamente após três falhas consecutivas
+por ausência da extensão/view, deixando um aviso na configuração e no log. É
+independente da coleta de activity. Pode ser pausado ou configurado em Jobs →
+Database, ou pelo bloco global `collector` do YAML.
 A extensão não é habilitada automaticamente; sua ausência ou falta de permissão
 mantém a coleta habitual funcionando. A consulta opcional usa os campos de
 `pg_stat_statements` disponíveis no PostgreSQL 14 ou superior. O advisor utiliza
@@ -40,11 +43,16 @@ candidato crítico. Um aviso exige pelo menos 100 chamadas, 60 segundos de tempo
 acumulado, 5% do tempo observado, uma hora de observação, dados recentes e pressão
 de escrita conhecida abaixo do limiar. Esses limiares são heurísticos, não uma
 previsão de ganho. Sem evidência suficiente, a recomendação é informativa e pede
-validação com planos representativos. O workload associado depende de a consulta
-ter sido capturada pela amostragem de consultas nativas; essa amostragem não é
-usada como frequência de execução. Sobreposição entre candidatos pode fazer o
+validação com planos representativos. Textos de statements também alimentam os
+parsers e o catálogo, associados a activity pelo query ID dentro de cada banco;
+essa amostragem não é usada como frequência de execução. Sobreposição entre
+candidatos pode fazer o
 mesmo workload aparecer em mais de uma recomendação; seus valores não devem ser
 somados como economias independentes.
+
+Detalhes de identidade, mescla de fontes e atualização em
+[`docs/query-sources.md`](../docs/query-sources.md). A migration
+`20261101_01_query-sources` deve ser aplicada antes de atualizar os serviços.
 
 Configuração do processo Analytics:
 

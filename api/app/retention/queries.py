@@ -36,7 +36,7 @@ CHUNKS = text("""
 """)
 
 WINDOW = text("""
-    SELECT now() AS measured_at, now() - CAST(:interval AS interval) AS cutoff,
+    SELECT now() AS measured_at, now() - CAST(CAST(:interval AS text) AS interval) AS cutoff,
            EXTRACT(EPOCH FROM (now() -
-               (now() - CAST(:interval AS interval)))) AS seconds
+               (now() - CAST(CAST(:interval AS text) AS interval)))) AS seconds
 """)

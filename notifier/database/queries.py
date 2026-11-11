@@ -1,4 +1,6 @@
 import json
+import logging
+from cryptography.fernet import InvalidToken
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -6,7 +8,9 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from notifier.utils import decrypt_or_plain
+from notifier.utils import decrypt
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -50,8 +54,14 @@ async def fetch_channels(session: AsyncSession) -> list[ChannelRow]:
     )
     channels = []
     for row in result.mappings():
-        decrypted = decrypt_or_plain(row["credentials"])
-        credentials = json.loads(decrypted) if decrypted else {}
+        try:
+            decrypted = decrypt(row["credentials"]) if row["credentials"] else None
+            credentials = json.loads(decrypted) if decrypted else {}
+            if not isinstance(credentials, dict):
+                raise ValueError("Invalid credential object")
+        except (InvalidToken, ValueError, TypeError):
+            logger.error("Channel %s skipped: invalid encrypted credentials", row["name"])
+            continue
         channels.append(ChannelRow(name=row["name"], credentials=credentials))
     return channels
 

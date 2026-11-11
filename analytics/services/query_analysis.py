@@ -25,6 +25,7 @@ from analytics.database.models.metric import (
     RamMetric,
     SessionMetric,
     TableMetric,
+    QueryWorkloadMetric,
 )
 
 from analytics.services.index_advisor import IndexShape, coverage, index_shape, predicate_roles, quote
@@ -77,7 +78,7 @@ class TableInsight:
 @dataclass(frozen=True)
 class QueryContext:
     query: Query
-    native_query: NativeQueryMetric
+    native_query: NativeQueryMetric | QueryWorkloadMetric
     database: Database
     window: TimeWindow
     tables: list[TableInsight]
@@ -91,6 +92,7 @@ class QueryContext:
     lock_samples: list[LockMetric]
     duration_history_ms: list[float]
     recent_dropped_indexes: list[DroppedIndexInfo]
+    source: str = "activity"
 
 
 async def process_query_analysis_with_session(
@@ -118,7 +120,7 @@ async def process_query_analysis_with_session(
             database_id=database_id,
             started_at=context.window.started_at,
             ended_at=context.window.ended_at,
-            duration_ms=context.native_query.query_duration_ms,
+            duration_ms=getattr(context.native_query, "query_duration_ms", None),
             overall_score=round(overall_score, 2),
             summary=summary,
         )
@@ -136,7 +138,7 @@ async def process_query_analysis_with_session(
                     title=finding.title,
                     explanation=finding.explanation,
                     recommendation=recommendation,
-                    evidence=finding.evidence,
+                    evidence={**finding.evidence, "query_source": context.source},
                 )
             )
 
@@ -166,7 +168,7 @@ async def _build_context(session: AsyncSession, query: Query) -> QueryContext | 
 
     native_query = await _latest_native_query(session, query)
     if native_query is None:
-        return None
+        return await _build_statement_context(session, query, database)
 
     window = _time_window(native_query)
     baseline_start = window.started_at - timedelta(seconds=BASELINE_SECONDS)
@@ -205,7 +207,9 @@ async def _build_context(session: AsyncSession, query: Query) -> QueryContext | 
 
 async def _latest_native_query(session: AsyncSession, query: Query) -> NativeQueryMetric | None:
     filters = [NativeQueryMetric.database_id == query.database_id]
-    if query.hash:
+    if query.pg_query_id:
+        filters.append(NativeQueryMetric.query_id == query.pg_query_id)
+    elif query.hash:
         filters.append(or_(NativeQueryMetric.query_hash == query.hash, NativeQueryMetric.query == query.query))
     else:
         filters.append(NativeQueryMetric.query == query.query)
@@ -217,6 +221,26 @@ async def _latest_native_query(session: AsyncSession, query: Query) -> NativeQue
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def _build_statement_context(session: AsyncSession, query: Query, database: Database) -> QueryContext | None:
+    identity = (QueryWorkloadMetric.query_id == query.pg_query_id) if query.pg_query_id else (QueryWorkloadMetric.query == query.query)
+    result = await session.execute(select(QueryWorkloadMetric).where(
+        QueryWorkloadMetric.database_id == query.database_id, identity,
+    ).order_by(QueryWorkloadMetric.collected_at.desc()).limit(1))
+    snapshot = result.scalar_one_or_none()
+    if snapshot is None:
+        return None
+    # A cumulative snapshot has no execution timestamp, PID, or instantaneous
+    # resource attribution. Only schema/table-based analysis is valid here.
+    window = TimeWindow(snapshot.collected_at, snapshot.collected_at)
+    return QueryContext(
+        query=query, native_query=snapshot, database=database, window=window,
+        tables=await _table_insights(session, query.id, query.database_id, snapshot.collected_at),
+        cpu_samples=[], cpu_baseline=[], ram_samples=[], io_samples=[], io_baseline=[],
+        disk_samples=[], session_samples=[], lock_samples=[], duration_history_ms=[],
+        recent_dropped_indexes=[], source="statements",
+    )
 
 
 def _time_window(native_query: NativeQueryMetric) -> TimeWindow:
@@ -416,14 +440,14 @@ async def _query_duration_history(
     days: int = REGRESSION_HISTORY_DAYS,
 ) -> list[float]:
     """Return recorded duration_ms values for the same query hash over the last N days."""
-    if not query.hash:
+    if not query.hash and not query.pg_query_id:
         return []
 
     cutoff = datetime.now().astimezone() - timedelta(days=days)
     result = await session.execute(
         select(NativeQueryMetric.query_duration_ms)
         .where(NativeQueryMetric.database_id == query.database_id)
-        .where(NativeQueryMetric.query_hash == query.hash)
+        .where((NativeQueryMetric.query_id == query.pg_query_id) if query.pg_query_id else (NativeQueryMetric.query_hash == query.hash))
         .where(NativeQueryMetric.query_duration_ms.is_not(None))
         .where(NativeQueryMetric.collected_at >= cutoff)
         .order_by(NativeQueryMetric.collected_at.asc())
@@ -463,6 +487,10 @@ async def _recent_dropped_indexes(
 
 def _analyze_context(context: QueryContext) -> list[FindingDraft]:
     findings: list[FindingDraft] = []
+    if context.source == "statements":
+        findings.extend(_missing_index_findings(context))
+        findings.extend(_maintenance_findings(context))
+        return sorted(findings, key=lambda finding: finding.confidence, reverse=True)
     findings.extend(_resource_findings(context))
     findings.extend(_lock_findings(context))
     findings.extend(_missing_index_findings(context))

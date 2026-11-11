@@ -806,7 +806,7 @@
 					class="flex items-center gap-2 border-b border-outline-variant bg-surface-container-low px-4 py-3"
 				>
 					<span class="material-symbols-outlined text-sm text-primary">show_chart</span>
-					<h2 class="m-0 font-headline-md text-headline-md">Executions over time</h2>
+					<h2 class="m-0 font-headline-md text-headline-md">Activity samples over time</h2>
 				</div>
 				<div class="relative p-4" bind:clientWidth={timelineChartWidth}>
 					{#if loading}
@@ -1296,12 +1296,14 @@
 								</td>
 							</tr>
 						{:else}
-							{#each paginatedItems as item (item.query_signature)}
+							{#each paginatedItems as item (item.query_hash ?? item.query_signature)}
 								<tr
 									class="hover:bg-surface-variant/20 transition-colors cursor-pointer"
 									onclick={() =>
 										(expandedQuery =
-											expandedQuery === item.query_signature ? null : item.query_signature)}
+											expandedQuery === (item.query_hash ?? item.query_signature)
+												? null
+												: (item.query_hash ?? item.query_signature))}
 								>
 									<td class="px-4 py-3">
 										<div class="flex items-start gap-2">
@@ -1348,9 +1350,24 @@
 										>{formatDate(item.last_seen)}</td
 									>
 								</tr>
-								{#if expandedQuery === item.query_signature}
+								{#if expandedQuery === (item.query_hash ?? item.query_signature)}
 									<tr class="bg-surface-container-high/50">
 										<td colspan="8" class="px-4 py-3">
+											<p class="text-xs text-on-surface-variant mb-3">
+												Sources: {(item.sources ?? ['activity']).join(' + ')} · Activity observations:
+												{item.activity_executions ?? item.execution_count} · Statement calls: {item.statements_calls ??
+													'unavailable'} · Metrics: {item.metrics_source ?? 'activity'}
+											</p>
+											{#if (item.query_texts?.length ?? 0) > 0}
+												<details class="mb-3 text-xs">
+													<summary class="cursor-pointer"
+														>Observed SQL texts ({item.query_texts?.length})</summary
+													>
+													{#each item.query_texts ?? [] as sql}
+														<pre class="mt-2 overflow-x-auto whitespace-pre-wrap">{sql}</pre>
+													{/each}
+												</details>
+											{/if}
 											<div class="mb-3">
 												<div class="flex items-center justify-between mb-1">
 													<p

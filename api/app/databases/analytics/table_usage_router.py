@@ -24,6 +24,11 @@ class TableUsageAvailabilityResponse(BaseModel):
 class TableQueryUsageItem(BaseModel):
     """Captured workload information for one parsed query."""
 
+    sources: list[str] = []
+    pg_query_id: str | None = None
+    activity_executions: int = 0
+    statements_calls: int | None = None
+    metrics_source: str = "activity"
     query: str
     execution_count: int
     last_executed_at: datetime | None

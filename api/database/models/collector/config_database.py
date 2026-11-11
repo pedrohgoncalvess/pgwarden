@@ -15,3 +15,5 @@ class ConfigDatabase(Base):
     interval    = Column(Float, nullable=False)
     is_paused   = Column(Boolean, nullable=False, default=False)
     next_run_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    consecutive_errors = Column(Integer, nullable=False, server_default="0")
+    warning = Column(Text, nullable=True)

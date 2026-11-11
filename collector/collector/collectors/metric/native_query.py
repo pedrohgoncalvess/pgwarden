@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
-from time import monotonic
 
 from psycopg.rows import dict_row
-from collector.collectors.metric.query_workload import collect_query_workload
 
 from database import (
     DatabaseConnection, load_monitored_query,
@@ -22,7 +20,6 @@ class NativeQueryMetricCollector(BaseCollector):
     def __init__(self, monitored_db: DatabaseConnection, metrics_db: DatabaseConnection, db_id: int) -> None:
         super().__init__(monitored_db=monitored_db, metrics_db=metrics_db)
         self._db_id = db_id
-        self._workload_last_attempt = float('-inf')
 
     async def _collect(self) -> SyncResult:
         result = SyncResult()
@@ -75,7 +72,6 @@ class NativeQueryMetricCollector(BaseCollector):
                         await cur.executemany(_INSERT_NATIVE_QUERY, to_insert)
                     await conn.commit()
 
-            await self._collect_workload()
             result.inserted = len(to_insert)
             await logger.info(
                 "NativeQueryMetricCollector",
@@ -87,15 +83,6 @@ class NativeQueryMetricCollector(BaseCollector):
             raise
 
         return result
-
-    async def _collect_workload(self) -> None:
-        # Active-query sampling can run several times per second. Aggregate
-        # workload snapshots only need one attempt per minute, including when
-        # the extension is unavailable.
-        now = monotonic()
-        if now - self._workload_last_attempt >= 60:
-            self._workload_last_attempt = now
-            await collect_query_workload(self.monitored_db, self.metrics_db, self._db_id)
 
     async def _fetch_db_info(self) -> dict | None:
         async with self.metrics_db as conn:

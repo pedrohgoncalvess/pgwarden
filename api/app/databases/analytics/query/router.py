@@ -25,7 +25,7 @@ router = APIRouter(
     "/query",
     response_model=QueryAnalyticsResponse,
     summary="Get query analytics",
-    description="Returns aggregated query analytics from native_query snapshots, with normalization, KPIs, filters and timeline.",
+    description="Merges activity samples and statement workload by database/query ID. Statement deltas supply counts when available; activity supplies the timeline. Origins and sampled counts remain explicit.",
     responses={
         404: {"model": ErrorMessage, "description": "Database not found"},
         **COMMON_RESPONSES
@@ -67,7 +67,7 @@ async def get_query_analytics(
     "/query/history",
     response_model=QueryExecutionHistoryResponse,
     summary="Get query execution history",
-    description="Returns a time-series of executions for a specific query hash.",
+    description="Returns activity samples and statement snapshots with separate origins and reset-safe deltas. Accepts a text hash or pg:<query_id>.",
     responses={
         404: {"model": ErrorMessage, "description": "Database not found"},
         **COMMON_RESPONSES
@@ -108,6 +108,9 @@ async def get_query_context(
     database_id: UUID,
     query_hash: str = Query(..., description="Query hash"),
     collected_at: str = Query(..., description="Exact collected_at timestamp of the execution (ISO 8601)"),
+    source: Optional[Literal["activity", "statements"]] = Query(default=None),
+    user_id: Optional[int] = Query(default=None),
+    is_toplevel: Optional[bool] = Query(default=None),
 ):
     from datetime import datetime, timezone
     
@@ -124,4 +127,7 @@ async def get_query_context(
             database_id,
             query_hash,
             dt,
+            source,
+            user_id,
+            is_toplevel,
         )

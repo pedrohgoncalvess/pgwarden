@@ -24,8 +24,8 @@ After merging and checking that CI passed on `main`:
 ```bash
 git switch main
 git pull --ff-only origin main
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
 ```
 
 Supported tags are `vMAJOR.MINOR.PATCH` and prereleases such as
@@ -58,3 +58,10 @@ The repository must permit Actions and package publication. For anonymous
 container pulls, set each GHCR package's visibility to public after its initial
 publication. Configure branch protection on `main` to require CI checks before
 merging. The workflow does not deploy to running servers.
+
+All service manifests and local package entries in lockfiles must match the root
+`pyproject.toml` version. CI runs `scripts/check_version.py`; release validation
+also requires the Git tag to match. The initial release is `v0.1.0`. For the next
+release, update manifests and lockfiles together before creating an annotated tag.
+The full test runner enables PostgreSQL ingestion and scoped retention integration
+tests against its disposable test database.

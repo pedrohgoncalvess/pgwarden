@@ -20,6 +20,13 @@ class QueryAnalyticsApplicationBreakdown(BaseModel):
 
 
 class QueryAnalyticsItem(BaseModel):
+    sources: List[str] = []
+    pg_query_id: Optional[str] = None
+    query_hashes: List[str] = []
+    query_texts: List[str] = []
+    activity_executions: int = 0
+    statements_calls: Optional[int] = None
+    metrics_source: str = "activity"
     query_signature: str
     query_preview: str
     query_hash: Optional[str]
@@ -68,6 +75,13 @@ class QueryAnalyticsResponse(BaseModel):
 
 
 class QueryExecutionHistoryItem(BaseModel):
+    source: str = "activity"
+    calls: Optional[int] = None
+    calls_delta: Optional[int] = None
+    total_exec_time_delta_ms: Optional[float] = None
+    user_id: Optional[int] = None
+    is_toplevel: Optional[bool] = None
+    statement_data: Optional[dict] = None
     collected_at: datetime
     duration_ms: Optional[float]
     user_name: Optional[str]
@@ -86,6 +100,8 @@ class QueryExecutionHistoryResponse(BaseModel):
 
 
 class QueryContextExecution(BaseModel):
+    source: str = "activity"
+    statement_data: Optional[dict] = None
     collected_at: datetime
     duration_ms: Optional[float]
     query: str
@@ -110,10 +126,10 @@ class QueryContextServerMetrics(BaseModel):
 
 
 class QueryContextDatabaseConnections(BaseModel):
-    active: int
-    idle: int
-    idle_in_transaction: int
-    waiting: int
+    active: Optional[int]
+    idle: Optional[int]
+    idle_in_transaction: Optional[int]
+    waiting: Optional[int]
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Text
 from analytics.database.models.base_model import Base
 
 
@@ -17,3 +17,7 @@ class QueryWorkloadMetric(Base):
     shared_blks_hit = Column(BigInteger, nullable=False)
     stats_reset = Column(DateTime(timezone=True), nullable=True)
     dealloc = Column(BigInteger, nullable=False)
+    query = Column(Text)
+    query_hash = Column(Text)
+    user_name = Column(Text)
+    statement_data = Column(Text)

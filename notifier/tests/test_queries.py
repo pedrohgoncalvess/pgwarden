@@ -47,7 +47,7 @@ async def test_fetch_channels_decrypts_and_parses_credentials():
     def fake_decrypt(value):
         return value if value == "" else value
 
-    with patch.object(queries, "decrypt_or_plain", lambda v: v):
+    with patch.object(queries, "decrypt", lambda v: v):
         channels = await queries.fetch_channels(session)
 
     assert len(channels) == 2
@@ -57,11 +57,11 @@ async def test_fetch_channels_decrypts_and_parses_credentials():
     assert channels[1].credentials == {}
 
 
-async def test_fetch_channels_uses_decrypt_or_plain():
+async def test_fetch_channels_uses_strict_decryption():
     rows = [{"name": "slack", "credentials": "CIPHERTEXT"}]
     session = QueuedSession([MappingsResult(rows)])
 
-    with patch.object(queries, "decrypt_or_plain", return_value='{"webhook_url": "u"}') as m:
+    with patch.object(queries, "decrypt", return_value='{"webhook_url": "u"}') as m:
         channels = await queries.fetch_channels(session)
 
     m.assert_called_once_with("CIPHERTEXT")

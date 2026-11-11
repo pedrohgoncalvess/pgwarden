@@ -14,6 +14,7 @@ from app.databases.schemas.exceptions import BaseAppException
 from app.openapi import tags_metadata
 from app.routes import register_routes
 from app.projects.rotation import run_rotation_worker
+from app.retention.cleanup import run_retention_worker
 from database.connection import DatabaseConnection
 from database.models.base import User
 from database.operations.base.user import UserRepository
@@ -69,12 +70,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         print(f"Failed to initialize admin user: {e}")
 
     rotation_task = asyncio.create_task(run_rotation_worker())
+    retention_task = asyncio.create_task(run_retention_worker())
     try:
         yield
     finally:
         rotation_task.cancel()
+        retention_task.cancel()
         with suppress(asyncio.CancelledError):
             await rotation_task
+        with suppress(asyncio.CancelledError):
+            await retention_task
         await DatabaseConnection.shutdown()
 
 

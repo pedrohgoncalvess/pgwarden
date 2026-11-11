@@ -7,6 +7,7 @@ from log import logger
 
 
 DEFAULT_COLLECTOR_SETTINGS = {
+    "query_workload_collector": {"interval": 60, "enabled": False},
     "table_collector": {"interval": 1800, "enabled": True},
     "column_collector": {"interval": 1800, "enabled": True},
     "index_collector": {"interval": 1800, "enabled": True},

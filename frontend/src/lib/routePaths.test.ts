@@ -41,11 +41,12 @@ describe('menu route hierarchy', () => {
 		expect(canonicalPath(after)).toBe(after);
 	});
 
-	it('keeps every tab under its sidebar section, including contextual links', () => {
+	it('keeps every tab under its sidebar section, including contextual links and icons', () => {
 		for (const [section, tabs] of Object.entries(sectionTabs)) {
 			for (const tab of tabs) {
 				expect(tab.href.startsWith(`/${section}`)).toBe(true);
 				expect(contextualHref(tab.href, 'db', 'server').startsWith(`/${section}/`)).toBe(true);
+				expect(tab.icon).toBeTruthy();
 			}
 		}
 	});

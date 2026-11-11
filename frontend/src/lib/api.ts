@@ -340,6 +340,8 @@ export type ServerConfigItem = {
 };
 
 export type DatabaseConfigItem = {
+	consecutive_errors?: number;
+	warning?: string | null;
 	id: number;
 	name: string;
 	interval: number;
@@ -819,6 +821,13 @@ export type QueryAnalyticsBreakdownItem = {
 };
 
 export type QueryAnalyticsItem = {
+	sources?: string[];
+	pg_query_id?: string | null;
+	query_hashes?: string[];
+	query_texts?: string[];
+	activity_executions?: number;
+	statements_calls?: number | null;
+	metrics_source?: string;
 	query_signature: string;
 	query_preview: string;
 	query_hash: string | null;
@@ -859,6 +868,13 @@ export type QueryAnalyticsResponse = {
 };
 
 export type QueryExecutionHistoryItem = {
+	source?: string;
+	calls?: number | null;
+	calls_delta?: number | null;
+	total_exec_time_delta_ms?: number | null;
+	user_id?: number | null;
+	is_toplevel?: boolean | null;
+	statement_data?: Record<string, unknown> | null;
 	collected_at: string;
 	duration_ms: number | null;
 	user_name: string | null;
@@ -873,6 +889,8 @@ export type QueryExecutionHistoryResponse = {
 };
 
 export type QueryContextExecution = {
+	source?: string;
+	statement_data?: Record<string, unknown> | null;
 	collected_at: string;
 	duration_ms: number | null;
 	query: string;
@@ -893,10 +911,10 @@ export type QueryContextServerMetrics = {
 };
 
 export type QueryContextDatabaseConnections = {
-	active: number;
-	idle: number;
-	idle_in_transaction: number;
-	waiting: number;
+	active: number | null;
+	idle: number | null;
+	idle_in_transaction: number | null;
+	waiting: number | null;
 };
 
 export type QueryContextIndex = {
@@ -1051,6 +1069,11 @@ export type ServerMetricsHistoryResponse = {
 };
 
 export type TableQueryUsageItem = {
+	sources?: string[];
+	pg_query_id?: string | null;
+	activity_executions?: number;
+	statements_calls?: number | null;
+	metrics_source?: string;
 	query: string;
 	execution_count: number;
 	last_executed_at: string | null;
@@ -1351,7 +1374,8 @@ export async function getQueryContext(
 	databaseId: string,
 	queryHash: string,
 	collectedAt: string,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	observation?: { source?: string; userId?: number | null; isToplevel?: boolean | null }
 ): Promise<QueryContextResponse> {
 	const url = new URL(
 		`/api/v1/databases/${databaseId}/analytics/query/context`,
@@ -1359,6 +1383,10 @@ export async function getQueryContext(
 	);
 	url.searchParams.set('query_hash', queryHash);
 	url.searchParams.set('collected_at', collectedAt);
+	if (observation?.source) url.searchParams.set('source', observation.source);
+	if (observation?.userId != null) url.searchParams.set('user_id', String(observation.userId));
+	if (observation?.isToplevel != null)
+		url.searchParams.set('is_toplevel', String(observation.isToplevel));
 	const res = await fetch(url.toString(), {
 		headers: authHeaders(),
 		signal

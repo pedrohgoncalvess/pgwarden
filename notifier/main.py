@@ -5,6 +5,7 @@ import sys
 
 from notifier.config import load_notifier_config, sync_config
 from notifier.database import DatabaseConnection
+from notifier.database.credential_migration import migrate_credentials
 from notifier.services.evaluator import Evaluator
 
 
@@ -13,6 +14,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+# HTTPX logs full webhook URLs at INFO; HTTP transport diagnostics contain secrets.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 async def run():
@@ -39,6 +43,8 @@ async def run():
 
     try:
         async with connection.connect() as session:
+            async with session.begin():
+                await migrate_credentials(session)
             await sync_config(session, config)
         logger.info("Notifier iniciado — %d regra(s) sincronizada(s)", len(config.rules))
 
