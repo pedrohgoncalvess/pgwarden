@@ -143,7 +143,7 @@ async def _find_missing_indexes(session: AsyncSession, database_id: int, tables:
             t.schema_name, t.name AS table_name,
             jsonb_build_object('advisor_version', 2,
                 'missing_prefix_columns', jsonb_agg(DISTINCT hit.column_name)) AS evidence,
-            NULLIF(native.query_id, 0) AS native_query_id
+            COALESCE(q.pg_query_id, NULLIF(native.query_id, 0)) AS native_query_id
         FROM analytics.query q
         JOIN analytics.query_column_hit hit ON hit.query_id = q.id
             AND (hit.is_condition OR hit.is_condition_foreign)
@@ -153,14 +153,15 @@ async def _find_missing_indexes(session: AsyncSession, database_id: int, tables:
         LEFT JOIN LATERAL (
             SELECT query_id, collected_at FROM metric.native_query n
             WHERE n.database_id = q.database_id
-              AND (n.query_hash = q.hash OR n.query = q.query)
+              AND ((q.pg_query_id IS NOT NULL AND n.query_id = q.pg_query_id)
+                   OR (q.pg_query_id IS NULL AND (n.query_hash = q.hash OR n.query = q.query)))
             ORDER BY n.collected_at DESC LIMIT 1
         ) native ON TRUE
         WHERE q.database_id = :database_id
           AND (q.created_at >= NOW() - make_interval(days => :days)
                OR native.collected_at >= NOW() - make_interval(days => :days)
                OR EXISTS (SELECT 1 FROM metric.query_workload w
-                          WHERE w.database_id = q.database_id AND w.query_id = native.query_id
+                          WHERE w.database_id = q.database_id AND w.query_id = COALESCE(q.pg_query_id, native.query_id)
                             AND w.collected_at >= NOW() - make_interval(days => :days)))
         GROUP BY q.id, q.query, t.id, t.schema_name, t.name, native.query_id
     """), {"database_id": database_id, "days": WINDOW_DAYS})
