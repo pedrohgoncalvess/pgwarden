@@ -33,7 +33,7 @@ async def test_native_migration_and_compressed_server_isolation() -> None:
     engine = None
     try:
         with psycopg.connect(target.render_as_string(hide_password=False), autocommit=True) as conn:
-            conn.execute("CREATE EXTENSION timescaledb")
+            conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
             conn.execute("""CREATE SCHEMA collector; CREATE SCHEMA metric; CREATE SCHEMA ingestion;
                 CREATE TABLE ingestion.project(id UUID PRIMARY KEY,name TEXT);
                 CREATE TABLE collector.server(id BIGINT PRIMARY KEY,public_id UUID UNIQUE,
