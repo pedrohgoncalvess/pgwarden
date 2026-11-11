@@ -26,9 +26,11 @@ from scheduler.startup import run_startup_collectors
 from scheduler.loops import run_database_collector_loop, run_server_collector_loop
 from config import bootstrap
 from log import logger
+from collector.collectors.metric.query_workload import QueryWorkloadMetricCollector
 
 
 DATABASE_COLLECTOR_MAP = {
+    "query_workload_collector": lambda mon, met, db: QueryWorkloadMetricCollector(mon, met, db.id),
     "table_collector": lambda mon, met, db: TableCollector(mon, met, db),
     "column_collector": lambda mon, met, db: ColumnCollector(mon, met, db),
     "index_collector": lambda mon, met, db: IndexCollector(mon, met, db),

@@ -125,6 +125,15 @@ def initialize(
                 )
             else:
                 cipher.decrypt(state["project_key"])
+            # Schema upgrades add statement fields. Refresh capture even for an
+            # already configured sender; otherwise its old trigger drops them.
+            table = "metric_query_workload"
+            columns = [row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')]
+            connection.execute(f"DROP TRIGGER IF EXISTS sender_{table}_insert")
+            connection.execute(
+                f'CREATE TRIGGER sender_{table}_insert AFTER INSERT ON "{table}" '
+                f'BEGIN {CLOCK} {capture_sql(table, columns)}; END'
+            )
             connection.commit()
             return
         if not key.startswith("pgw_") or "replace" in key:

@@ -29,6 +29,26 @@ def local(tmp_path):
     db.close()
 
 
+def test_restart_refreshes_old_statement_capture_trigger(local):
+    db, cipher, _ = local
+    seed(db)
+    initialize(db, 'http://localhost/events', 'pgw_initial', cipher)
+    # Simulate the trigger installed before query text and payload columns existed.
+    db.execute('DROP TRIGGER sender_metric_query_workload_insert')
+    db.execute('''CREATE TRIGGER sender_metric_query_workload_insert
+        AFTER INSERT ON metric_query_workload BEGIN SELECT 1; END''')
+    db.commit()
+    initialize(db, 'http://localhost/events', 'pgw_initial', cipher)
+    db.execute('''INSERT INTO metric_query_workload
+        (collected_at,database_id,query_id,user_id,is_toplevel,calls,total_exec_time,
+         shared_blks_read,shared_blks_hit,dealloc,query,query_hash,user_name,statement_data)
+        VALUES('2026-11-01T00:00:00Z',1,-123,10,true,5,10,0,2,0,
+               'SELECT $1','hash','alice','{"rows": 5, "wal_bytes": 10}')''')
+    captured = json.loads(db.execute("SELECT data FROM sender_outbox WHERE table_name='metric_query_workload' ORDER BY seq DESC LIMIT 1").fetchone()[0])
+    assert captured['query'] == 'SELECT $1' and captured['query_id'] == -123
+    assert json.loads(captured['statement_data'])['wal_bytes'] == 10
+
+
 def seed(db):
     db.execute(
         """INSERT INTO collector_server(name,host,port,username,password)

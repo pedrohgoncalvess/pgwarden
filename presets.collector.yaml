@@ -1,4 +1,6 @@
 presets:
+  # query_workload_collector uses the same interval/enabled controls as others.
+  # Disabled by default. Enable explicitly; use 60 seconds or 3600 for hourly collection.
   ## Preset - default
   # collector:
   #   table_collector:

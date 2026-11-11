@@ -11,6 +11,9 @@ servers:
       - app
 
 collector:
+  query_workload_collector:
+    interval: 60  # Seconds; 3600 collects hourly. Independent of activity.
+    enabled: false
   database_stat_collector:
     interval: 3
     enabled: true
