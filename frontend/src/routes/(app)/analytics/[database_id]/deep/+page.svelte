@@ -286,7 +286,8 @@
 				dbId,
 				selectedQuery.query_hash,
 				item.collected_at,
-				request.signal
+				request.signal,
+				{ source: item.source, userId: item.user_id, isToplevel: item.is_toplevel }
 			);
 			if (request.signal.aborted) return;
 			contextResponse = response;
@@ -358,12 +359,21 @@
 
 	let maxDurationValue = $derived.by(() => {
 		if (!historyResponse || historyResponse.items.length === 0) return 10;
-		return Math.max(...historyResponse.items.map((i) => i.duration_ms || 0), 10);
+		return Math.max(
+			...historyResponse.items
+				.filter((i) => i.source !== 'statements')
+				.map((i) => i.duration_ms || 0),
+			10
+		);
 	});
+	let statementSnapshots = $derived(
+		historyResponse?.items.filter((item) => item.source === 'statements') ?? []
+	);
 
 	let historyPoints = $derived.by(() => {
 		if (!historyResponse || historyResponse.items.length === 0) return [];
-		const items = historyResponse.items;
+		const items = historyResponse.items.filter((item) => item.source !== 'statements');
+		if (items.length === 0) return [];
 		const maxDuration = maxDurationValue;
 		const minTime = new Date(items[0].collected_at).getTime();
 		const maxTime = new Date(items[items.length - 1].collected_at).getTime();
@@ -634,7 +644,7 @@
 						<div class="flex items-center gap-2">
 							<span class="material-symbols-outlined text-primary text-lg">show_chart</span>
 							<h2 class="font-headline-md text-base font-bold text-on-surface">
-								Execution timeline
+								Activity timeline
 							</h2>
 						</div>
 						{#if loadingHistory}
@@ -644,7 +654,7 @@
 							</div>
 						{:else if historyResponse}
 							<span class="font-mono text-sm text-on-surface-variant"
-								>{historyResponse.items.length} points</span
+								>{historyPoints.length} activity points</span
 							>
 						{/if}
 					</div>
@@ -815,7 +825,7 @@
 							{/if}
 						{:else if !loadingHistory}
 							<div class="text-sm text-on-surface-variant font-medium">
-								Select a query on the left to display its execution line chart.
+								No activity samples for this query. Statement snapshots appear below when available.
 							</div>
 						{/if}
 					</div>
@@ -833,6 +843,27 @@
 						{/if}
 					</div>
 				</div>
+				{#if statementSnapshots.length > 0}
+					<div class="rounded-xl border border-outline-variant bg-surface-container p-4">
+						<h3 class="font-bold mb-2">Statement snapshots</h3>
+						<p class="text-xs text-on-surface-variant mb-3">
+							Calls and average time describe valid intervals between snapshots. Select a row to
+							inspect SQL, schema and collected statistics.
+						</p>
+						<div class="max-h-64 overflow-auto">
+							{#each statementSnapshots as snapshot}
+								<button
+									onclick={() => selectExecution(snapshot)}
+									class="block w-full text-left border-b border-outline-variant/30 px-2 py-2 text-xs hover:bg-surface-container-high cursor-pointer"
+								>
+									{formatDate(snapshot.collected_at)} · {snapshot.user_name ?? 'unknown'} ·
+									{snapshot.is_toplevel ? 'top level' : 'nested'} ·
+									{snapshot.calls_delta ?? '--'} calls · {formatDuration(snapshot.duration_ms)} average
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -863,7 +894,9 @@
 							</div>
 							<div>
 								<h3 class="font-headline-md text-base font-bold text-on-surface">
-									Execution snapshot context
+									{selectedExecution.source === 'statements'
+										? 'Statement snapshot context'
+										: 'Execution snapshot context'}
 								</h3>
 								<div
 									class="flex items-center gap-3 text-sm text-on-surface-variant font-mono mt-0.5"
@@ -890,7 +923,9 @@
 						<div class="flex items-center gap-3">
 							<div class="text-right">
 								<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
-									Execution duration
+									{selectedExecution.source === 'statements'
+										? 'Interval average duration'
+										: 'Execution duration'}
 								</div>
 								<div class="font-mono text-lg font-bold text-primary">
 									{formatDuration(selectedExecution.duration_ms)}
@@ -934,168 +969,187 @@
 						<span class="text-sm text-error font-mono">{contextError}</span>
 					</div>
 				{:else if contextResponse}
-					<!-- System Resource & Connection KPIs -->
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-						<!-- Server Metrics -->
-						<div
-							class="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-sm"
-						>
-							<h4
-								class="font-label-caps text-sm text-on-surface-variant tracking-wider uppercase mb-4 flex items-center gap-2"
+					{#if contextResponse.execution.source === 'statements'}
+						<div class="rounded-xl border border-outline-variant bg-surface-container p-4">
+							<p class="text-sm text-on-surface-variant mb-3">
+								This is aggregated statement data. Session state, locks and resource usage cannot be
+								attributed to a single execution.
+							</p>
+							<details>
+								<summary class="cursor-pointer text-sm font-bold"
+									>Collected statement statistics</summary
+								>
+								<pre class="mt-3 max-h-80 overflow-auto text-xs">{JSON.stringify(
+										contextResponse.execution.statement_data,
+										null,
+										2
+									)}</pre>
+							</details>
+						</div>
+					{:else}
+						<!-- System Resource & Connection KPIs -->
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+							<!-- Server Metrics -->
+							<div
+								class="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-sm"
 							>
-								<span class="material-symbols-outlined text-primary text-base">dns</span>
-								Server Resource Usage
-							</h4>
-							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
+								<h4
+									class="font-label-caps text-sm text-on-surface-variant tracking-wider uppercase mb-4 flex items-center gap-2"
 								>
+									<span class="material-symbols-outlined text-primary text-base">dns</span>
+									Server Resource Usage
+								</h4>
+								<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 									<div
-										class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
 									>
-										<span>CPU</span>
-										{#if contextResponse.server_metrics.cpu_stale}
-											<span
-												class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
-												title="Metric was recorded outside the 90s execution window">stale</span
-											>
-										{/if}
+										<div
+											class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										>
+											<span>CPU</span>
+											{#if contextResponse.server_metrics.cpu_stale}
+												<span
+													class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
+													title="Metric was recorded outside the 90s execution window">stale</span
+												>
+											{/if}
+										</div>
+										<div class="font-mono text-xl font-bold text-on-surface mt-1">
+											{contextResponse.server_metrics.cpu_percent !== null
+												? `${contextResponse.server_metrics.cpu_percent.toFixed(1)}%`
+												: '--'}
+										</div>
 									</div>
-									<div class="font-mono text-xl font-bold text-on-surface mt-1">
-										{contextResponse.server_metrics.cpu_percent !== null
-											? `${contextResponse.server_metrics.cpu_percent.toFixed(1)}%`
-											: '--'}
+									<div
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
+									>
+										<div
+											class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										>
+											<span>RAM</span>
+											{#if contextResponse.server_metrics.ram_stale}
+												<span
+													class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
+													title="Metric was recorded outside the 90s execution window">stale</span
+												>
+											{/if}
+										</div>
+										<div class="font-mono text-xl font-bold text-on-surface mt-1">
+											{contextResponse.server_metrics.ram_percent !== null
+												? `${contextResponse.server_metrics.ram_percent.toFixed(1)}%`
+												: '--'}
+										</div>
+									</div>
+									<div
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
+									>
+										<div
+											class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										>
+											<span>Disk</span>
+											{#if contextResponse.server_metrics.disk_stale}
+												<span
+													class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
+													title="Metric was recorded outside the 90s execution window">stale</span
+												>
+											{/if}
+										</div>
+										<div class="font-mono text-xl font-bold text-on-surface mt-1">
+											{contextResponse.server_metrics.disk_percent !== null
+												? `${contextResponse.server_metrics.disk_percent.toFixed(1)}%`
+												: '--'}
+										</div>
+									</div>
+									<div
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
+									>
+										<div
+											class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										>
+											<span>Disk I/O</span>
+											{#if contextResponse.server_metrics.io_stale}
+												<span
+													class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
+													title="Metric was recorded outside the 90s execution window">stale</span
+												>
+											{/if}
+										</div>
+										<div class="font-mono text-sm font-semibold text-on-surface mt-1">
+											R: {formatBytes(contextResponse.server_metrics.read_bytes)}
+										</div>
+										<div class="font-mono text-sm font-semibold text-on-surface">
+											W: {formatBytes(contextResponse.server_metrics.write_bytes)}
+										</div>
 									</div>
 								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
+							</div>
+
+							<!-- Database Connections -->
+							<div
+								class="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-sm"
+							>
+								<h4
+									class="font-label-caps text-sm text-on-surface-variant tracking-wider uppercase mb-4 flex items-center gap-2"
 								>
+									<span class="material-symbols-outlined text-primary text-base">hub</span>
+									Database Connection State
+								</h4>
+								<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 									<div
-										class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
 									>
-										<span>RAM</span>
-										{#if contextResponse.server_metrics.ram_stale}
-											<span
-												class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
-												title="Metric was recorded outside the 90s execution window">stale</span
-											>
-										{/if}
+										<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
+											Active
+										</div>
+										<div class="font-mono text-xl font-bold text-primary mt-1">
+											{contextResponse.database_connections.active ?? '--'}
+										</div>
 									</div>
-									<div class="font-mono text-xl font-bold text-on-surface mt-1">
-										{contextResponse.server_metrics.ram_percent !== null
-											? `${contextResponse.server_metrics.ram_percent.toFixed(1)}%`
-											: '--'}
-									</div>
-								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
-								>
 									<div
-										class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
 									>
-										<span>Disk</span>
-										{#if contextResponse.server_metrics.disk_stale}
-											<span
-												class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
-												title="Metric was recorded outside the 90s execution window">stale</span
-											>
-										{/if}
+										<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
+											Waiting (Lock)
+										</div>
+										<div
+											class="font-mono text-xl font-bold {contextResponse.database_connections
+												.waiting != null && contextResponse.database_connections.waiting > 0
+												? 'text-status-warning'
+												: 'text-on-surface'} mt-1"
+										>
+											{contextResponse.database_connections.waiting ?? '--'}
+										</div>
 									</div>
-									<div class="font-mono text-xl font-bold text-on-surface mt-1">
-										{contextResponse.server_metrics.disk_percent !== null
-											? `${contextResponse.server_metrics.disk_percent.toFixed(1)}%`
-											: '--'}
-									</div>
-								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg flex flex-col justify-between"
-								>
 									<div
-										class="font-label-caps text-[12px] text-on-surface-variant uppercase flex items-center justify-between"
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
 									>
-										<span>Disk I/O</span>
-										{#if contextResponse.server_metrics.io_stale}
-											<span
-												class="text-[11px] text-status-warning bg-status-warning/10 px-1 py-0.5 rounded border border-status-warning/20 font-mono tracking-tighter shrink-0"
-												title="Metric was recorded outside the 90s execution window">stale</span
-											>
-										{/if}
+										<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
+											Idle
+										</div>
+										<div class="font-mono text-xl font-bold text-on-surface mt-1">
+											{contextResponse.database_connections.idle ?? '--'}
+										</div>
 									</div>
-									<div class="font-mono text-sm font-semibold text-on-surface mt-1">
-										R: {formatBytes(contextResponse.server_metrics.read_bytes)}
-									</div>
-									<div class="font-mono text-sm font-semibold text-on-surface">
-										W: {formatBytes(contextResponse.server_metrics.write_bytes)}
+									<div
+										class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
+									>
+										<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
+											Idle in Tx
+										</div>
+										<div
+											class="font-mono text-xl font-bold {contextResponse.database_connections
+												.idle_in_transaction != null &&
+											contextResponse.database_connections.idle_in_transaction > 0
+												? 'text-status-warning'
+												: 'text-on-surface'} mt-1"
+										>
+											{contextResponse.database_connections.idle_in_transaction ?? '--'}
+										</div>
 									</div>
 								</div>
 							</div>
 						</div>
-
-						<!-- Database Connections -->
-						<div
-							class="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-sm"
-						>
-							<h4
-								class="font-label-caps text-sm text-on-surface-variant tracking-wider uppercase mb-4 flex items-center gap-2"
-							>
-								<span class="material-symbols-outlined text-primary text-base">hub</span>
-								Database Connection State
-							</h4>
-							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
-								>
-									<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
-										Active
-									</div>
-									<div class="font-mono text-xl font-bold text-primary mt-1">
-										{contextResponse.database_connections.active}
-									</div>
-								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
-								>
-									<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
-										Waiting (Lock)
-									</div>
-									<div
-										class="font-mono text-xl font-bold {contextResponse.database_connections
-											.waiting > 0
-											? 'text-status-warning'
-											: 'text-on-surface'} mt-1"
-									>
-										{contextResponse.database_connections.waiting}
-									</div>
-								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
-								>
-									<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
-										Idle
-									</div>
-									<div class="font-mono text-xl font-bold text-on-surface mt-1">
-										{contextResponse.database_connections.idle}
-									</div>
-								</div>
-								<div
-									class="bg-surface-container-high border border-outline-variant/60 p-3 rounded-lg"
-								>
-									<div class="font-label-caps text-[12px] text-on-surface-variant uppercase">
-										Idle in Tx
-									</div>
-									<div
-										class="font-mono text-xl font-bold {contextResponse.database_connections
-											.idle_in_transaction > 0
-											? 'text-status-warning'
-											: 'text-on-surface'} mt-1"
-									>
-										{contextResponse.database_connections.idle_in_transaction}
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
+					{/if}
 					<!-- Database Locks Section -->
 					<div
 						class="bg-surface-container border border-outline-variant rounded-xl p-5 shadow-sm space-y-4"
@@ -1110,8 +1164,9 @@
 							<div
 								class="text-sm text-on-surface-variant bg-surface-container-high p-4 rounded-lg border border-outline-variant/60 text-center"
 							>
-								No lock conflicts recorded on related tables or query PID during this snapshot
-								window.
+								{contextResponse.execution.source === 'statements'
+									? 'Locks are unavailable for aggregated statement snapshots.'
+									: 'No lock conflicts recorded on related tables or query PID during this snapshot window.'}
 							</div>
 						{:else}
 							<div

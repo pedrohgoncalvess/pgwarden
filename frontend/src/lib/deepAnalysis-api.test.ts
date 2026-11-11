@@ -5,7 +5,10 @@ describe('Deep Analysis request cancellation', () => {
 	beforeEach(() => {
 		vi.stubGlobal('window', { location: { origin: 'http://localhost' } });
 		vi.stubGlobal('localStorage', { getItem: () => null });
-		vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response('{}')));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockImplementation(async () => new Response('{}'))
+		);
 	});
 
 	afterEach(() => vi.unstubAllGlobals());
@@ -47,5 +50,18 @@ describe('Deep Analysis request cancellation', () => {
 		expect(url.searchParams.get('start_date')).toBe('2026-10-01T00:00:00Z');
 		expect(url.searchParams.get('end_date')).toBe('2026-11-01T00:00:00Z');
 		expect(url.searchParams.has('preset')).toBe(false);
+	});
+
+	it('preserves statement source, role and execution level when requesting context', async () => {
+		await getQueryContext('db', 'pg:-123', '2026-11-01T00:00:00Z', undefined, {
+			source: 'statements',
+			userId: 10,
+			isToplevel: false
+		});
+		const url = new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+		expect(url.searchParams.get('query_hash')).toBe('pg:-123');
+		expect(url.searchParams.get('source')).toBe('statements');
+		expect(url.searchParams.get('user_id')).toBe('10');
+		expect(url.searchParams.get('is_toplevel')).toBe('false');
 	});
 });

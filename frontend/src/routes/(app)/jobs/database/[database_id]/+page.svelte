@@ -331,6 +331,11 @@
 				<div class="row-item px-5 py-4 flex items-center justify-between gap-4">
 					<div class="min-w-0">
 						<p class="font-bold text-on-surface text-sm truncate">{formatName(config.name)}</p>
+						{#if config.warning}
+							<p role="status" class="mt-1 text-xs text-status-warning max-w-xl">
+								{config.warning}
+							</p>
+						{/if}
 					</div>
 
 					<div class="flex items-center gap-4 flex-shrink-0">
@@ -359,11 +364,11 @@
 
 						<label class="flex items-center gap-2 text-xs font-bold text-on-surface">
 							<input
-								type="checkbox" role="switch"
+								type="checkbox"
+								role="switch"
 								checked={draft.is_active}
 								disabled={!can($profile, 'schedulers.configure') || savingIntervals}
 								onchange={(event) => updateDraftActive(config.id, event.currentTarget.checked)}
-
 							/>
 							Active
 						</label>
