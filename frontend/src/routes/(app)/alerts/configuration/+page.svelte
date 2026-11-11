@@ -126,9 +126,19 @@
 				Object.entries(draft.fields).filter(([, value]) => value.trim().length > 0)
 			);
 			if (Object.keys(filledFields).length > 0) {
+				if (channel.name === 'email') {
+					if (!['host', 'port', 'from', 'to'].every((key) => draft.fields[key]?.trim())) {
+						throw new Error(
+							'Replace the complete SMTP configuration: host, port, from and to are required.'
+						);
+					}
+					if (Boolean(draft.fields.username) !== Boolean(draft.fields.password)) {
+						throw new Error('Provide both SMTP username and password, or leave both empty.');
+					}
+				}
 				const portField = metaFor(channel).fields.find((field) => field.type === 'number');
 				patch.credentials = Object.fromEntries(
-					Object.entries(filledFields).map(([key, value]) => [
+					Object.entries(draft.fields).map(([key, value]) => [
 						key,
 						portField && key === portField.key ? Number(value) : value
 					])
@@ -136,6 +146,8 @@
 			}
 
 			await patchNotifierChannel(channel.id, patch);
+			// Clear submitted secrets before reloading, including when that request fails.
+			drafts = { ...drafts, [channel.id]: toDraft(channel) };
 			savedId = channel.id;
 			await load();
 		} catch (err: any) {
@@ -189,7 +201,8 @@
 		</div>
 		<p class="text-sm text-on-surface-variant">
 			Enable channels and configure their credentials. Credentials are stored encrypted and are
-			never displayed after saving.
+			never displayed after saving. To change credentials, enter a complete replacement. Empty
+			fields do not recover saved values.
 		</p>
 	</section>
 
@@ -237,11 +250,11 @@
 						{/if}
 						<label class="flex items-center gap-2 text-xs font-bold text-on-surface">
 							<input
-								type="checkbox" role="switch"
+								type="checkbox"
+								role="switch"
 								checked={draft.enabled}
 								disabled={!can($profile, 'alerts.configure') || savingId === channel.id}
 								onchange={(event) => updateDraftEnabled(channel.id, event.currentTarget.checked)}
-
 							/>
 							Active
 						</label>
@@ -260,6 +273,7 @@
 									id={`channel-${channel.id}-${field.key}`}
 									type={field.type}
 									value={draft.fields[field.key] ?? ''}
+									autocomplete="off"
 									disabled={!can($profile, 'alerts.configure') || savingId === channel.id}
 									placeholder={channel.has_credentials ? '••••••••' : ''}
 									oninput={(event) =>

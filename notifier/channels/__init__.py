@@ -37,7 +37,7 @@ def build_channels(
         try:
             channels.append(builder(row.credentials, client=client))
         except ValueError as error:
-            logger.warning("Canal %s ignorado: %s", row.name, error)
+            logger.warning("Canal %s ignorado: %s", row.name, type(error).__name__)
     return channels
 
 

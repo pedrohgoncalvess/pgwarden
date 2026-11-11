@@ -10,6 +10,8 @@ os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
 from database.models.notifier.rule import NotifierRule
 from database.models.notifier.rule_database import RuleDatabase
 from database.models.notifier.channel import NotifierChannel
+from utils import decrypt
+import json
 
 
 @pytest_asyncio.fixture
@@ -307,3 +309,53 @@ async def test_patch_channel_not_found(auth_client: AsyncClient):
         json={"enabled": True},
     )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["slack", "discord", "teams", "email"])
+async def test_channel_credentials_are_write_only_and_replaced(
+    auth_client: AsyncClient, test_channel, db_session, name
+):
+    test_channel.name = name
+    await db_session.commit()
+    old = {"webhook_url": "https://example.com/old-secret"}
+    new = {"webhook_url": "https://example.com/new-secret"}
+    if name == "email":
+        old = dict(host="smtp.example.com", port=587, username="user", password="old-secret",
+                   to="to@example.com", **{"from": "from@example.com"})
+        new = {**old, "password": "new-secret"}
+    path = f"/v1/notifier/channels/{test_channel.id}"
+    for credentials in (old, new):
+        response = await auth_client.patch(path, json={"credentials": credentials})
+        assert response.status_code == 200
+        assert set(response.json()) == {"id", "name", "enabled", "has_credentials"}
+        await db_session.refresh(test_channel)
+        assert "secret" not in test_channel.credentials
+        assert json.loads(decrypt(test_channel.credentials)) == credentials
+    encrypted = test_channel.credentials
+    response = await auth_client.patch(path, json={"enabled": True})
+    assert response.status_code == 200
+    await db_session.refresh(test_channel)
+    assert test_channel.credentials == encrypted
+    response = await auth_client.get("/v1/notifier/channels")
+    assert "new-secret" not in response.text
+    assert encrypted not in response.text
+
+
+@pytest.mark.asyncio
+async def test_partial_smtp_replacement_preserves_saved_credentials(
+    auth_client: AsyncClient, test_channel, db_session
+):
+    test_channel.name = "email"
+    await db_session.commit()
+    credentials = dict(host="smtp.example.com", port=587, username="user", password="old-secret",
+                       to="to@example.com", **{"from": "from@example.com"})
+    path = f"/v1/notifier/channels/{test_channel.id}"
+    assert (await auth_client.patch(path, json={"credentials": credentials})).status_code == 200
+    await db_session.refresh(test_channel)
+    encrypted = test_channel.credentials
+    response = await auth_client.patch(path, json={"credentials": {"password": "new-secret"}})
+    assert response.status_code == 400
+    assert "new-secret" not in response.text
+    await db_session.refresh(test_channel)
+    assert test_channel.credentials == encrypted

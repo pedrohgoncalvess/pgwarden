@@ -172,9 +172,9 @@ class Evaluator:
             any_success = False
             for channel, result in zip(channels, results):
                 if isinstance(result, Exception):
-                    logger.exception(
+                    logger.error(
                         "Falha ao enviar alerta %s para o canal %s: %s",
-                        alert.rule, channel.name, result,
+                        alert.rule, channel.name, type(result).__name__,
                     )
                 else:
                     any_success = True
@@ -209,7 +209,7 @@ class Evaluator:
                     delay = _RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(
                         "Canal %s falhou (tentativa %d/%d), retry em %.1fs: %s",
-                        channel.name, attempt + 1, _RETRY_ATTEMPTS, delay, exc,
+                        channel.name, attempt + 1, _RETRY_ATTEMPTS, delay, type(exc).__name__,
                     )
                     await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]

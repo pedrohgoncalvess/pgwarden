@@ -31,6 +31,7 @@ from database.operations.notifier import (
     threshold_repository,
 )
 from utils import encrypt
+from app.notifier.credentials import validate_credentials
 
 
 router = APIRouter(
@@ -406,7 +407,7 @@ async def list_channels():
     "/channels/{channel_id}",
     response_model=ChannelResponse,
     summary="Configure a notification channel",
-    description="Updates the enabled flag and/or the channel credentials. Credentials are stored encrypted.",
+    description="Updates the enabled flag and/or replaces the complete channel credentials. All SMTP fields must be supplied, including empty username and password for unauthenticated SMTP. Credentials are stored encrypted and never returned.",
     responses={
         404: {"model": ErrorMessage, "description": "Channel not found"},
         400: {"model": ErrorMessage, "description": "No fields to update"},
@@ -425,6 +426,10 @@ async def patch_channel(channel_id: int, patch: ChannelPatch):
             raise HTTPException(status_code=400, detail="No fields to update")
 
         if "credentials" in updates:
+            try:
+                validate_credentials(channel.name, updates["credentials"])
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from None
             updates["credentials"] = encrypt(json.dumps(updates["credentials"]))
 
         updated = await channel_repo.update(channel_id, updates)

@@ -109,6 +109,24 @@ suportam interpolação `${VAR}` e `${VAR:-default}` de variáveis de ambiente.
 | teams | `webhook_url` |
 | email | `host`, `port`, `username`, `password`, `from`, `to` (lista ou string separada por vírgula) |
 
+As credenciais são criptografadas com Fernet usando `ENCRYPTION_KEY`. A API retorna
+somente `has_credentials`, nunca o segredo ou seu texto criptografado. Alterações
+pela API substituem o conjunto inteiro: no SMTP, envie os seis campos; para SMTP
+sem autenticação, envie `username` e `password` como strings vazias. Alterar apenas
+`enabled` preserva as credenciais. A tela nunca carrega os valores salvos.
+
+Na inicialização, antes da sincronização YAML, o notifier migra automaticamente
+credenciais legadas em JSON puro para Fernet em uma transação, preservando valores
+já criptografados. Mantenha a mesma `ENCRYPTION_KEY` na API e no notifier. Uma chave
+incompatível ou registro inválido impede a inicialização, sem registrar o valor;
+restaure a chave correta ou substitua integralmente as credenciais afetadas pela API.
+A leitura para envio não aceita texto puro. A migração não remove cópias antigas
+de backups, arquivos YAML, variáveis de ambiente ou logs anteriores.
+
+Os logs de HTTP ficam em WARNING para evitar o registro das URLs dos webhooks;
+falhas de envio registram apenas o tipo do erro. Não habilite diagnósticos HTTP
+em produção, pois URLs de webhook contêm segredos.
+
 Exemplo completo de regras em [config.yaml.example](config.yaml.example).
 
 ## Executar

@@ -1,7 +1,7 @@
 """Tests for notifier.utils.crypto (Fernet encrypt/decrypt helpers)."""
 
 import pytest
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from notifier.utils import crypto
 
@@ -41,13 +41,17 @@ def test_decrypt_or_plain_returns_plain_when_valid(encryption_key):
     assert crypto.decrypt_or_plain(token) == "payload"
 
 
-def test_decrypt_or_plain_returns_raw_value_when_key_wrong(encryption_key, monkeypatch):
+def test_decrypt_or_plain_rejects_wrong_key(encryption_key, monkeypatch):
     token = crypto.encrypt("payload")
     monkeypatch.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
 
-    result = crypto.decrypt_or_plain(token)
+    with pytest.raises(InvalidToken):
+        crypto.decrypt_or_plain(token)
 
-    assert result == token
+
+def test_decrypt_or_plain_rejects_plaintext(encryption_key):
+    with pytest.raises(InvalidToken):
+        crypto.decrypt_or_plain('{"password": "secret"}')
 
 
 def test_decrypt_or_plain_returns_none_for_none_input(encryption_key):
