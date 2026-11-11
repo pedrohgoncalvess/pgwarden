@@ -24,7 +24,7 @@ def test_sqlite_apply_repeat_and_rollback(tmp_path, monkeypatch):
     url, directory = get_migration_target()
     backend = get_backend(url)
     migrations = read_migrations(str(directory))
-    assert len(migrations) == 7
+    assert len(migrations) == 9
     assert not backend.to_apply(migrations)
     with sqlite3.connect(path) as connection:
         tables = {
@@ -46,7 +46,7 @@ def test_sqlite_apply_repeat_and_rollback(tmp_path, monkeypatch):
     backend.connection.execute("PRAGMA foreign_keys=ON")
     with backend.lock():
         backend.rollback_migrations(backend.to_rollback(migrations))
-    assert len(backend.to_apply(migrations)) == 7
+    assert len(backend.to_apply(migrations)) == 9
     backend.connection.close()
 
 

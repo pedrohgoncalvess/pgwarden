@@ -1,0 +1,15 @@
+DROP TRIGGER default_query_workload ON metadata.database;
+DROP FUNCTION collector.fn_default_query_workload();
+DELETE FROM collector.config_database WHERE name = 'query_workload_collector';
+DROP INDEX analytics.query_pg_identity_idx;
+ALTER TABLE analytics.query DROP CONSTRAINT query_database_query_identity_key;
+ALTER TABLE analytics.query ADD CONSTRAINT query_database_query_key UNIQUE (database_id, query);
+ALTER TABLE analytics.query DROP COLUMN seen_statements;
+ALTER TABLE analytics.query DROP COLUMN seen_activity;
+ALTER TABLE analytics.query DROP COLUMN pg_query_id;
+DROP INDEX metric.query_workload_identity_idx;
+DROP INDEX metric.query_workload_hash_idx;
+ALTER TABLE metric.query_workload DROP COLUMN statement_data;
+ALTER TABLE metric.query_workload DROP COLUMN user_name;
+ALTER TABLE metric.query_workload DROP COLUMN query_hash;
+ALTER TABLE metric.query_workload DROP COLUMN query;
