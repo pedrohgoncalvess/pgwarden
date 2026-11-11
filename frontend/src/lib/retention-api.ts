@@ -14,6 +14,8 @@ export type RetentionPolicy = {
 	last_run_status: string | null;
 };
 export type RetentionPreview = {
+	logical?: boolean;
+	expired_rows?: number;
 	name: string;
 	window: RetentionWindow;
 	measured_at: string;

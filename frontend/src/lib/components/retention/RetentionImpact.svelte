@@ -52,6 +52,10 @@
 				</p>
 			</div>
 		{:else if preview && fresh}
+			{#if preview.logical}<p class="mb-3 text-xs text-on-surface-variant">
+					Logical row volume for servers inheriting this default. Project and server overrides are
+					preserved. These values do not represent immediate disk savings.
+				</p>{/if}
 			<p class="mb-5 text-xs text-on-surface-variant">
 				Keep {preview.window.value}
 				{preview.window.unit} · {global ? `${count} metric tables` : `metric.${preview.name}`}
@@ -80,8 +84,10 @@
 						{formatBytes(preview.reclaimable_bytes)} eligible for removal
 					</p>
 					<p class="text-xs leading-relaxed text-on-surface-variant">
-						{preview.eligible_chunks} complete chunks can expire under this policy. Cleanup runs on the
-						existing schedule; removed history cannot be restored.
+						{#if preview.logical}{preview.expired_rows} rows can expire under this default. Cleanup runs
+							in batches every minute; removed history cannot be restored.{:else}{preview.eligible_chunks}
+							complete chunks can expire under this policy. Cleanup runs on the existing schedule; removed
+							history cannot be restored.{/if}
 					</p>
 				</div>
 			</div>
@@ -103,16 +109,20 @@
 							<dd class="mt-1 font-mono">{value}</dd>
 						</div>{/each}
 				</dl>
-				<p class="mt-4 text-xs leading-relaxed text-on-surface-variant">
-					Physical chunk bytes, including indexes, TOAST and compression, are averaged from the
-					first sample to now. Projections assume the same collection volume and compression mix.
-					They describe an approximate steady-state footprint, not an immediate disk change.
-				</p>
-				<p class="mt-3 text-xs leading-relaxed text-on-surface-variant">
-					TimescaleDB expires complete chunks. Short retention windows may keep more data until a
-					chunk fully expires. Increasing retention collects future history and does not restore
-					previously removed data.
-				</p>
+				{#if preview.logical}<p class="mt-4 text-xs leading-relaxed text-on-surface-variant">
+						Estimated logical row sizes exclude indexes, compression and free pages. Deletion makes
+						storage reusable and does not guarantee filesystem shrinkage. The projection assumes the
+						observed collection rate continues.
+					</p>{:else}<p class="mt-4 text-xs leading-relaxed text-on-surface-variant">
+						Physical chunk bytes, including indexes, TOAST and compression, are averaged from the
+						first sample to now. Projections assume the same collection volume and compression mix.
+						They describe an approximate steady-state footprint, not an immediate disk change.
+					</p>
+					<p class="mt-3 text-xs leading-relaxed text-on-surface-variant">
+						TimescaleDB expires complete chunks. Short retention windows may keep more data until a
+						chunk fully expires. Increasing retention collects future history and does not restore
+						previously removed data.
+					</p>{/if}
 				{#if global}<p class="mt-3 text-xs leading-relaxed text-on-surface-variant">
 						Consolidated projections require enough history for every table. Comparing policies also
 						requires an existing retention limit on every table. Individual estimates remain

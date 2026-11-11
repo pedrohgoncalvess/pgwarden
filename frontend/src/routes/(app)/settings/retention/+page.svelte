@@ -5,6 +5,7 @@
 	import Spinner from '$lib/components/Spinner.svelte';
 	import RetentionImpact from '$lib/components/retention/RetentionImpact.svelte';
 	import RetentionPolicies from '$lib/components/retention/RetentionPolicies.svelte';
+	import ScopedRetention from '$lib/components/retention/ScopedRetention.svelte';
 	import {
 		listRetentionPolicies,
 		previewRetention,
@@ -31,6 +32,7 @@
 	let error = $state('');
 	let success = $state('');
 	let revision = 0;
+	let defaultsVersion = $state(0);
 	const policy = $derived(policies.find((item) => item.name === selected));
 	const valid = $derived(
 		value !== undefined && Number.isInteger(value) && value >= 1 && value <= 100000
@@ -123,8 +125,9 @@
 			}
 			preview = null;
 			success = global
-				? `Retention policy saved for all ${policies.length} metric tables. TimescaleDB will apply each policy on its scheduled background runs.`
-				: 'Retention policy saved. TimescaleDB will apply it on its scheduled background runs.';
+				? `Retention policy saved for all ${policies.length} metric tables. Cleanup applies inherited rules every minute.`
+				: 'Retention policy saved. Cleanup applies inherited rules every minute.';
+			defaultsVersion++;
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Could not save retention policy.';
 		} finally {
@@ -211,9 +214,14 @@
 				</p>
 			</div>
 		{:else if policy}
+			{#key defaultsVersion}<ScopedRetention
+					onchange={() => {
+						void load();
+					}}
+				/>{/key}
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div>
-					<h2 class="text-lg font-bold text-on-surface">Manage metric history</h2>
+					<h2 class="text-lg font-bold text-on-surface">Global table defaults</h2>
 					<p class="mt-1 max-w-xl text-sm leading-relaxed text-on-surface-variant">
 						Choose how long to keep collected metrics, review the storage impact, then apply your
 						changes.
@@ -336,8 +344,8 @@
 						{#if global}<p class="flex gap-2 text-xs leading-relaxed text-on-surface-variant">
 								<span class="material-symbols-outlined shrink-0 text-[16px]" aria-hidden="true"
 									>info</span
-								>Existing schedules and paused jobs are preserved. Future tables need a separate
-								policy.
+								>Project and server overrides are preserved. Paused defaults remain paused. The
+								all-table default also covers future supported metric tables.
 							</p>{:else if policy.job_id !== null && !policy.scheduled}<p
 								class="flex gap-2 text-xs leading-relaxed text-status-warning"
 							>
@@ -380,8 +388,9 @@
 			/>
 			<p class="flex items-start gap-2 text-xs leading-relaxed text-on-surface-variant">
 				<span class="material-symbols-outlined shrink-0 text-[16px]" aria-hidden="true">info</span
-				>Policies affect the PGWarden metrics database across all monitored servers and projects.
-				Cleanup runs automatically when entire chunks expire.
+				>Global defaults apply where no project or server rule overrides them. Cleanup deletes
+				expired rows in bounded batches every minute. Deleted space becomes reusable and may not
+				immediately reduce database files.
 			</p>
 		{/if}
 	{/if}

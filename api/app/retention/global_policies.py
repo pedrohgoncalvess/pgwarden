@@ -41,6 +41,8 @@ async def preview_global(
         "name": "__all__", "window": window.model_dump(),
         "measured_at": previews[0]["measured_at"], "cutoff": previews[0]["cutoff"],
         "current_policy": None, "tables": previews,
+        "logical": all(item.get("logical", False) for item in previews),
+        "expired_rows": sum(item.get("expired_rows", 0) for item in previews),
         "observed_seconds": max(item["observed_seconds"] for item in previews),
         "first_sample": min(first_samples) if first_samples else None,
         "last_sample": max(last_samples) if last_samples else None,
@@ -59,6 +61,9 @@ async def update_global(
         targets = await get_targets(session)
         for policy in targets:
             await services.apply_policy(session, policy["name"], window)
+        if all(policy.get("managed") for policy in targets):
+            from app.retention.scopes import GLOBAL_ID, save_policy
+            await save_policy(session, "global", GLOBAL_ID, "*", window)
         await session.commit()
     except Exception:
         await session.rollback()

@@ -13,6 +13,9 @@ from app.retention.queries import CHUNKS, TABLES, WINDOW
 
 async def list_policies(session: AsyncSession) -> list[dict[str, Any]]:
     """List metric hypertables and their current retention jobs."""
+    if await session.scalar(text("SELECT to_regclass('retention.policy')")):
+        from app.retention.managed import list_defaults
+        return await list_defaults(session)
     installed = await session.scalar(text(
         "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'timescaledb')"
     ))
@@ -39,6 +42,9 @@ async def preview_policy(
 ) -> dict[str, Any]:
     """Estimate the proposed interval using a consistent transaction timestamp."""
     policy = await get_policy(session, name)
+    if policy.get("managed"):
+        from app.retention.managed_preview import preview_default
+        return await preview_default(session, policy, window)
     relation = get_relation(name)
     interval = f"{window.value} {window.unit}"
     timing = (await session.execute(WINDOW, {"interval": interval})).mappings().one()
@@ -71,11 +77,15 @@ async def apply_policy(
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                           {"key": f"pgwarden:retention:{name}"})
     policy = await get_policy(session, name)
+    if policy.get("managed"):
+        from app.retention.scopes import GLOBAL_ID, save_policy
+        await save_policy(session, "global", GLOBAL_ID, name, window)
+        return
     params = {"interval": f"{window.value} {window.unit}"}
     if policy["job_id"] is None:
         await session.execute(text("""
             SELECT add_retention_policy(CAST(:relation AS regclass),
-                                        drop_after => CAST(:interval AS interval))
+                                        drop_after => CAST(CAST(:interval AS text) AS interval))
         """), {**params, "relation": get_relation(name)})
     else:
         await session.execute(text("""

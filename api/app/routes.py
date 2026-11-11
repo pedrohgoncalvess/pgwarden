@@ -39,6 +39,7 @@ from app.services.router import router as services_router
 from app.projects.router import router as projects_router
 from app.ingestion.router import router as ingestion_router
 from app.retention.router import router as retention_router
+from app.retention.scope_router import router as retention_scope_router
 
 
 def register_routes(app: FastAPI) -> None:
@@ -73,6 +74,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(services_router, prefix="/v1", dependencies=[Depends(authorize_request)])
     app.include_router(projects_router, prefix="/v1", dependencies=[Depends(authorize_request)])
     app.include_router(ingestion_router, prefix="/v1")
+    app.include_router(retention_scope_router, prefix="/v1")
     app.include_router(retention_router, prefix="/v1")
 
     app.include_router(access_router, prefix="/v1", dependencies=[Depends(authorize_request)])
