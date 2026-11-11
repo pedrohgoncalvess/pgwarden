@@ -17,4 +17,3 @@ BEGIN
     INSERT INTO collector_config_database (database_id, name, interval)
     VALUES (NEW.id, 'query_workload_collector', 60);
 END;
-
