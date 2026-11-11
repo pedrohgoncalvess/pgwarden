@@ -1,6 +1,7 @@
 """Allowlisted destination tables and per-table row validation."""
 
 from functools import lru_cache
+import json
 from ipaddress import ip_address
 from typing import Annotated, Any
 
@@ -96,6 +97,15 @@ def validate_address(value: str) -> str:
     return str(ip_address(value))
 
 
+def validate_statement_data(value: str) -> str:
+    try:
+        if isinstance(json.loads(value), dict):
+            return value
+    except ValueError:
+        pass
+    raise ValueError("Statement statistics must be a JSON object")
+
+
 @lru_cache(maxsize=32)
 def get_row_model(name: str) -> type[BaseModel]:
     """Build a strict input model from the destination's allowlisted columns."""
@@ -125,6 +135,8 @@ def get_row_model(name: str) -> type[BaseModel]:
             annotation = Annotated[float, Field(allow_inf_nan=False)]
         elif column.name == "client_addr":
             annotation = Annotated[str, AfterValidator(validate_address)]
+        elif column.name == "statement_data":
+            annotation = Annotated[str, Field(max_length=262144), AfterValidator(validate_statement_data)]
         else:
             annotation = Annotated[str, Field(max_length=262144)]
         optional = (

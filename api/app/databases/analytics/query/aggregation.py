@@ -31,6 +31,7 @@ def _group_executions(filters: list) -> Select:
     return (
         select(
             Sample.query_hash, func.min(Sample.query).label("query"),
+            func.nullif(Sample.query_id, 0).label("pg_query_id"),
             Sample.user_name, Sample.application_name, bucket.label("bucket"),
             func.count().label("execution_count"),
             func.count(executions.c.duration).label("duration_count"),
@@ -49,6 +50,7 @@ def _group_executions(filters: list) -> Select:
         .where(*filters)
         .group_by(
             Sample.query_hash, unhashed_query,
+            Sample.query_id,
             Sample.user_name, Sample.application_name, bucket,
         )
         .order_by(func.min(executions.c.first_seen))

@@ -19,6 +19,7 @@ from app.databases.analytics.query.models import (
     QueryExecutionHistoryResponse,
 )
 from app.databases.analytics.query.summaries import summarize_queries
+from app.databases.analytics.query.workload import fetch_statement_groups, payload, snapshots, valid_delta
 from app.databases.schemas.exceptions import DatabaseNotFoundError
 from database.models.analytics.query import Query
 from database.models.metadata.database import Database
@@ -28,6 +29,7 @@ from database.models.metric.disk import DiskMetric
 from database.models.metric.io import IoMetric
 from database.models.metric.lock import LockMetric
 from database.models.metric.native_query import NativeQueryMetric
+from database.models.metric.query_workload import QueryWorkloadMetric
 from database.models.metric.ram import RamMetric
 from database.models.metric.session import SessionMetric
 from utils import decrypt_or_plain
@@ -93,6 +95,7 @@ def _normalize_query(query: Optional[str]) -> str:
     query = _DOUBLE_QUOTE_RE.sub(r"\1", query)
     query = query.lower()
     query = _STRING_LITERAL_RE.sub("?", query)
+    query = re.sub(r"\$\d+\b", "?", query)
     query = _NUMERIC_LITERAL_RE.sub("?", query)
     query = _IN_CLAUSE_RE.sub("in (?)", query)
     query = _WHITESPACE_RE.sub(" ", query).strip()
@@ -146,6 +149,13 @@ async def get_query_analytics(
     groups, filters = await fetch_query_groups(
         db, database.id, start_dt, end_dt, user_name, application_name, state,
     )
+    # Statements have no session application or activity state; such filters
+    # must not silently return aggregate workload that cannot satisfy them.
+    if application_name is None and state is None:
+        statement_groups = await fetch_statement_groups(db, database.id, start_dt, end_dt, user_name)
+        groups.extend(statement_groups)
+        filters.users = sorted(set(filters.users) | {row.user_name for row in statement_groups},
+                               key=lambda value: (value is None, value or ""))
     items, timeline, total = summarize_queries(
         groups, _normalize_query, _normalize_search_terms(search),
         [term.strip().lower() for term in (exclude or []) if term.strip()],
@@ -182,6 +192,8 @@ async def get_query_execution_history(
     if limit > 2000:
         limit = 2000
 
+    pg_id = await _resolve_pg_id(db, database.id, query_hash)
+    identity = (NativeQueryMetric.query_id == pg_id) if pg_id is not None else (NativeQueryMetric.query_hash == query_hash)
     result = await db.execute(
         select(
             NativeQueryMetric.collected_at,
@@ -192,7 +204,7 @@ async def get_query_execution_history(
         )
         .where(
             NativeQueryMetric.database_id == database.id,
-            NativeQueryMetric.query_hash == query_hash,
+            identity,
             NativeQueryMetric.collected_at >= start_dt,
             NativeQueryMetric.collected_at <= end_dt,
         )
@@ -215,6 +227,22 @@ async def get_query_execution_history(
         for row in reversed(rows)  # Oldest first for charts
     ]
 
+    statement_rows = await snapshots(db, database.id, start_dt, end_dt, pg_id, query_hash, limit=limit)
+    for row in statement_rows:
+        valid = valid_delta(row) and row.previous_at >= start_dt
+        calls = row.calls - row.prev_calls if valid else None
+        duration = row.total_exec_time - row.prev_total_exec_time if valid else None
+        items.append(QueryExecutionHistoryItem(
+            collected_at=row.collected_at, duration_ms=duration / calls if calls else None,
+            user_name=row.user_name, application_name=None, rows_returned=None,
+            source="statements", calls=row.calls, calls_delta=calls,
+            total_exec_time_delta_ms=duration, user_id=row.user_id,
+            is_toplevel=row.is_toplevel, statement_data=payload(row.statement_data),
+        ))
+    items.sort(key=lambda item: item.collected_at)
+    items = items[-limit:]
+    if not query_preview and statement_rows:
+        query_preview = _build_preview(_normalize_query(statement_rows[-1].query))
     return QueryExecutionHistoryResponse(
         query_hash=query_hash,
         query_preview=query_preview,
@@ -227,6 +255,9 @@ async def get_query_context(
     database_id: UUID,
     query_hash: str,
     collected_at: datetime,
+    source: str | None = None,
+    user_id: int | None = None,
+    is_toplevel: bool | None = None,
 ) -> QueryContextResponse:
     db_result = await db.execute(
         select(Database).where(
@@ -238,19 +269,25 @@ async def get_query_context(
     if not database:
         raise DatabaseNotFoundError(str(database_id))
 
+    pg_id = await _resolve_pg_id(db, database.id, query_hash)
+    if source == "statements":
+        return await _statement_context(db, database, query_hash, pg_id, collected_at, user_id, is_toplevel)
+    identity = (NativeQueryMetric.query_id == pg_id) if pg_id is not None else (NativeQueryMetric.query_hash == query_hash)
     # 1. Fetch the exact execution
     exec_result = await db.execute(
         select(NativeQueryMetric)
         .where(
             NativeQueryMetric.database_id == database.id,
-            NativeQueryMetric.query_hash == query_hash,
+            identity,
             NativeQueryMetric.collected_at == collected_at,
         )
         .limit(1)
     )
     execution_row = exec_result.scalar_one_or_none()
     if not execution_row:
-        raise ValueError("Execution not found")
+        if source == "activity":
+            raise ValueError("Execution not found")
+        return await _statement_context(db, database, query_hash, pg_id, collected_at)
 
     execution = QueryContextExecution(
         collected_at=execution_row.collected_at,
@@ -360,7 +397,7 @@ async def get_query_context(
         select(Query.id)
         .where(
             Query.database_id == database.id,
-            func.lower(Query.hash) == query_hash.lower(),
+            (Query.pg_query_id == pg_id) if pg_id is not None else (func.lower(Query.hash) == query_hash.lower()),
         )
         .limit(1)
     )
@@ -421,4 +458,66 @@ async def get_query_context(
         database_connections=database_connections,
         tables=tables_response,
         locks=locks_response,
+    )
+
+
+async def _resolve_pg_id(db: AsyncSession, database_id: int, query_hash: str) -> int | None:
+    if query_hash.startswith("pg:"):
+        try:
+            value = int(query_hash[3:])
+            if value and -(2**63) <= value < 2**63:
+                return value
+        except ValueError:
+            pass
+        raise ValueError("Invalid PostgreSQL query identity")
+    for model, hash_column, id_column in (
+        (Query, Query.hash, Query.pg_query_id),
+        (NativeQueryMetric, NativeQueryMetric.query_hash, NativeQueryMetric.query_id),
+        (QueryWorkloadMetric, QueryWorkloadMetric.query_hash, QueryWorkloadMetric.query_id),
+    ):
+        result = await db.execute(select(id_column).where(
+            model.database_id == database_id, hash_column == query_hash,
+            id_column.is_not(None), id_column != 0,
+        ).distinct().limit(2))
+        ids = result.scalars().all()
+        if len(ids) == 1:
+            return ids[0]
+        if len(ids) > 1:
+            return None
+    return None
+
+
+async def _statement_context(db, database, query_hash, pg_id, collected_at, user_id=None, is_toplevel=None):
+    identity = (QueryWorkloadMetric.query_id == pg_id) if pg_id is not None else (QueryWorkloadMetric.query_hash == query_hash)
+    statement = select(QueryWorkloadMetric).where(
+        QueryWorkloadMetric.database_id == database.id, identity,
+        QueryWorkloadMetric.collected_at == collected_at,
+    )
+    if user_id is not None:
+        statement = statement.where(QueryWorkloadMetric.user_id == user_id)
+    if is_toplevel is not None:
+        statement = statement.where(QueryWorkloadMetric.is_toplevel == is_toplevel)
+    result = await db.execute(statement.order_by(QueryWorkloadMetric.user_id, QueryWorkloadMetric.is_toplevel.desc()).limit(1))
+    snapshot = result.scalar_one_or_none()
+    if snapshot is None:
+        raise ValueError("Execution not found")
+    result = await db.execute(select(Query.id).where(
+        Query.database_id == database.id,
+        (Query.pg_query_id == pg_id) if pg_id is not None else (Query.hash == query_hash),
+    ).order_by(Query.id).limit(1))
+    query_id = result.scalar_one_or_none()
+    return QueryContextResponse(
+        execution=QueryContextExecution(
+            collected_at=collected_at, duration_ms=None, query=snapshot.query or "",
+            user_name=snapshot.user_name, application_name=None, source="statements",
+            statement_data=payload(snapshot.statement_data),
+        ),
+        server_metrics=QueryContextServerMetrics(
+            cpu_percent=None, ram_percent=None, disk_percent=None,
+            read_bytes=None, write_bytes=None,
+            cpu_stale=True, ram_stale=True, disk_stale=True, io_stale=True,
+        ),
+        database_connections=QueryContextDatabaseConnections(active=None, idle=None, idle_in_transaction=None, waiting=None),
+        tables=await get_context_tables(db, database.id, query_id, collected_at) if query_id else [],
+        locks=[],
     )

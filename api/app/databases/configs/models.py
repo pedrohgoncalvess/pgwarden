@@ -8,6 +8,8 @@ class ConfigItem(BaseModel):
     name: str
     interval: float
     is_paused: bool
+    consecutive_errors: int = 0
+    warning: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

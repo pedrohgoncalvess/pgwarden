@@ -8,6 +8,7 @@ PostgreSQL transactions and the existing collector/metric tables.
 
 import os
 import re
+import tomllib
 import asyncio
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -37,6 +38,28 @@ from database.connection import DatabaseConnection
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.asyncio
+async def test_statement_collector_defaults_auto_pause_warning_and_explicit_resume(db_session):
+    from app.databases.configs.models import ConfigPatch
+    from app.databases.configs.router import patch_database_config
+
+    server_id = (await db_session.execute(text("""INSERT INTO collector.server(name,host,port,username,password)
+        VALUES('workload warning test','localhost','5432','test','test') RETURNING id"""))).scalar_one()
+    database = (await db_session.execute(text("""INSERT INTO metadata.database(server_id,db_name)
+        VALUES(:server_id,'workload warning test') RETURNING id,public_id"""), {'server_id': server_id})).one()
+    config = (await db_session.execute(text("SELECT id,is_paused FROM collector.config_database WHERE database_id=:id AND name='query_workload_collector'"), {'id': database.id})).one()
+    assert config.is_paused
+    await db_session.execute(text('UPDATE collector.config_database SET is_paused=false WHERE id=:id'), {'id': config.id})
+    query = tomllib.loads((ROOT / 'collector/database/queries/storage/collector/config_database.toml').read_text())['UPDATE']['workload_unavailable']
+    query = query.replace('%(database_id)s', ':database_id')
+    for count in range(1, 4):
+        row = (await db_session.execute(text(query), {'database_id': database.id})).one()
+        assert row.consecutive_errors == count
+        assert bool(row.warning) == (count == 3)
+    updated = await patch_database_config(str(database.public_id), config.id, ConfigPatch(is_paused=False))
+    assert not updated.is_paused and updated.warning is None and updated.consecutive_errors == 0
+
+
 @pytest.fixture(autouse=True)
 def _stub_embeddings() -> Iterator[None]:
     """These routes do not use embeddings or the wider application bootstrap."""
@@ -64,7 +87,10 @@ def _apply_migrations(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]
                 "20260424_01_9UN1w-add-n-mod-since-analyze.sql",
                 "20260623_01_database-stats-metric.sql",
                 "20260624_01_native-query-metric.sql",
+                "20260709_01_zo2AJ-analytics-module.sql",
                 "20261031_02_index-advisor.sql",
+                "20261101_01_query-sources.sql",
+                "20261102_01_workload-auto-disable.sql",
             ]:
                 ddl = (ROOT / "migrations/sql" / filename).read_text()
                 ddl = re.sub(
@@ -533,6 +559,10 @@ async def test_all_metric_types_and_index_relationships(
                 shared_blks_read=2,
                 shared_blks_hit=20,
                 dealloc=0,
+                query="SELECT $1",
+                query_hash="statement-hash",
+                user_name="monitor",
+                statement_data='{"rows": 10, "wal_bytes": 125, "queryid": 12345}',
             )
         observations.append(item(name, data))
     body = batch(*parents, *observations)

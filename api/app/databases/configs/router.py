@@ -67,5 +67,8 @@ async def patch_database_config(database_id: str, config_id: int, patch: ConfigP
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")
 
+        if config.name == 'query_workload_collector' and updates.get('is_paused') is False:
+            updates.update(consecutive_errors=0, warning=None)
+
         updated = await config_repo.update(config_id, updates)
         return ConfigItem.model_validate(updated)
