@@ -22,6 +22,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.11.16'
+          python-version: '3.13'
+          enable-cache: false
       - name: Require a version tag on main
         id: version
         shell: bash
@@ -31,6 +36,7 @@ jobs:
             exit 1
           fi
           git merge-base --is-ancestor HEAD origin/main
+          uv run --no-project --python 3.13 python scripts/check_version.py --tag "$GITHUB_REF_NAME"
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             echo 'prerelease=true' >> "$GITHUB_OUTPUT"
           else
