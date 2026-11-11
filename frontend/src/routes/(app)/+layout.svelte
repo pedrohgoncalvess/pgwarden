@@ -363,7 +363,8 @@
 				{#each tabs as tab (tab.href)}{@const target = href(tab.href)}<a
 						href={resolve(...([target] as Parameters<typeof resolve>))}
 						aria-current={tabIsActive($page.url.pathname, target) ? 'page' : undefined}
-						>{tab.label}</a
+						><span class="material-symbols-outlined" aria-hidden="true">{tab.icon}</span
+						><span>{tab.label}</span></a
 					>{/each}
 			</nav>{/if}
 		{#if can($profile, 'alerts.read')}<NotificationPanel

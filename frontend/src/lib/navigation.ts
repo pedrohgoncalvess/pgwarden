@@ -1,6 +1,6 @@
 import { canonicalPath } from './routePaths';
 
-export type Destination = { label: string; href: string; icon?: string };
+export type Destination = { label: string; href: string; icon: string };
 
 export function contextualHref(
 	path: string,
@@ -41,38 +41,41 @@ export const destinations: Destination[] = [
 
 export const sectionTabs: Record<string, Destination[]> = {
 	analytics: [
-		{ label: 'Queries', href: '/analytics/query' },
-		{ label: 'Deep analysis', href: '/analytics/deep' },
-		{ label: 'Data', href: '/analytics/data' },
-		{ label: 'Indexes', href: '/analytics/index' },
-		{ label: 'Recommendations', href: '/analytics/recommendations' },
-		{ label: 'Time travel', href: '/analytics/time-travel' }
+		{ label: 'Queries', href: '/analytics/query', icon: 'search' },
+		{ label: 'Deep analysis', href: '/analytics/deep', icon: 'travel_explore' },
+		{ label: 'Data', href: '/analytics/data', icon: 'analytics' },
+		{ label: 'Indexes', href: '/analytics/index', icon: 'speed' },
+		{ label: 'Recommendations', href: '/analytics/recommendations', icon: 'tips_and_updates' },
+		{ label: 'Time travel', href: '/analytics/time-travel', icon: 'history_toggle_off' }
 	],
 	schema: [
-		{ label: 'Structure', href: '/schema' },
-		{ label: 'Documentation', href: '/schema/documentation' },
-		{ label: 'Tags', href: '/schema/tags' }
+		{ label: 'Structure', href: '/schema', icon: 'account_tree' },
+		{ label: 'Documentation', href: '/schema/documentation', icon: 'description' },
+		{ label: 'Tags', href: '/schema/tags', icon: 'label' }
 	],
-	alerts: ['Server', 'Database', 'Table', 'Index', 'Configuration'].map((label) => ({
-		label,
-		href: `/alerts/${label.toLowerCase()}`
-	})),
+	alerts: [
+		{ label: 'Server', href: '/alerts/server', icon: 'dns' },
+		{ label: 'Database', href: '/alerts/database', icon: 'database' },
+		{ label: 'Table', href: '/alerts/table', icon: 'table' },
+		{ label: 'Index', href: '/alerts/index', icon: 'speed' },
+		{ label: 'Configuration', href: '/alerts/configuration', icon: 'settings' }
+	],
 	jobs: [
-		{ label: 'Live runs', href: '/jobs/live' },
-		{ label: 'Run history', href: '/jobs/history' },
-		{ label: 'Server jobs', href: '/jobs/server' },
-		{ label: 'Database jobs', href: '/jobs/database' },
-		{ label: 'Services', href: '/jobs/services' }
+		{ label: 'Live runs', href: '/jobs/live', icon: 'precision_manufacturing' },
+		{ label: 'Run history', href: '/jobs/history', icon: 'history' },
+		{ label: 'Server jobs', href: '/jobs/server', icon: 'dns' },
+		{ label: 'Database jobs', href: '/jobs/database', icon: 'database' },
+		{ label: 'Services', href: '/jobs/services', icon: 'hub' }
 	],
 	settings: [
-		{ label: 'Retention', href: '/settings/retention' },
-		{ label: 'Connections', href: '/settings/connections' },
-		{ label: 'Servers', href: '/settings/servers' },
-		{ label: 'Projects', href: '/settings/projects' },
-		{ label: 'Users', href: '/settings/users' },
-		{ label: 'Roles', href: '/settings/roles' },
-		{ label: 'Change password', href: '/settings/password' },
-		{ label: 'Account', href: '/settings/account' }
+		{ label: 'Retention', href: '/settings/retention', icon: 'history' },
+		{ label: 'Connections', href: '/settings/connections', icon: 'cable' },
+		{ label: 'Servers', href: '/settings/servers', icon: 'lan' },
+		{ label: 'Projects', href: '/settings/projects', icon: 'key' },
+		{ label: 'Users', href: '/settings/users', icon: 'group' },
+		{ label: 'Roles', href: '/settings/roles', icon: 'shield_person' },
+		{ label: 'Change password', href: '/settings/password', icon: 'lock' },
+		{ label: 'Account', href: '/settings/account', icon: 'manage_accounts' }
 	]
 };
 
