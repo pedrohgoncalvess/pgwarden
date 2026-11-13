@@ -8,11 +8,13 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateTable
+from statement_fixtures import insert_samples
 
 from app.databases.analytics.query.services import _normalize_query, _statement_context
 from app.databases.analytics.query.summaries import summarize_queries
 from app.databases.analytics.query.workload import fetch_statement_groups, snapshots, valid_delta
-from database.models.metric.query_workload import QueryWorkloadMetric as Workload
+from database.models.metric.query_workload import QueryWorkloadMetric as Workload, StatementText
 from app.ingestion.catalog import validate_statement_data
 
 NOW = datetime(2026, 11, 1, 12)
@@ -29,11 +31,8 @@ def workload_session():
     engine = create_engine('sqlite://')
     with engine.connect() as conn:
         conn.exec_driver_sql("ATTACH DATABASE ':memory:' AS metric")
-        conn.exec_driver_sql('''CREATE TABLE metric.query_workload (
-            collected_at DATETIME, database_id BIGINT, query_id BIGINT, user_id BIGINT,
-            is_toplevel BOOLEAN, calls BIGINT, total_exec_time FLOAT,
-            shared_blks_read BIGINT, shared_blks_hit BIGINT, stats_reset DATETIME,
-            dealloc BIGINT, query TEXT, query_hash TEXT, user_name TEXT, statement_data TEXT)''')
+        for table in (StatementText.__table__, Workload.__table__):
+            conn.execute(CreateTable(table, include_foreign_key_constraints=[]))
         with Session(conn) as session:
             yield session
     engine.dispose()
@@ -45,7 +44,7 @@ def sample(offset=0, **values):
                 total_exec_time=1000 + offset * 100, shared_blks_read=offset,
                 shared_blks_hit=100 + offset, stats_reset=NOW, dealloc=0,
                 query='SELECT * FROM users WHERE id = $1', query_hash='statement-hash',
-                user_name='alice', statement_data='{"wal_bytes": 100}') | values
+                user_name='alice', wal_bytes=100, stats_since=None) | values
 
 
 async def groups(session, start=NOW):
@@ -64,7 +63,7 @@ def activity(**values):
 
 @pytest.mark.asyncio
 async def test_statements_only_enter_catalog_without_fabricating_first_interval(workload_session):
-    workload_session.execute(Workload.__table__.insert(), [sample()])
+    insert_samples(workload_session, [sample()])
     rows = await groups(workload_session)
     items, timeline, total = summarize_queries(rows, _normalize_query, [], [], 50, 'executions', 'desc')
     assert total == 1 and items[0].execution_count == 0
@@ -76,7 +75,7 @@ async def test_statements_only_enter_catalog_without_fabricating_first_interval(
 
 @pytest.mark.asyncio
 async def test_merge_preserves_both_texts_and_does_not_add_activity_counts(workload_session):
-    workload_session.execute(Workload.__table__.insert(), [sample(), sample(1)])
+    insert_samples(workload_session, [sample(), sample(1)])
     rows = await groups(workload_session)
     items, timeline, total = summarize_queries([activity(), *rows], _normalize_query, [], [], 50, 'executions', 'desc')
     item = items[0]
@@ -95,10 +94,10 @@ async def test_merge_preserves_both_texts_and_does_not_add_activity_counts(workl
 @pytest.mark.parametrize('changed', [
     {'calls': 1}, {'total_exec_time': 1}, {'shared_blks_read': -1},
     {'stats_reset': NOW + timedelta(seconds=1)}, {'dealloc': 1},
-    {'statement_data': json.dumps({'stats_since': 'new epoch'})},
+    {'stats_since': NOW + timedelta(seconds=1)},
 ])
 async def test_reset_eviction_and_counter_decrease_invalidate_interval(workload_session, changed):
-    workload_session.execute(Workload.__table__.insert(), [sample(), sample(1, **changed)])
+    insert_samples(workload_session, [sample(), sample(1, **changed)])
     rows = await snapshots(AsyncMock(execute=AsyncMock(side_effect=workload_session.execute)),
                            1, NOW, NOW + timedelta(hours=1))
     assert not valid_delta(rows[1])
@@ -108,7 +107,7 @@ async def test_reset_eviction_and_counter_decrease_invalidate_interval(workload_
 
 @pytest.mark.asyncio
 async def test_counters_are_partitioned_by_role_and_level(workload_session):
-    workload_session.execute(Workload.__table__.insert(), [
+    insert_samples(workload_session, [
         sample(), sample(1), sample(user_id=20), sample(1, user_id=20),
         sample(is_toplevel=False), sample(1, is_toplevel=False),
         sample(database_id=2), sample(1, database_id=2),
@@ -119,7 +118,7 @@ async def test_counters_are_partitioned_by_role_and_level(workload_session):
 
 @pytest.mark.asyncio
 async def test_interval_crossing_requested_window_is_not_attributed(workload_session):
-    workload_session.execute(Workload.__table__.insert(), [sample(), sample(2)])
+    insert_samples(workload_session, [sample(), sample(2)])
     items, _, _ = summarize_queries(await groups(workload_session, NOW + timedelta(minutes=1)),
                                    _normalize_query, [], [], 50, 'executions', 'desc')
     assert items[0].statements_calls is None
@@ -138,15 +137,15 @@ def test_distinct_postgres_identities_do_not_merge_even_with_equal_sql():
 async def test_snapshot_context_preserves_role_and_execution_level(workload_session):
     workload_session.connection().exec_driver_sql("ATTACH DATABASE ':memory:' AS analytics")
     workload_session.connection().exec_driver_sql('CREATE TABLE analytics.query (id INTEGER, database_id INTEGER, pg_query_id BIGINT, hash TEXT)')
-    workload_session.execute(Workload.__table__.insert(), [
-        sample(statement_data='{"tag": "first"}'),
-        sample(user_id=20, user_name='other', statement_data='{"tag": "top"}'),
-        sample(user_id=20, user_name='other', is_toplevel=False, statement_data='{"tag": "nested"}'),
+    insert_samples(workload_session, [
+        sample(rows=1),
+        sample(user_id=20, user_name='other', rows=2),
+        sample(user_id=20, user_name='other', is_toplevel=False, rows=3),
     ])
     db = AsyncMock(execute=AsyncMock(side_effect=workload_session.execute))
     context = await _statement_context(db, SimpleNamespace(id=1), 'pg:-123', -123, NOW, 20, False)
     assert context.execution.source == 'statements'
-    assert context.execution.statement_data['tag'] == 'nested'
+    assert context.execution.statement_data['rows'] == 3
     assert context.execution.user_name == 'other'
     assert context.execution.duration_ms is None
     assert context.database_connections.active is None

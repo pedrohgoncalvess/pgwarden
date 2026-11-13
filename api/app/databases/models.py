@@ -45,6 +45,6 @@ class UptimeResponse(BaseModel):
 class DatabaseMetricsSummaryResponse(BaseModel):
     database_id: UUID
     stats: DatabaseStatsResponse
-    uptime: UptimeResponse
+    uptime: UptimeResponse | None
 
     model_config = ConfigDict(from_attributes=True)

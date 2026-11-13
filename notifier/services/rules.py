@@ -41,8 +41,8 @@ def _latest_per_server(table: str, value_column: str) -> str:
         SELECT DISTINCT ON (m.server_id) s.name AS entity, m.{value_column} AS value
         FROM metric.{table} m
         JOIN collector.server s ON s.id = m.server_id
-        WHERE m.collected_at > now() - make_interval(mins => :window)
-          AND (:entity_id IS NULL OR m.server_id = :entity_id)
+        WHERE m.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+          AND (CAST(:entity_id AS BIGINT) IS NULL OR m.server_id = :entity_id)
         ORDER BY m.server_id, m.collected_at DESC
     """
 
@@ -53,8 +53,8 @@ def _delta_per_database(value_column: str) -> str:
                (MAX(ds.{value_column}) - MIN(ds.{value_column}))::float AS value
         FROM metric.database_stat ds
         JOIN metadata.database d ON d.id = ds.database_id
-        WHERE ds.collected_at > now() - make_interval(mins => :window)
-          AND (:entity_id IS NULL OR ds.database_id = :entity_id)
+        WHERE ds.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+          AND (CAST(:entity_id AS BIGINT) IS NULL OR ds.database_id = :entity_id)
         GROUP BY d.db_name
     """
 
@@ -64,8 +64,8 @@ def _metadata_count_per_database(table: str, timestamp_column: str) -> str:
         SELECT d.db_name AS entity, COUNT(*)::float AS value
         FROM metadata.{table} m
         JOIN metadata.database d ON d.id = m.database_id
-        WHERE m.{timestamp_column} > now() - make_interval(mins => :window)
-          AND (:entity_id IS NULL OR m.database_id = :entity_id)
+        WHERE m.{timestamp_column} > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+          AND (CAST(:entity_id AS BIGINT) IS NULL OR m.database_id = :entity_id)
         GROUP BY d.db_name
     """
 
@@ -98,8 +98,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                    s.name || ' ' || dk.mount_point AS entity, dk.percent AS value
             FROM metric.disk dk
             JOIN collector.server s ON s.id = dk.server_id
-            WHERE dk.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR dk.server_id = :entity_id)
+            WHERE dk.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR dk.server_id = :entity_id)
             ORDER BY dk.server_id, dk.mount_point, dk.collected_at DESC
         """,
         mapper=_simple("entity", "value"),
@@ -116,8 +116,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                      / NULLIF(MIN(ds.db_size_bytes), 0) * 100 AS value
             FROM metric.database_stat ds
             JOIN metadata.database d ON d.id = ds.database_id
-            WHERE ds.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR ds.database_id = :entity_id)
+            WHERE ds.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR ds.database_id = :entity_id)
             GROUP BY d.db_name
         """,
         mapper=_simple("entity", "value"),
@@ -135,8 +135,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                             + (MAX(ds.blks_read) - MIN(ds.blks_read)), 0) AS value
             FROM metric.database_stat ds
             JOIN metadata.database d ON d.id = ds.database_id
-            WHERE ds.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR ds.database_id = :entity_id)
+            WHERE ds.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR ds.database_id = :entity_id)
             GROUP BY d.db_name
         """,
         mapper=_simple("entity", "value"),
@@ -180,9 +180,9 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                    MAX(nq.query_duration_ms) AS value
             FROM metric.native_query nq
             JOIN metadata.database d ON d.id = nq.database_id
-            WHERE nq.collected_at > now() - make_interval(mins => :window)
+            WHERE nq.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
               AND nq.state = 'active'
-              AND (:entity_id IS NULL OR nq.database_id = :entity_id)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR nq.database_id = :entity_id)
             GROUP BY d.db_name, nq.pid, nq.backend_start
         """,
         mapper=_simple("entity", "value"),
@@ -199,10 +199,10 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
             JOIN metadata.database d ON d.id = sn.database_id
             WHERE sn.collected_at = (
                       SELECT MAX(collected_at) FROM metric.session
-                      WHERE collected_at > now() - make_interval(mins => :window)
+                      WHERE collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
                   )
               AND sn.wait_event_type IS NOT NULL
-              AND (:entity_id IS NULL OR sn.database_id = :entity_id)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR sn.database_id = :entity_id)
             GROUP BY d.db_name
         """,
         mapper=_simple("entity", "value"),
@@ -219,10 +219,10 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
             JOIN metadata.database d ON d.id = lk.database_id
             WHERE lk.collected_at = (
                       SELECT MAX(collected_at) FROM metric.lock
-                      WHERE collected_at > now() - make_interval(mins => :window)
+                      WHERE collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
                   )
               AND lk.is_granted = false
-              AND (:entity_id IS NULL OR lk.database_id = :entity_id)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR lk.database_id = :entity_id)
             GROUP BY d.db_name
         """,
         mapper=_simple("entity", "value"),
@@ -275,8 +275,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                        MIN(table_size_bytes) AS min_size,
                        MAX(table_size_bytes) AS max_size
                 FROM metric.table
-                WHERE collected_at > now() - make_interval(mins => :window)
-                  AND (:entity_id IS NULL OR table_id = :entity_id)
+                WHERE collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+                  AND (CAST(:entity_id AS BIGINT) IS NULL OR table_id = :entity_id)
                 GROUP BY table_id
             )
             SELECT mt.schema_name || '.' || mt.name AS entity,
@@ -298,8 +298,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                    t.n_dead_tup::float AS value
             FROM metric.table t
             JOIN metadata.table mt ON mt.id = t.table_id
-            WHERE t.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR t.table_id = :entity_id)
+            WHERE t.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR t.table_id = :entity_id)
             ORDER BY t.table_id, t.collected_at DESC
         """,
         mapper=_simple("entity", "value"),
@@ -316,8 +316,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                    t.n_dead_tup, t.n_live_tup
             FROM metric.table t
             JOIN metadata.table mt ON mt.id = t.table_id
-            WHERE t.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR t.table_id = :entity_id)
+            WHERE t.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR t.table_id = :entity_id)
             ORDER BY t.table_id, t.collected_at DESC
         """,
         mapper=_dead_tuple_ratio,
@@ -332,8 +332,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
             SELECT mt.schema_name || '.' || mt.name AS entity, COUNT(*)::float AS value
             FROM metadata.column c
             JOIN metadata.table mt ON mt.id = c.table_id
-            WHERE c.created_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR c.table_id = :entity_id)
+            WHERE c.created_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR c.table_id = :entity_id)
             GROUP BY mt.schema_name, mt.name
         """,
         mapper=_simple("entity", "value"),
@@ -351,8 +351,8 @@ RULE_TYPES: dict[tuple[str, str], RuleType] = {
                             + (MAX(i.blks_read) - MIN(i.blks_read)), 0) AS value
             FROM metric.index i
             JOIN metadata.index mi ON mi.id = i.index_id
-            WHERE i.collected_at > now() - make_interval(mins => :window)
-              AND (:entity_id IS NULL OR i.index_id = :entity_id)
+            WHERE i.collected_at > now() - make_interval(secs => CAST(:window AS DOUBLE PRECISION) * 60)
+              AND (CAST(:entity_id AS BIGINT) IS NULL OR i.index_id = :entity_id)
             GROUP BY mi.name
         """,
         mapper=_simple("entity", "value"),

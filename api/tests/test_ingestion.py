@@ -82,6 +82,7 @@ def _apply_migrations(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]
     backend = None
     try:
         with psycopg.connect(database_url, autocommit=True) as connection:
+            connection.execute('CREATE SCHEMA IF NOT EXISTS "base"')
             for filename in [
                 "20260324_01_pUn2z.sql",
                 "20260424_01_9UN1w-add-n-mod-since-analyze.sql",
@@ -89,8 +90,11 @@ def _apply_migrations(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]
                 "20260624_01_native-query-metric.sql",
                 "20260709_01_zo2AJ-analytics-module.sql",
                 "20261031_02_index-advisor.sql",
+                "20260729_01_service-heartbeats.sql",
                 "20261101_01_query-sources.sql",
                 "20261102_01_workload-auto-disable.sql",
+                "20261112_01_statement-reset-marker.sql",
+                "20261112_02_typed-statements.sql",
             ]:
                 ddl = (ROOT / "migrations/sql" / filename).read_text()
                 ddl = re.sub(
@@ -181,6 +185,38 @@ async def provision(client: AsyncClient, **settings: Any) -> dict:
     return response.json()
 
 
+@pytest.mark.asyncio
+async def test_typed_and_legacy_statements_share_text_and_keep_replay_receipts(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """Queued legacy events and new typed events converge without payload copies."""
+    created = await provision(client)
+    key = created["credential"]["key"]
+    now = datetime.now(timezone.utc)
+    common = dict(database_id=1, query_id=123, user_id=10, is_toplevel=True,
+                  calls=10, total_exec_time=20, shared_blks_read=1,
+                  shared_blks_hit=5, dealloc=0, query="SELECT $1")
+    body = batch(
+        item("collector_server", {"name": "typed-source"}, 1),
+        item("metadata_database", {"server_id": 1, "db_name": "typed-db"}, 1),
+        item("metric_query_workload", dict(common, collected_at=now.isoformat(),
+             wal_bytes="18446744073709551615", rows=30, stats_since=now.isoformat())),
+        item("metric_query_workload", dict(common, collected_at=(now+timedelta(seconds=60)).isoformat(),
+             statement_data='{"wal_bytes":18446744073709551615,"rows":40}')),
+    )
+    response = await send(client, key, body)
+    assert response.status_code == 200, response.text
+    assert response.json()["accepted"] == 4
+    response = await send(client, key, body)
+    assert response.json()["duplicates"] == 4
+    samples = (await db_session.execute(text("SELECT rows,wal_bytes,statement_text_id FROM metric.query_workload ORDER BY collected_at"))).all()
+    assert len(samples) == 2 and [row.rows for row in samples] == [30,40]
+    assert str(samples[0].wal_bytes) == "18446744073709551615"
+    assert samples[0].statement_text_id == samples[1].statement_text_id
+    receipts = await db_session.scalar(text("SELECT count(*) FROM ingestion.event WHERE table_name='metric_query_workload' AND payload='{}'::jsonb"))
+    assert receipts == 2
+
+
 def item(table: str, data: dict, local_id: int | None = None, **changes: Any) -> dict:
     return {
         "event_id": str(uuid4()),
@@ -204,6 +240,37 @@ async def send(client: AsyncClient, key: str, body: dict) -> Response:
     return await client.post(
         "/v1/ingestion/events", headers={"Authorization": f"Bearer {key}"}, json=body
     )
+
+
+@pytest.mark.asyncio
+async def test_remote_heartbeat_health_uses_collection_time_and_ignores_stale_replays(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    from app.health.services import get_health
+
+    created = await provision(client)
+    key = created["credential"]["key"]
+    now = datetime.now(timezone.utc)
+    stale = (now - timedelta(minutes=5)).isoformat()
+    fresh = now.isoformat()
+    await db_session.execute(text("DELETE FROM base.service_heartbeat WHERE service='collector'"))
+    body = batch(item("base_service_heartbeat", {"service": "collector", "updated_at": stale}))
+    assert (await send(client, key, body)).status_code == 200
+    assert (await get_health(db_session)).services["collector"].status == "unavailable"
+
+    body = batch(item("base_service_heartbeat", {"service": "collector", "updated_at": fresh}))
+    assert (await send(client, key, body)).status_code == 200
+    assert (await send(client, key, body)).json()["duplicates"] == 1
+    health = (await get_health(db_session)).services["collector"]
+    assert health.status == "healthy"
+    assert health.updated_at == now
+
+    older = batch(item("base_service_heartbeat", {"service": "collector", "updated_at": stale}))
+    assert (await send(client, key, older)).status_code == 200
+    assert (await get_health(db_session)).services["collector"].updated_at == now
+    for service in ("analytics", "notifier"):
+        invalid = batch(item("base_service_heartbeat", {"service": service, "updated_at": fresh}))
+        assert (await send(client, key, invalid)).status_code == 422
 
 
 @pytest.mark.asyncio

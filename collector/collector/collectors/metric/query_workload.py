@@ -6,6 +6,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 from database import load_storage_query
+from database.statements import prepare_statement
 from log import logger
 from collector.collectors.base import BaseCollector
 from collector.collectors.result import SyncResult
@@ -71,11 +72,7 @@ async def collect_query_workload(monitored_db, metrics_db, database_id: int) -> 
                     raise StatementSourceUnavailable('pg_stat_statements extension is not installed in the monitored database.')
                 schema = extension['nspname']
                 await cur.execute(sql.SQL("""
-                    SELECT s.queryid AS query_id, s.userid AS user_id,
-                           s.toplevel AS is_toplevel, s.calls, s.total_exec_time,
-                           s.shared_blks_read, s.shared_blks_hit, info.stats_reset, info.dealloc,
-                           s.query, md5(s.query) AS query_hash, r.rolname AS user_name,
-                           row_to_json(s)::text AS statement_data
+                    SELECT s.*, info.stats_reset, info.dealloc, r.rolname AS user_name
                     FROM {}.pg_stat_statements s
                     CROSS JOIN {}.pg_stat_statements_info info
                     LEFT JOIN pg_roles r ON r.oid = s.userid
@@ -95,10 +92,13 @@ async def collect_query_workload(monitored_db, metrics_db, database_id: int) -> 
     if not rows:
         return 0
     collected_at = datetime.now(timezone.utc)
-    values = [dict(row, collected_at=collected_at, database_id=database_id) for row in rows]
+    values = [prepare_statement(row, database_id, collected_at) for row in rows]
     query = load_storage_query('metric', 'query_workload', 'INSERT', 'default')
+    text_query = load_storage_query('metric', 'query_workload', 'INSERT', 'texts')
     async with metrics_db as conn:
         async with conn.cursor() as cur:
+            texts = {row['fingerprint']: row for row in values if row['query'] is not None}
+            await cur.executemany(text_query, list(texts.values()))
             await cur.executemany(query, values)
         await conn.commit()
     return len(values)

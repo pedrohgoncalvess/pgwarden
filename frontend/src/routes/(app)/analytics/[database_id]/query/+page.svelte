@@ -373,10 +373,18 @@
 	const timelineChartHeight = 260;
 	const padding = { top: 16, right: 48, bottom: 40, left: 56 };
 
-	function xScale(index: number, count: number): number {
-		if (count <= 1) return padding.left;
-		const usableWidth = timelineChartWidth - padding.left - padding.right;
-		return padding.left + (index / (count - 1)) * usableWidth;
+	let timelineBounds = $derived.by(() => {
+		const times = (data?.timeline ?? []).flatMap((point) => [
+			Date.parse(point.interval_start ?? point.timestamp),
+			Date.parse(point.timestamp)
+		]);
+		return { start: Math.min(...times), end: Math.max(...times) };
+	});
+
+	function timeScale(timestamp: string): number {
+		const { start, end } = timelineBounds;
+		const ratio = end > start ? (Date.parse(timestamp) - start) / (end - start) : 0.5;
+		return padding.left + ratio * (timelineChartWidth - padding.left - padding.right);
 	}
 
 	function yScale(value: number, maxValue: number): number {
@@ -404,7 +412,8 @@
 			month: 'short',
 			day: 'numeric',
 			hour: '2-digit',
-			minute: '2-digit'
+			minute: '2-digit',
+			second: '2-digit'
 		});
 	}
 
@@ -413,10 +422,19 @@
 		const svg = event.currentTarget as SVGSVGElement;
 		const rect = svg.getBoundingClientRect();
 		const x = event.clientX - rect.left;
-		const usableWidth = timelineChartWidth - padding.left - padding.right;
-		const ratio = Math.max(0, Math.min(1, (x - padding.left) / usableWidth));
-		const index = Math.round(ratio * (data.timeline.length - 1));
-		timelineHoverIndex = Math.max(0, Math.min(data.timeline.length - 1, index));
+		const y = event.clientY - rect.top;
+		let nearest = 0;
+		let distance = Infinity;
+		for (const [index, point] of timelineExecutions.entries()) {
+			const start = point.interval_start ? timeScale(point.interval_start) : point.x;
+			const dx = x < start ? start - x : x > point.x ? x - point.x : 0;
+			const candidate = dx * dx + (y - point.y) ** 2;
+			if (candidate < distance) {
+				distance = candidate;
+				nearest = index;
+			}
+		}
+		timelineHoverIndex = nearest;
 	}
 
 	function handleTimelineMouseLeave() {
@@ -427,17 +445,22 @@
 		const currentData = data;
 		if (!currentData || currentData.timeline.length === 0) return [];
 		const maxExec = Math.max(...currentData.timeline.map((p) => p.execution_count), 1);
-		return currentData.timeline.map((p, i) => ({
-			x: xScale(i, currentData.timeline.length),
+		return currentData.timeline.map((p) => ({
+			x: timeScale(p.timestamp),
 			y: yScale(p.execution_count, maxExec),
 			value: p.execution_count,
-			timestamp: p.timestamp
+			timestamp: p.timestamp,
+			source: p.source ?? 'activity',
+			interval_start: p.interval_start
 		}));
 	});
 
 	let timelinePath = $derived.by(() => {
 		if (timelineExecutions.length === 0) return '';
-		return timelineExecutions.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+		return timelineExecutions
+			.filter((p) => p.source === 'activity')
+			.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+			.join(' ');
 	});
 
 	let timelineTooltip = $derived.by(() => {
@@ -447,7 +470,10 @@
 		if (!exec) return null;
 		return {
 			timestamp: point.timestamp,
-			fullDate: formatChartDateFull(point.timestamp),
+			fullDate: point.interval_start
+				? `${formatChartDateFull(point.interval_start)} – ${formatChartDateFull(point.timestamp)}`
+				: formatChartDateFull(point.timestamp),
+			source: point.source ?? 'activity',
 			execution_count: point.execution_count,
 			avg_duration_ms: point.avg_duration_ms,
 			x: exec.x,
@@ -806,8 +832,16 @@
 					class="flex items-center gap-2 border-b border-outline-variant bg-surface-container-low px-4 py-3"
 				>
 					<span class="material-symbols-outlined text-sm text-primary">show_chart</span>
-					<h2 class="m-0 font-headline-md text-headline-md">Activity samples over time</h2>
+					<h2 class="m-0 font-headline-md text-headline-md">Query workload over time</h2>
 				</div>
+				<p class="px-4 pt-3 text-xs text-on-surface-variant">
+					<span style={`color: ${colors[0]}`}>● Activity samples (5 min)</span>
+					<span class="ml-3" style={`color: ${colors[1]}`}
+						>▬ Statement calls per collection interval</span
+					>
+					<br />Sources are separate; statement counts cover the displayed interval, not individual
+					execution times.
+				</p>
 				<div class="relative p-4" bind:clientWidth={timelineChartWidth}>
 					{#if loading}
 						<div class="flex items-center justify-center py-24">
@@ -835,7 +869,10 @@
 					{:else if data?.timeline.length === 0}
 						<div class="flex flex-col items-center justify-center py-24 text-on-surface-variant">
 							<span class="material-symbols-outlined text-[40px] mb-3">insert_chart</span>
-							<p class="text-sm">No timeline data available.</p>
+							<p class="text-sm text-center">
+								No valid statement intervals or activity samples in this range. Statement counts
+								require two valid snapshots.
+							</p>
 						</div>
 					{:else}
 						<svg
@@ -843,7 +880,7 @@
 							height={timelineChartHeight}
 							class="overflow-visible"
 							role="img"
-							aria-label="Executions over time"
+							aria-label="Activity samples and statement calls by interval"
 							onmousemove={handleTimelineMouseMove}
 							onmouseleave={handleTimelineMouseLeave}
 						>
@@ -869,20 +906,41 @@
 									>
 								{/each}
 
-								{#each [0, Math.floor((data.timeline.length - 1) / 2), data.timeline.length - 1] as idx}
-									{@const x = xScale(idx, data.timeline.length)}
+								{#each timelineBounds.start === timelineBounds.end ? [0.5] : [0, 0.5, 1] as ratio}
+									{@const timestamp = new Date(
+										timelineBounds.start + ratio * (timelineBounds.end - timelineBounds.start)
+									).toISOString()}
+									{@const x = timeScale(timestamp)}
 									<text
 										{x}
 										y={timelineChartHeight - 12}
 										text-anchor="middle"
-										class="text-[10px] fill-on-surface-variant"
-										>{formatChartDate(data.timeline[idx].timestamp)}</text
+										class="text-[10px] fill-on-surface-variant">{formatChartDate(timestamp)}</text
 									>
 								{/each}
 
+								{#each timelineExecutions.filter((p) => p.source === 'statements' && p.interval_start) as pt}
+									{@const startX = timeScale(pt.interval_start!)}
+									<rect
+										x={startX}
+										y={pt.y}
+										width={Math.max(pt.x - startX, 1)}
+										height={Math.max(yScale(0, maxExec) - pt.y, 2)}
+										fill={colors[1]}
+										fill-opacity="0.3"
+									/>
+									<line
+										x1={startX}
+										x2={pt.x}
+										y1={pt.y}
+										y2={pt.y}
+										stroke={colors[1]}
+										stroke-width="2"
+									/>
+								{/each}
 								<path d={timelinePath} fill="none" stroke={colors[0]} stroke-width="2" />
 								{#if timelineExecutions.length <= 200}
-									{#each timelineExecutions as pt}
+									{#each timelineExecutions.filter((p) => p.source === 'activity') as pt}
 										<circle cx={pt.x} cy={pt.y} r="3" fill={colors[0]} />
 									{/each}
 								{/if}
@@ -901,7 +959,7 @@
 										cx={timelineTooltip.x}
 										cy={timelineTooltip.y}
 										r="5"
-										fill={colors[0]}
+										fill={timelineTooltip.source === 'statements' ? colors[1] : colors[0]}
 										stroke="white"
 										stroke-width="2"
 									/>
@@ -915,9 +973,10 @@
 							>
 								<p class="font-bold text-on-surface mb-1">{timelineTooltip.fullDate}</p>
 								<p class="text-on-surface-variant">
-									Executions: <span class="font-bold text-on-surface"
-										>{timelineTooltip.execution_count}</span
-									>
+									{timelineTooltip.source === 'statements'
+										? 'Statement calls in interval'
+										: 'Activity samples'}:
+									<span class="font-bold text-on-surface">{timelineTooltip.execution_count}</span>
 								</p>
 								{#if timelineTooltip.avg_duration_ms !== null}
 									<p class="text-on-surface-variant">

@@ -36,7 +36,7 @@ class CollectionEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     event_id: UUID
     occurred_at: AwareDatetime
-    table: EntityTable | MetricTable
+    table: EntityTable | MetricTable | Literal["base_service_heartbeat"]
     local_id: int | None = Field(default=None, gt=0, le=9223372036854775807)
     operation: Literal["upsert", "delete"] = "upsert"
     data: dict[str, Any]
@@ -46,7 +46,7 @@ class CollectionEvent(BaseModel):
         """Require local IDs for entities and constrain physical deletion."""
         if (
             not self.table.startswith("metric_")
-            and self.table != "metadata_index_column"
+            and self.table not in ("metadata_index_column", "base_service_heartbeat")
             and self.local_id is None
         ):
             raise ValueError("Entity events require local_id")

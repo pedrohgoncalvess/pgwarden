@@ -31,10 +31,13 @@ limpar o aviso e iniciar uma nova sequência de tentativas.
 A extensão deve estar instalada/configurada no PostgreSQL monitorado, com acesso
 às estatísticas e textos para o usuário de coleta. Ausência da extensão ou falta
 de permissão não interrompem os demais coletores. Os campos fixos exigem
-PostgreSQL 14+; `statement_data` armazena em JSON textual todos os campos
-retornados pela versão instalada, inclusive planejamento, execução, linhas,
-blocos, temporários, WAL, JIT e novos campos quando presentes. Não há criação
-automática da extensão nem reset de estatísticas.
+PostgreSQL 14+. As estatísticas ficam em colunas tipadas, incluindo planejamento,
+execução, linhas, blocos, temporários, WAL, JIT, paralelismo e resets. Campos que
+não existem na versão monitorada ficam como `NULL`. O SQL representativo fica
+em uma tabela compartilhada, referenciada pelas amostras, sem repetir o texto
+ou armazenar JSON em cada snapshot. Campos desconhecidos exigem atualização
+explícita do schema. Veja [armazenamento estruturado](statement-storage.md).
+Não há criação automática da extensão nem reset de estatísticas.
 
 ## Catálogo, parsers e identidade
 
@@ -45,7 +48,8 @@ podem pertencer à mesma identidade. Sem identificador, o catálogo usa texto ex
 textos apenas parecidos não vinculam fontes com identificadores diferentes.
 
 `pg_query_id`, `seen_activity` e `seen_statements` registram o vínculo e a origem.
-Os textos e hashes observados permanecem nas métricas originais. Histórico e
+Os textos e hashes de statements ficam em `metric.statement_text`, com referência
+em cada amostra; activity mantém seu armazenamento original. Histórico e
 contexto aceitam tanto hashes existentes quanto `pg:<query_id>`; a API usa string
 para IDs PostgreSQL na listagem de consultas, evitando perda de precisão no JS.
 Identificadores do PostgreSQL não são garantidos entre upgrades de versão major;
@@ -72,11 +76,18 @@ no catálogo, com métricas indisponíveis ou com evidência de activity.
 Máximo/mínimo de uma execução não podem ser derivados de diferenças de
 contadores acumulados: esses campos ficam indisponíveis na agregação statements.
 Os valores brutos da extensão continuam disponíveis no histórico em
-`statement_data`. O histórico identifica cada origem e preserva o usuário e nível
+`statement_data`, um objeto de resposta montado a partir das colunas tipadas,
+sem coluna JSON persistida. O histórico identifica cada origem e preserva o usuário e nível
 de execução dos snapshots.
 
-Overview, streaming de sessões e timeline de atividade continuam baseados em
-activity. Um snapshot statements não cria sessão, PID, espera, ponto de atividade
+Overview e streaming de sessões continuam baseados em activity. O gráfico
+Query workload over time mostra activity em linha (amostras em grupos de cinco
+minutos) e statements em barras por intervalo real entre duas coletas válidas.
+O tooltip informa a origem, os limites do intervalo, chamadas e tempo médio.
+As séries não são somadas; intervalos inválidos ficam sem barras, enquanto um
+delta válido de zero chamadas aparece como zero. Consultas com intervalos
+diferentes permanecem separadas, mesmo quando terminam no mesmo instante.
+Um snapshot statements não cria sessão, PID, espera, ponto de atividade
 ou evento de execução individual. Sem activity, a análise usa SQL, schema,
 índices e manutenção de tabelas; não atribui CPU, locks ou regressão de uma
 execução ao instante de coleta do snapshot.

@@ -27,7 +27,7 @@ type UptimeResponse = {
 type DatabaseMetricsSummary = {
 	database_id: string;
 	stats: DatabaseStats;
-	uptime: UptimeResponse;
+	uptime: UptimeResponse | null;
 };
 
 export type ServiceHealth = {
@@ -432,7 +432,7 @@ export async function getDatabaseStats(databaseId: string): Promise<DatabaseStat
 	return res.json();
 }
 
-export async function getDatabaseUptime(databaseId: string): Promise<UptimeResponse> {
+export async function getDatabaseUptime(databaseId: string): Promise<UptimeResponse | null> {
 	const res = await fetch(`/api/v1/databases/${databaseId}/metrics/uptime`, {
 		headers: authHeaders()
 	});
@@ -845,6 +845,8 @@ export type QueryAnalyticsItem = {
 };
 
 export type QueryAnalyticsTimelinePoint = {
+	source?: string;
+	interval_start?: string | null;
 	timestamp: string;
 	execution_count: number;
 	avg_duration_ms: number | null;

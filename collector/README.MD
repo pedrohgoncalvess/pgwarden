@@ -70,6 +70,14 @@ acknowledgement. A batch with invalid data stays queued for investigation. Logs
 exclude payloads and credentials. One sender process owns each SQLite file.
 `SENDER_INTERVAL`, `SENDER_BATCH_SIZE`, and `SENDER_TIMEOUT` configure delivery.
 
+Collector service heartbeats are included in delivery, including when metric
+collection is idle. The receiver uses the collector's original heartbeat time
+for the dashboard status; replaying an old queued heartbeat does not make a
+stopped collector healthy. Only the `collector` service can be updated through
+ingestion. Upgrade the receiving API before upgrading the sender so it accepts
+the `base_service_heartbeat` event type. Existing outboxes install heartbeat
+capture on restart without changing their source identity or project key.
+
 Automatic rotation persists the replacement project key encrypted with
 `ENCRYPTION_KEY` in the same SQLite transaction that removes acknowledged events.
 After initialization the persisted key takes precedence over `.env.sqlite`, so

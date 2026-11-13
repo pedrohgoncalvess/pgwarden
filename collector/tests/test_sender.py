@@ -39,14 +39,17 @@ def test_restart_refreshes_old_statement_capture_trigger(local):
         AFTER INSERT ON metric_query_workload BEGIN SELECT 1; END''')
     db.commit()
     initialize(db, 'http://localhost/events', 'pgw_initial', cipher)
+    db.execute("INSERT INTO metric_statement_text(database_id,fingerprint,query,query_hash) VALUES(1,'hash','SELECT $1','hash')")
     db.execute('''INSERT INTO metric_query_workload
         (collected_at,database_id,query_id,user_id,is_toplevel,calls,total_exec_time,
-         shared_blks_read,shared_blks_hit,dealloc,query,query_hash,user_name,statement_data)
+         shared_blks_read,shared_blks_hit,dealloc,statement_text_id,user_name,rows,wal_bytes)
         VALUES('2026-11-01T00:00:00Z',1,-123,10,true,5,10,0,2,0,
-               'SELECT $1','hash','alice','{"rows": 5, "wal_bytes": 10}')''')
+               1,'alice',5,'10')''')
     captured = json.loads(db.execute("SELECT data FROM sender_outbox WHERE table_name='metric_query_workload' ORDER BY seq DESC LIMIT 1").fetchone()[0])
     assert captured['query'] == 'SELECT $1' and captured['query_id'] == -123
-    assert json.loads(captured['statement_data'])['wal_bytes'] == 10
+    assert captured['wal_bytes'] == '10'
+    assert 'statement_data' not in captured
+    assert 'statement_text_id' not in captured
 
 
 def seed(db):
@@ -64,6 +67,47 @@ def seed(db):
     )
     db.execute("UPDATE metadata_column SET fk_table_id=1,fk_column_id=1 WHERE id=1")
     db.commit()
+
+
+def test_heartbeat_capture_backfill_updates_rollback_and_service_filter(local):
+    db, cipher, _ = local
+    db.execute("INSERT INTO base_service_heartbeat VALUES('collector', '2026-11-11T12:00:00+00:00')")
+    db.commit()
+    initialize(db, "http://localhost/events", "pgw_initial", cipher)
+
+    def heartbeats():
+        return [json.loads(row[0]) for row in db.execute(
+            "SELECT data FROM sender_outbox WHERE table_name='base_service_heartbeat' ORDER BY seq"
+        )]
+
+    assert heartbeats() == [{"service": "collector", "updated_at": "2026-11-11T12:00:00+00:00"}]
+    db.execute("UPDATE base_service_heartbeat SET updated_at='2026-11-11T12:00:30+00:00' WHERE service='collector'")
+    db.commit()
+    assert heartbeats()[-1]["updated_at"] == "2026-11-11T12:00:30+00:00"
+    db.execute("UPDATE base_service_heartbeat SET updated_at='2026-11-11T12:01:00+00:00' WHERE service='collector'")
+    db.rollback()
+    db.execute("INSERT INTO base_service_heartbeat VALUES('notifier', '2026-11-11T12:01:00+00:00')")
+    db.commit()
+    assert len(heartbeats()) == 2
+    assert db.execute("SELECT local_id FROM sender_outbox WHERE table_name='base_service_heartbeat'").fetchone()[0] is None
+
+
+def test_existing_sender_installs_heartbeat_capture_without_resetting_identity(local):
+    db, cipher, _ = local
+    initialize(db, "http://localhost/events", "pgw_initial", cipher)
+    identity = tuple(db.execute("SELECT source_id,project_key FROM sender_state").fetchone())
+    for action in ("insert", "update"):
+        db.execute(f"DROP TRIGGER sender_base_service_heartbeat_{action}")
+    db.execute("INSERT INTO base_service_heartbeat VALUES('collector', '2026-11-11T12:00:00+00:00')")
+    db.commit()
+    initialize(db, "http://localhost/events", "pgw_initial", cipher)
+    assert tuple(db.execute("SELECT source_id,project_key FROM sender_state").fetchone()) == identity
+    assert db.execute("SELECT count(*) FROM sender_outbox WHERE table_name='base_service_heartbeat'").fetchone()[0] == 1
+    initialize(db, "http://localhost/events", "pgw_initial", cipher)
+    assert db.execute("SELECT count(*) FROM sender_outbox WHERE table_name='base_service_heartbeat'").fetchone()[0] == 1
+    db.execute("UPDATE base_service_heartbeat SET updated_at='2026-11-11T12:00:30+00:00' WHERE service='collector'")
+    db.commit()
+    assert db.execute("SELECT count(*) FROM sender_outbox WHERE table_name='base_service_heartbeat'").fetchone()[0] == 2
 
 
 def test_capture_transaction_rollback_and_credential_filter(local):
