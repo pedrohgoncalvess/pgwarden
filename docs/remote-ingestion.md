@@ -97,6 +97,13 @@ local events. Missing parents or an event ID reused with different content retur
 back the entire batch, so retain it and correct/retry delivery. Keep receipt data
 while senders may retry; no automatic receipt retention is enabled yet.
 
+Statement events use typed statistics and inline SQL in the transport envelope.
+The receiver resolves a database-scoped shared SQL reference; local text IDs
+are never accepted. Queued legacy `statement_data` events remain supported and
+are converted before storage. Statement receipts keep their original fingerprint
+and an empty payload instead of duplicating the sample. See the coordinated
+[structured statement upgrade](statement-storage.md) before updating collectors.
+
 Imported servers are marked as remotely collected so the central PostgreSQL
 collector does not poll them or record the central host's system metrics against
 them. Their normalized metrics are available through the existing API and UI.
