@@ -23,6 +23,8 @@ TIME_FIELDS = {
     "xact_start",
     "query_start",
     "state_change",
+    "stats_since",
+    "minmax_stats_since",
     "last_vacuum",
     "last_autovacuum",
     "last_analyze",

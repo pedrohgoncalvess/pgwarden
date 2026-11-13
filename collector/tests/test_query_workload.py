@@ -60,10 +60,10 @@ async def test_snapshots_preserve_counter_identity_and_reset_epoch(monkeypatch, 
     cursor = AsyncMock()
     cursor.fetchone.return_value = {'nspname': 'extension schema'}
     reset = datetime(2026, 10, 31, tzinfo=timezone.utc)
-    cursor.fetchall.return_value = [{'query_id': -123, 'user_id': 10, 'is_toplevel': True,
+    cursor.fetchall.return_value = [{'queryid': -123, 'userid': 10, 'toplevel': True,
         'calls': 200, 'total_exec_time': 1234.5, 'shared_blks_read': 5, 'shared_blks_hit': 30,
         'stats_reset': reset, 'dealloc': 2, 'query': 'SELECT $1', 'query_hash': 'abc',
-        'user_name': 'alice', 'statement_data': '{"rows": 200, "wal_bytes": 12}'}]
+        'user_name': 'alice', 'rows': 200, 'wal_bytes': 12}]
     monitored, _ = connection(cursor)
     output = AsyncMock()
     storage, session = connection(output)
@@ -75,7 +75,9 @@ async def test_snapshots_preserve_counter_identity_and_reset_epoch(monkeypatch, 
     assert values[0]['stats_reset'] == reset
     assert values[0]['dealloc'] == 2
     assert values[0]['query'] == 'SELECT $1'
-    assert values[0]['statement_data'] == '{"rows": 200, "wal_bytes": 12}'
+    assert values[0]['rows'] == 200
+    assert values[0]['wal_bytes'] == '12'
+    assert 'statement_data' not in values[0]
     assert values[0]['collected_at'].tzinfo is not None
     session.commit.assert_awaited_once()
 

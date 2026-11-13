@@ -75,12 +75,17 @@ async def test_workload_snapshot_persists_and_deduplicates(storage):
                   is_toplevel=True, calls=200, total_exec_time=1234.5, shared_blks_read=5,
                   shared_blks_hit=30, stats_reset=now, dealloc=2,
                   query='SELECT $1', query_hash='abc', user_name='alice',
-                  statement_data='{"wal_bytes": 100, "rows": 200}')
+                  rows=200, wal_bytes='100')
+    from database.statement_fields import EXTRA_FIELDS
+    from hashlib import sha256
+    values = dict.fromkeys(EXTRA_FIELDS) | values
+    values['fingerprint'] = sha256(values['query'].encode()).hexdigest()
     query = load_storage_query('metric', 'query_workload', 'INSERT')
     async with storage as connection:
         async with connection.cursor(row_factory=dict_row) as cursor:
+            await cursor.executemany(load_storage_query('metric', 'query_workload', 'INSERT', 'texts'), [values])
             await cursor.executemany(query, [values, values])
-            await cursor.execute('SELECT * FROM metric_query_workload')
+            await cursor.execute('SELECT w.*,t.query FROM metric_query_workload w LEFT JOIN metric_statement_text t ON t.id=w.statement_text_id')
             rows = await cursor.fetchall()
     assert len(rows) == 1
     assert rows[0]['is_toplevel'] is True
@@ -88,7 +93,9 @@ async def test_workload_snapshot_persists_and_deduplicates(storage):
     assert rows[0]['total_exec_time'] == 1234.5
     assert rows[0]['query_id'] == -123
     assert rows[0]['query'] == 'SELECT $1'
-    assert rows[0]['statement_data'] == '{"wal_bytes": 100, "rows": 200}'
+    assert rows[0]['wal_bytes'] == '100'
+    assert rows[0]['rows'] == 200
+    assert 'statement_data' not in rows[0]
 
 
 def test_all_sqlite_queries_match_schema(storage):

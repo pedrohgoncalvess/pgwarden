@@ -50,6 +50,7 @@ SERVER_FIELDS = {
 CLOCK = """UPDATE sender_clock SET value = max(value + 1,
     CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER));"""
 MAX_BYTES = 2 * 1024 * 1024
+HEARTBEAT_TABLE = "base_service_heartbeat"
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -68,9 +69,15 @@ def capture_sql(
 ) -> str:
     """Build SQL only from our table allowlist and migrated column names."""
     fields = ", ".join(f"'{name}', {prefix}\"{name}\"" for name in columns)
+    if table == "metric_query_workload" and "statement_text_id" in columns:
+        fields = ", ".join(f"'{name}', {prefix}\"{name}\""
+                           for name in columns if name != "statement_text_id")
+        reference = f'{prefix}"statement_text_id"'
+        fields += f""", 'query', (SELECT query FROM metric_statement_text WHERE id={reference}),
+            'query_hash', (SELECT query_hash FROM metric_statement_text WHERE id={reference})"""
     identity = (
         "NULL"
-        if table in METRICS or table == "metadata_index_column"
+        if table in METRICS or table in ("metadata_index_column", HEARTBEAT_TABLE)
         else f'{prefix}"id"'
     )
     return f"""INSERT INTO sender_outbox(event_id, occurred_us, table_name, local_id, operation, data)
@@ -78,6 +85,29 @@ def capture_sql(
             || hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(6))),
         (SELECT value FROM sender_clock),
         '{table}', {identity}, '{operation}', json_object({fields})"""
+
+
+def install_heartbeat_capture(connection: sqlite3.Connection) -> None:
+    """Forward the collector's own clock, including upgrades of existing outboxes."""
+    columns = ["service", "updated_at"]
+    missing = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='trigger' AND name=?",
+        (f"sender_{HEARTBEAT_TABLE}_update",),
+    ).fetchone() is None
+    for action in ("INSERT", "UPDATE"):
+        trigger = f"sender_{HEARTBEAT_TABLE}_{action.lower()}"
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+        connection.execute(
+            f'CREATE TRIGGER {trigger} AFTER {action} ON "{HEARTBEAT_TABLE}" '
+            f"WHEN NEW.service = 'collector' "
+            f"BEGIN {CLOCK} {capture_sql(HEARTBEAT_TABLE, columns)}; END"
+        )
+    if missing:
+        connection.execute(CLOCK)
+        connection.execute(
+            capture_sql(HEARTBEAT_TABLE, columns, prefix="")
+            + f" FROM {HEARTBEAT_TABLE} WHERE service = 'collector'"
+        )
 
 
 def initialize(
@@ -134,6 +164,7 @@ def initialize(
                 f'CREATE TRIGGER sender_{table}_insert AFTER INSERT ON "{table}" '
                 f'BEGIN {CLOCK} {capture_sql(table, columns)}; END'
             )
+            install_heartbeat_capture(connection)
             connection.commit()
             return
         if not key.startswith("pgw_") or "replace" in key:
@@ -185,6 +216,7 @@ def initialize(
                 connection.execute(
                     capture_sql(table, columns, prefix="") + f' FROM "{table}"'
                 )
+        install_heartbeat_capture(connection)
         connection.commit()
     except BaseException:
         connection.rollback()
