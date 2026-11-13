@@ -11,7 +11,7 @@ from app.databases.schemas.exceptions import DatabaseNotFoundError
 from utils import decrypt, decrypt_or_plain
 
 
-async def get_database_uptime(db: AsyncSession, database_id: UUID) -> UptimeResponse:
+async def get_database_uptime(db: AsyncSession, database_id: UUID) -> UptimeResponse | None:
     db_result = await db.execute(
         select(Database).where(Database.public_id == database_id, Database.deleted_at.is_(None))
     )
@@ -27,6 +27,10 @@ async def get_database_uptime(db: AsyncSession, database_id: UUID) -> UptimeResp
 
     if not server:
         raise DatabaseNotFoundError(f"Server for database {database_id} not found")
+
+    # Remote ingestion does not include connection credentials or server uptime.
+    if server.ingestion_project_id is not None:
+        return None
 
     import asyncpg
 

@@ -55,9 +55,9 @@ async def get_stats(database_id: UUID):
 
 @router.get(
     "/uptime",
-    response_model=UptimeResponse,
+    response_model=UptimeResponse | None,
     summary="Get database uptime",
-    description="Returns the uptime of the PostgreSQL server hosting the database.",
+    description="Returns PostgreSQL uptime, or null when uptime is unavailable for a remote collector.",
     responses={
         404: {"model": ErrorMessage, "description": "Database not found"},
         **COMMON_RESPONSES,
