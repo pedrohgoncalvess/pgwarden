@@ -3,7 +3,8 @@
 from functools import lru_cache
 import json
 from ipaddress import ip_address
-from typing import Annotated, Any
+from decimal import Decimal
+from typing import Annotated, Any, Literal
 
 from fastapi import HTTPException
 from pydantic import (
@@ -15,10 +16,11 @@ from pydantic import (
     ValidationError,
     create_model,
 )
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, Numeric
 from sqlalchemy.dialects.postgresql import OID
 
 from database.models.collector.server import Server
+from database.models.base.service_heartbeat import ServiceHeartbeat
 from database.models.metadata import (
     Database,
     Table as MetadataTable,
@@ -26,6 +28,7 @@ from database.models.metadata import (
     Index,
     IndexColumn,
 )
+from app.ingestion.statements import expand_legacy_statement
 from database.models.metric import (
     CpuMetric,
     RamMetric,
@@ -63,6 +66,7 @@ TABLES = {
         LockMetric,
         NativeQueryMetric,
         QueryWorkloadMetric,
+        ServiceHeartbeat,
     )
 }
 REFERENCES = {
@@ -81,6 +85,7 @@ EXCLUDED = {
     "updated_by",
     "deleted_by",
     "ingestion_project_id",
+    "statement_text_id",
 }
 SERVER_FIELDS = {
     "name",
@@ -117,7 +122,9 @@ def get_row_model(name: str) -> type[BaseModel]:
             and column.name not in SERVER_FIELDS
         ):
             continue
-        if isinstance(column.type, DateTime):
+        if name == "base_service_heartbeat" and column.name == "service":
+            annotation = Literal["collector"]
+        elif isinstance(column.type, DateTime):
             annotation = AwareDatetime
         elif isinstance(column.type, Boolean):
             annotation = bool
@@ -133,6 +140,8 @@ def get_row_model(name: str) -> type[BaseModel]:
             ]
         elif isinstance(column.type, Float):
             annotation = Annotated[float, Field(allow_inf_nan=False)]
+        elif isinstance(column.type, Numeric):
+            annotation = Annotated[Decimal, Field(ge=0, max_digits=30, decimal_places=0, allow_inf_nan=False)]
         elif column.name == "client_addr":
             annotation = Annotated[str, AfterValidator(validate_address)]
         elif column.name == "statement_data":
@@ -148,6 +157,9 @@ def get_row_model(name: str) -> type[BaseModel]:
             annotation | None if column.nullable else annotation,
             None if optional else ...,
         )
+    if name == "metric_query_workload":
+        fields.update(query=(Annotated[str, Field(max_length=262144)] | None, None),
+                      query_hash=(Annotated[str, Field(max_length=64)] | None, None))
     return create_model(
         f"Ingest_{name}", __config__=ConfigDict(extra="forbid"), **fields
     )
@@ -156,7 +168,11 @@ def get_row_model(name: str) -> type[BaseModel]:
 def validate_row(name: str, data: dict[str, Any]) -> dict:
     """Reject unknown fields and malformed data before writing any event."""
     try:
+        if name == "metric_query_workload":
+            data = expand_legacy_statement(data)
         return get_row_model(name).model_validate(data).model_dump(exclude_unset=True)
-    except ValidationError as error:
+    except (ValueError, TypeError) as error:
+        if not isinstance(error, ValidationError):
+            raise HTTPException(422, "Invalid statement statistics") from None
         fields = ", ".join(".".join(map(str, issue["loc"])) for issue in error.errors())
         raise HTTPException(422, f"Invalid {name} fields: {fields}") from None

@@ -78,7 +78,7 @@ def summarize_queries(
 ) -> tuple[list[QueryAnalyticsItem], list[QueryAnalyticsTimelinePoint], int]:
     """Merge hash statistics while keeping equally weighted execution averages."""
     signatures: dict[tuple, dict] = {}
-    timeline: dict[datetime, dict] = {}
+    timeline: dict[tuple, dict] = {}
     normalized: dict[tuple, str] = {}
     text_ids: dict[str, set] = {}
     for row in rows:
@@ -120,12 +120,23 @@ def summarize_queries(
         summary["first_seen"] = min(summary["first_seen"], row.first_seen)
         summary["last_seen"] = max(summary["last_seen"], row.last_seen)
 
-        if source != "activity":
+        if getattr(row, "skip_timeline", False):
             continue
-        bucket = datetime.fromtimestamp(float(row.bucket) * 300, tz=timezone.utc)
-        if bucket not in timeline:
-            timeline[bucket] = _new_summary()
-        _merge_duration(timeline[bucket], row)
+        if source == "statements":
+            if not getattr(row, "delta_valid", False):
+                continue
+            bucket, interval_start = row.last_seen, row.first_seen
+            if bucket.tzinfo is None:
+                bucket = bucket.astimezone(timezone.utc)
+            if interval_start.tzinfo is None:
+                interval_start = interval_start.astimezone(timezone.utc)
+        else:
+            bucket = datetime.fromtimestamp(float(row.bucket) * 300, tz=timezone.utc)
+            interval_start = None
+        timeline_key = (bucket, source, interval_start)
+        if timeline_key not in timeline:
+            timeline[timeline_key] = _new_summary()
+        _merge_duration(timeline[timeline_key], row)
 
     for summary in signatures.values():
         use_statements = summary["has_delta"]
@@ -149,8 +160,9 @@ def summarize_queries(
     return (
         [_build_item(summary["signature"], summary) for _, summary in page],
         [QueryAnalyticsTimelinePoint(
-            timestamp=bucket, execution_count=summary["count"],
+            timestamp=bucket, source=source, interval_start=interval_start,
+            execution_count=summary["count"],
             avg_duration_ms=_duration(summary, "avg"),
-        ) for bucket, summary in sorted(timeline.items())],
+        ) for (bucket, source, interval_start), summary in sorted(timeline.items())],
         len(signatures),
     )

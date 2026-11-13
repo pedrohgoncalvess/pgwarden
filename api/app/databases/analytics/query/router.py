@@ -25,7 +25,7 @@ router = APIRouter(
     "/query",
     response_model=QueryAnalyticsResponse,
     summary="Get query analytics",
-    description="Merges activity samples and statement workload by database/query ID. Statement deltas supply counts when available; activity supplies the timeline. Origins and sampled counts remain explicit.",
+    description="Merges activity samples and statement workload by database/query ID. Timeline points distinguish activity samples from statement counts with explicit collection interval boundaries. Origins and sampled counts remain explicit.",
     responses={
         404: {"model": ErrorMessage, "description": "Database not found"},
         **COMMON_RESPONSES

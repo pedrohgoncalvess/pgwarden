@@ -39,7 +39,7 @@ async def receive_events(
                     **identity,
                     table_name=item.table,
                     fingerprint=fingerprint,
-                    payload=payload,
+                    payload={} if item.table == "metric_query_workload" else payload,
                 )
                 .on_conflict_do_nothing()
                 .returning(event.c.event_id)
@@ -55,7 +55,9 @@ async def receive_events(
                 )
             duplicates += 1
             continue
-        if item.table.startswith("metric_") or item.table == "metadata_index_column":
+        if item.table.startswith("metric_") or item.table in (
+            "metadata_index_column", "base_service_heartbeat",
+        ):
             await save_observation(session, settings, batch.source_id, item, data)
         else:
             await save_entity(session, settings, batch.source_id, item, data)

@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.databases.analytics.query.aggregation import fetch_query_groups
+from app.databases.analytics.query.sources import fetch_analytics
 from app.databases.analytics.query.context_tables import get_context_tables
 from app.databases.analytics.query.models import (
     QueryAnalyticsResponse,
@@ -18,8 +18,8 @@ from app.databases.analytics.query.models import (
     QueryExecutionHistoryItem,
     QueryExecutionHistoryResponse,
 )
-from app.databases.analytics.query.summaries import summarize_queries
-from app.databases.analytics.query.workload import fetch_statement_groups, payload, snapshots, valid_delta
+from app.databases.analytics.query.workload import snapshots, valid_delta
+from app.databases.analytics.query.statement_statistics import get_statistics
 from app.databases.schemas.exceptions import DatabaseNotFoundError
 from database.models.analytics.query import Query
 from database.models.metadata.database import Database
@@ -146,18 +146,9 @@ async def get_query_analytics(
 
     start_dt, end_dt = _resolve_date_range(start_date, end_date, preset)
 
-    groups, filters = await fetch_query_groups(
+    items, timeline, total, filters = await fetch_analytics(
         db, database.id, start_dt, end_dt, user_name, application_name, state,
-    )
-    # Statements have no session application or activity state; such filters
-    # must not silently return aggregate workload that cannot satisfy them.
-    if application_name is None and state is None:
-        statement_groups = await fetch_statement_groups(db, database.id, start_dt, end_dt, user_name)
-        groups.extend(statement_groups)
-        filters.users = sorted(set(filters.users) | {row.user_name for row in statement_groups},
-                               key=lambda value: (value is None, value or ""))
-    items, timeline, total = summarize_queries(
-        groups, _normalize_query, _normalize_search_terms(search),
+        _normalize_query, _normalize_search_terms(search),
         [term.strip().lower() for term in (exclude or []) if term.strip()],
         limit, order_by, order_dir,
     )
@@ -237,7 +228,7 @@ async def get_query_execution_history(
             user_name=row.user_name, application_name=None, rows_returned=None,
             source="statements", calls=row.calls, calls_delta=calls,
             total_exec_time_delta_ms=duration, user_id=row.user_id,
-            is_toplevel=row.is_toplevel, statement_data=payload(row.statement_data),
+            is_toplevel=row.is_toplevel, statement_data=get_statistics(row),
         ))
     items.sort(key=lambda item: item.collected_at)
     items = items[-limit:]
@@ -510,7 +501,7 @@ async def _statement_context(db, database, query_hash, pg_id, collected_at, user
         execution=QueryContextExecution(
             collected_at=collected_at, duration_ms=None, query=snapshot.query or "",
             user_name=snapshot.user_name, application_name=None, source="statements",
-            statement_data=payload(snapshot.statement_data),
+            statement_data=get_statistics(snapshot),
         ),
         server_metrics=QueryContextServerMetrics(
             cpu_percent=None, ram_percent=None, disk_percent=None,

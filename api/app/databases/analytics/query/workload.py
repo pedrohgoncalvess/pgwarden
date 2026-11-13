@@ -1,6 +1,5 @@
 """Statement snapshots and reset-safe deltas; never manufacture executions."""
 
-import json
 from types import SimpleNamespace
 
 from sqlalchemy import func, select
@@ -8,34 +7,21 @@ from sqlalchemy import func, select
 from database.models.metric.query_workload import QueryWorkloadMetric as Workload
 
 
-def payload(value: str | None) -> dict:
-    if not value:
-        return {}
-    try:
-        result = json.loads(value)
-        if not isinstance(result, dict):
-            return {}
-        if result.get("queryid") is not None:
-            result["queryid"] = str(result["queryid"])
-        return result
-    except (ValueError, TypeError):
-        return {}
-
-
 def valid_delta(row) -> bool:
     if row.previous_at is None or row.stats_reset != row.prev_stats_reset or row.dealloc != row.prev_dealloc:
         return False
     # Newer PostgreSQL versions also expose per-entry resets. Global reset and
     # monotonic counters alone cannot detect a reset followed by a busy query.
-    if payload(row.statement_data).get("stats_since") != payload(row.prev_statement_data).get("stats_since"):
+    if row.stats_since != row.prev_stats_since:
         return False
     return all(getattr(row, name) >= getattr(row, "prev_" + name)
                for name in ("calls", "total_exec_time", "shared_blks_read", "shared_blks_hit"))
 
 
 async def snapshots(db, database_id, start_at, end_at, pg_query_id=None, query_hash=None, limit=None):
-    columns = [Workload]
-    for name in ("calls", "total_exec_time", "shared_blks_read", "shared_blks_hit", "stats_reset", "dealloc", "statement_data"):
+    columns = [*Workload.__table__.c, Workload.query.label("query"),
+               Workload.query_hash.label("query_hash")]
+    for name in ("calls", "total_exec_time", "shared_blks_read", "shared_blks_hit", "stats_reset", "dealloc", "stats_since"):
         column = getattr(Workload, name)
         columns.append(func.lag(column, type_=column.type).over(
             partition_by=(Workload.query_id, Workload.user_id, Workload.is_toplevel),

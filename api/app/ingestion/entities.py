@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -116,6 +116,18 @@ async def save_observation(
                 table.c.column_id == values["column_id"],
             )
         )
+    elif item.table == "base_service_heartbeat":
+        statement = insert(table).values(**values)
+        await session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[table.c.service],
+                set_={
+                    "updated_at": func.greatest(
+                        table.c.updated_at, statement.excluded.updated_at,
+                    ),
+                },
+            )
+        )
     elif item.table == "metadata_index_column":
         await session.execute(
             insert(table)
@@ -126,4 +138,7 @@ async def save_observation(
             )
         )
     else:
+        if item.table == "metric_query_workload":
+            from app.ingestion.statements import resolve_statement_text
+            values = await resolve_statement_text(session, values)
         await session.execute(insert(table).values(**values).on_conflict_do_nothing())

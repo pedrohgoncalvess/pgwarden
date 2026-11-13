@@ -12,7 +12,8 @@ from database.models.metadata.database import Database
 from database.models.metadata.table import Table
 from app.databases.analytics.query.aggregation import fetch_query_groups
 from app.databases.analytics.query.summaries import summarize_queries
-from app.databases.analytics.query.workload import fetch_statement_groups
+from app.databases.analytics.query.statement_aggregation import fetch_compact_statements
+from app.databases.analytics.query.sources import build_statement_group
 
 
 async def _get_table(db: AsyncSession, database_id: UUID, table_id: UUID) -> tuple[Database, Table]:
@@ -145,7 +146,9 @@ async def _with_workload(db, database_id, queries):
         return []
     start, end = datetime(1970, 1, 1, tzinfo=timezone.utc), datetime.now(timezone.utc)
     activity, _ = await fetch_query_groups(db, database_id, start, end, None, None, None)
-    statements = await fetch_statement_groups(db, database_id, start, end)
+    statements = [build_statement_group(row) for row in await fetch_compact_statements(
+        db, database_id, start, end, None,
+    )]
     # Keep exact SQL for legacy identities; PostgreSQL IDs unify literal variants.
     items, _, _ = summarize_queries([*activity, *statements], lambda sql: sql or '', [], [], None, 'executions', 'desc')
     by_id = {int(item.pg_query_id): item for item in items if item.pg_query_id is not None}

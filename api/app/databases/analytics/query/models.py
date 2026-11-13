@@ -46,6 +46,8 @@ class QueryAnalyticsItem(BaseModel):
 
 
 class QueryAnalyticsTimelinePoint(BaseModel):
+    source: str = "activity"
+    interval_start: Optional[datetime] = None
     timestamp: datetime
     execution_count: int
     avg_duration_ms: Optional[float]
