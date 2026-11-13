@@ -65,13 +65,15 @@ async def table_evidence(session, database_id: int) -> dict[int, dict]:
 async def query_evidence(session, database_id: int) -> dict[int, dict]:
     result = await session.execute(text("""
         WITH samples AS (
-            SELECT m.*, lag(calls) OVER w AS prev_calls,
+            SELECT query_id, user_id, is_toplevel, calls, total_exec_time,
+                shared_blks_read, shared_blks_hit, stats_reset, dealloc, stats_since, collected_at,
+                lag(calls) OVER w AS prev_calls,
                 lag(total_exec_time) OVER w AS prev_time,
                 lag(shared_blks_read) OVER w AS prev_read,
                 lag(shared_blks_hit) OVER w AS prev_hit,
                 lag(stats_reset) OVER w AS prev_reset,
                 lag(dealloc) OVER w AS prev_dealloc,
-                lag(statement_data) OVER w AS prev_statement_data,
+                lag(stats_since) OVER w AS prev_stats_since,
                 lag(collected_at) OVER w AS previous_at
             FROM metric.query_workload m
             WHERE database_id = :database_id
@@ -86,7 +88,7 @@ async def query_evidence(session, database_id: int) -> dict[int, dict]:
         FROM samples WHERE is_toplevel AND previous_at IS NOT NULL
           AND stats_reset IS NOT DISTINCT FROM prev_reset
           AND dealloc = prev_dealloc
-          AND (statement_data::jsonb ->> 'stats_since') IS NOT DISTINCT FROM (prev_statement_data::jsonb ->> 'stats_since')
+          AND stats_since IS NOT DISTINCT FROM prev_stats_since
           AND calls >= prev_calls AND total_exec_time >= prev_time
           AND shared_blks_read >= prev_read AND shared_blks_hit >= prev_hit
         GROUP BY query_id
